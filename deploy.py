@@ -106,11 +106,11 @@ def main():
 
     # 7. Railway Deployments
     print("\n---> Uploading & deploying to Railway backend...")
-    backend_res = run_cmd("railway up --service backend --detach", cwd="backend")
+    backend_res = run_cmd("railway up --service backend --path-as-root --detach backend")
     print(f"Backend deployment initiated.")
     
     print("\n---> Uploading & deploying to Railway frontend...")
-    frontend_res = run_cmd("railway up --service frontend --detach", cwd="frontend")
+    frontend_res = run_cmd("railway up --service frontend --path-as-root --detach frontend")
     print(f"Frontend deployment initiated.")
     
     print("\n🎉 Deployment successfully initiated! Monitor the builds in your Railway dashboard:")
