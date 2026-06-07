@@ -17,7 +17,7 @@ from auth_utils import verify_password, get_password_hash, create_access_token, 
 # Create tables
 models.Base.metadata.create_all(bind=engine)
 
-app = FastAPI(title="Vintamie API", version="2.0.0")
+app = FastAPI(title="Vintamie API", version="2.0.1")
 
 UPLOAD_DIR = "uploads"
 os.makedirs(UPLOAD_DIR, exist_ok=True)
