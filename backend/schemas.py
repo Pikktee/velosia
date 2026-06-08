@@ -31,6 +31,7 @@ class UserResponse(UserBase):
     default_city: Optional[str] = None
     default_category: Optional[str] = None
     default_shipping: Optional[str] = None
+    is_admin: Optional[bool] = False
 
     class Config:
         from_attributes = True
@@ -79,4 +80,26 @@ class AnalysisResponse(BaseModel):
 
 class DraftRegenerateRequest(BaseModel):
     field: str
+
+
+# Bug Report Schemas
+class BugReportCreate(BaseModel):
+    title: str
+    description: str
+    device_info: Optional[str] = None
+    screenshot_base64: Optional[str] = None
+
+class BugReportResponse(BaseModel):
+    id: int
+    user_id: Optional[int] = None
+    title: str
+    description: str
+    device_info: Optional[str] = None
+    screenshot_path: Optional[str] = None
+    created_at: datetime
+    user_email: Optional[str] = None
+
+    class Config:
+        from_attributes = True
+
 

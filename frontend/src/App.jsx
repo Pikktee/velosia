@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Camera, FolderHeart, Sparkles, LogOut, User, Cloud } from 'lucide-react';
+import { Camera, FolderHeart, Sparkles, LogOut, User, Cloud, HelpCircle } from 'lucide-react';
 import CameraCapture from './components/CameraCapture';
 import DraftList from './components/DraftList';
 import DraftDetail from './components/DraftDetail';
@@ -7,7 +7,10 @@ import AnalysisLoader from './components/AnalysisLoader';
 import Login from './components/Login';
 import Settings from './components/Settings';
 import LandingPage from './components/LandingPage';
+import BugReportModal from './components/BugReportModal';
+import IssueManagement from './components/IssueManagement';
 import { getDrafts, deleteDraft, isAuthenticated, setAuthToken, getMe, uploadAndAnalyze } from './utils/api';
+
 
 export default function App() {
   const [token, setToken] = useState(null);
@@ -22,6 +25,8 @@ export default function App() {
   const [capturedImages, setCapturedImages] = useState([]);
   const [abortController, setAbortController] = useState(null);
   const [prevView, setPrevView] = useState('list');
+  const [showBugReportModal, setShowBugReportModal] = useState(false);
+
 
   // Track previous view for closing camera/getting back
   useEffect(() => {
@@ -93,6 +98,8 @@ export default function App() {
     if (isAuth) {
       if (route === '#/' || route === '#/login') {
         window.location.hash = '#/app';
+      } else if (route === '#/admin/issues') {
+        setView('issues');
       }
     } else {
       const isAndroidApp = typeof window.VintamieBridge !== 'undefined';
@@ -330,6 +337,15 @@ export default function App() {
               <span>Entwurf-Modus</span>
             </div>
           )}
+          
+          <button 
+            className="help-icon-btn" 
+            onClick={() => setShowBugReportModal(true)} 
+            title="Problem melden"
+          >
+            <HelpCircle size={18} />
+          </button>
+
           {view === 'settings' && (
             <button 
               className="logout-icon-btn" 
@@ -403,11 +419,21 @@ export default function App() {
               onUpdateUser={(updatedUser) => setUser(updatedUser)}
             />
           )}
+
+          {view === 'issues' && (
+            <IssueManagement
+              user={user}
+              onBack={() => {
+                setView('settings');
+                window.location.hash = '#/app';
+              }}
+            />
+          )}
         </div>
       </main>
 
       {/* Responsive Sticky Footer Navigation (Tinder style flat bottom bar) */}
-      {!isInputFocused && view !== 'analyzing' && (
+      {!isInputFocused && view !== 'analyzing' && view !== 'issues' && (
         <nav className="app-nav">
           {/* Left: Entwürfe */}
           <button
@@ -476,6 +502,13 @@ export default function App() {
             <span>Profil</span>
           </button>
         </nav>
+      )}
+
+      {showBugReportModal && (
+        <BugReportModal 
+          currentView={view} 
+          onClose={() => setShowBugReportModal(false)} 
+        />
       )}
     </div>
   );

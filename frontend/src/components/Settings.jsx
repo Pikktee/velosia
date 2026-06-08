@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { User, LogOut, Trash2, AlertTriangle, Save, HelpCircle, Check } from 'lucide-react';
+import { User, LogOut, Trash2, AlertTriangle, Save, HelpCircle, Check, Shield } from 'lucide-react';
 import { deleteUserAccount, updateMe } from '../utils/api';
 import { version } from '../../package.json';
 
@@ -334,6 +334,24 @@ export default function Settings({ user, onLogout, onUpdateUser }) {
           </div>
 
         </form>
+
+        {/* Admin Section */}
+        {user.is_admin && (
+          <div style={{ borderTop: '1px solid var(--glass-border)', paddingTop: '1.5rem', marginBottom: '1rem', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+            <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.08em', fontWeight: 'bold', marginBottom: '0.25rem' }}>Admin-Werkzeuge</span>
+            <button
+              type="button"
+              onClick={() => {
+                window.location.hash = '#/admin/issues';
+              }}
+              className="btn btn-secondary"
+              style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem', borderColor: 'var(--primary-glow)', color: 'var(--primary)' }}
+            >
+              <Shield size={18} />
+              Issue Management öffnen
+            </button>
+          </div>
+        )}
 
         {/* Danger Zone */}
         <div style={{ borderTop: '1px solid var(--glass-border)', paddingTop: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>

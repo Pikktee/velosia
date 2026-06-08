@@ -277,3 +277,49 @@ export const regenerateDraftField = async (id, field) => {
 
   return response.json();
 };
+
+// --- BUG REPORTS API ---
+
+export const submitBugReport = async (bugData) => {
+  const response = await fetch(`${API_BASE_URL}/api/bugs`, {
+    method: 'POST',
+    headers: getHeaders(),
+    body: JSON.stringify(bugData),
+  });
+
+  if (!response.ok) {
+    const errorData = await response.json();
+    throw new Error(errorData.detail || 'Fehler beim Senden des Bug Reports.');
+  }
+
+  return response.json();
+};
+
+export const getBugReports = async () => {
+  const response = await fetch(`${API_BASE_URL}/api/bugs`, {
+    method: 'GET',
+    headers: getHeaders(),
+  });
+
+  if (!response.ok) {
+    const errorData = await response.json();
+    throw new Error(errorData.detail || 'Fehler beim Laden der Bug Reports.');
+  }
+
+  return response.json();
+};
+
+export const deleteBugReport = async (id) => {
+  const response = await fetch(`${API_BASE_URL}/api/bugs/${id}`, {
+    method: 'DELETE',
+    headers: getHeaders(),
+  });
+
+  if (!response.ok) {
+    const errorData = await response.json();
+    throw new Error(errorData.detail || 'Fehler beim Löschen des Bug Reports.');
+  }
+
+  return true;
+};
+

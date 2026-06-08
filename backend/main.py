@@ -63,7 +63,7 @@ def run_migrations():
 
 run_migrations()
 
-app = FastAPI(title="Vintamie API", version="2.2.61")
+app = FastAPI(title="Vintamie API", version="2.2.62")
 
 UPLOAD_DIR = "uploads"
 os.makedirs(UPLOAD_DIR, exist_ok=True)
@@ -634,3 +634,83 @@ async def upload_apk(
             pass
             
     return {"status": "success", "message": f"APK-Datei erfolgreich aktualisiert (gespeichert unter {APK_DIR})."}
+
+# --- BUG REPORT ENDPOINTS (SECURED) ---
+
+@app.post("/api/bugs", response_model=schemas.BugReportResponse, status_code=status.HTTP_201_CREATED)
+def create_bug_report(
+    bug_in: schemas.BugReportCreate,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user)
+):
+    screenshot_path = None
+    if bug_in.screenshot_base64 and "," in bug_in.screenshot_base64:
+        try:
+            header, encoded = bug_in.screenshot_base64.split(",", 1)
+            file_extension = ".png"
+            if "image/jpeg" in header or "image/jpg" in header:
+                file_extension = ".jpg"
+            elif "image/webp" in header:
+                file_extension = ".webp"
+            
+            import base64
+            data = base64.b64decode(encoded)
+            unique_filename = f"bug_{uuid.uuid4()}{file_extension}"
+            file_path = os.path.join(UPLOAD_DIR, unique_filename)
+            with open(file_path, "wb") as buffer:
+                buffer.write(data)
+            screenshot_path = f"/uploads/{unique_filename}"
+        except Exception as e:
+            print(f"Error saving bug screenshot: {e}", flush=True)
+
+    db_bug = models.BugReport(
+        user_id=current_user.id,
+        title=bug_in.title,
+        description=bug_in.description,
+        device_info=bug_in.device_info,
+        screenshot_path=screenshot_path
+    )
+    db.add(db_bug)
+    db.commit()
+    db.refresh(db_bug)
+    return db_bug
+
+@app.get("/api/bugs", response_model=List[schemas.BugReportResponse])
+def get_bug_reports(
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user)
+):
+    if not current_user.is_admin:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Keine Berechtigung für diese Ressource."
+        )
+    return db.query(models.BugReport).order_by(models.BugReport.created_at.desc()).all()
+
+@app.delete("/api/bugs/{bug_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_bug_report(
+    bug_id: int,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user)
+):
+    if not current_user.is_admin:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Keine Berechtigung für diese Ressource."
+        )
+    db_bug = db.query(models.BugReport).filter(models.BugReport.id == bug_id).first()
+    if not db_bug:
+        raise HTTPException(status_code=404, detail="Bug Report wurde nicht gefunden.")
+    
+    if db_bug.screenshot_path:
+        local_path = db_bug.screenshot_path.lstrip("/")
+        if os.path.exists(local_path):
+            try:
+                os.remove(local_path)
+            except Exception as e:
+                print(f"Error removing bug screenshot {local_path}: {e}", flush=True)
+
+    db.delete(db_bug)
+    db.commit()
+    return {"detail": "Bug Report gelöscht"}
+
