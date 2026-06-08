@@ -2420,9 +2420,9 @@ select.form-control {
 
 /* Scroll snap container track */
 .SwipeableList-item.is-initialized .SwipeableList-track {
-  display: grid;
-  grid-template-columns: 100% 100%;
-  overflow: scroll clip;
+  display: flex;
+  overflow-x: auto;
+  overflow-y: hidden;
   overscroll-behavior-x: none;
   scrollbar-width: none;
   scroll-snap-type: x mandatory;
@@ -2450,6 +2450,7 @@ select.form-control {
   width: 100%;
   max-width: 100%;
   box-sizing: border-box; /* Crucial to include borders in 100% width calculations */
+  flex: 0 0 100%;
 }
 
 .SwipeableList-content:hover {
@@ -2461,6 +2462,9 @@ select.form-control {
   scroll-snap-align: start;
   background-color: transparent; /* Transparent to let red absolute element below shine through */
   z-index: 2;
+  flex: 0 0 100%;
+  width: 100%;
+  max-width: 100%;
 }
 
 /* Stationary background action icon */

@@ -286,9 +286,6 @@ function DraftListItem({ draft, onSelect, onDelete }) {
                 <span className="draft-list-item-badge category-badge">
                   {draft.category}
                 </span>
-                <span className="draft-list-item-badge condition-badge">
-                  {draft.condition}
-                </span>
                 <span className="draft-list-item-date">
                   <Calendar size={11} />
                   <span>{formatDate(draft.created_at)}</span>
