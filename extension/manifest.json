@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Vintamie Assistant",
-  "version": "2.2.12",
+  "version": "2.2.13",
   "description": "F\u00fclle deine Vinted und Kleinanzeigen Inserate automatisch aus dem Vintamie-Dashboard aus.",
   "permissions": [
     "activeTab",

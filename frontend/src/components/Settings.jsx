@@ -76,7 +76,7 @@ export default function Settings({ user, onLogout }) {
                 fontWeight: '600',
                 border: '1px solid var(--primary-glow)'
               }}>
-                gemini-3.5-flash
+                gemini-2.5-flash
               </span>
             </div>
 
