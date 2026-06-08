@@ -133,7 +133,7 @@ export const updateMe = async (settingsData) => {
 
 // --- DRAFTS API (AUTHENTICATED) ---
 
-export const uploadAndAnalyze = async (files) => {
+export const uploadAndAnalyze = async (files, signal) => {
   const formData = new FormData();
   if (Array.isArray(files)) {
     files.forEach(file => {
@@ -151,6 +151,7 @@ export const uploadAndAnalyze = async (files) => {
     method: 'POST',
     headers: headers,
     body: formData,
+    signal,
   });
 
   if (!response.ok) {

@@ -1,11 +1,14 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Camera, Upload, Image as ImageIcon, Sparkles, X, RotateCw } from 'lucide-react';
-import { uploadAndAnalyze } from '../utils/api';
 
-const CameraCapture = ({ onAnalysisStart, onAnalysisSuccess, onAnalysisError, initialError, onClose }) => {
-  const [selectedImages, setSelectedImages] = useState([]); // Array of { id, file, previewUrl }
+const CameraCapture = ({ 
+  selectedImages = [], 
+  setSelectedImages, 
+  onAnalysisStart, 
+  initialError, 
+  onClose 
+}) => {
   const [facingMode, setFacingMode] = useState('environment'); // 'environment' or 'user'
-  const [uploading, setUploading] = useState(false);
   const [error, setError] = useState(initialError);
   const [flash, setFlash] = useState(false);
 
@@ -153,32 +156,7 @@ const CameraCapture = ({ onAnalysisStart, onAnalysisSuccess, onAnalysisError, in
     });
   };
 
-  const handleUploadAndAnalyze = async () => {
-    if (selectedImages.length === 0) return;
-    
-    setUploading(true);
-    setError(null);
-    onAnalysisStart();
 
-    try {
-      // Send array of file objects to api
-      const filesToSend = selectedImages.map(img => img.file);
-      const result = await uploadAndAnalyze(filesToSend);
-      
-      // Revoke preview URLs
-      selectedImages.forEach(img => URL.revokeObjectURL(img.previewUrl));
-      setSelectedImages([]);
-      
-      onAnalysisSuccess(result);
-    } catch (err) {
-      console.error(err);
-      const errMsg = err.message || 'Die Analyse ist fehlgeschlagen. Versuche es erneut.';
-      setError(errMsg);
-      onAnalysisError(errMsg);
-    } finally {
-      setUploading(false);
-    }
-  };
 
   return (
     <div className="camera-container">
@@ -390,8 +368,7 @@ const CameraCapture = ({ onAnalysisStart, onAnalysisSuccess, onAnalysisError, in
             {selectedImages.length > 0 && (
               <button
                 className="btn btn-primary"
-                onClick={handleUploadAndAnalyze}
-                disabled={uploading}
+                onClick={onAnalysisStart}
                 style={{
                   minHeight: 'auto',
                   padding: '0.65rem 1rem',

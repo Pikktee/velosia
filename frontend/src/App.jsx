@@ -7,7 +7,7 @@ import AnalysisLoader from './components/AnalysisLoader';
 import Login from './components/Login';
 import Settings from './components/Settings';
 import LandingPage from './components/LandingPage';
-import { getDrafts, deleteDraft, isAuthenticated, setAuthToken, getMe } from './utils/api';
+import { getDrafts, deleteDraft, isAuthenticated, setAuthToken, getMe, uploadAndAnalyze } from './utils/api';
 
 export default function App() {
   const [token, setToken] = useState(null);
@@ -19,6 +19,8 @@ export default function App() {
   const [analysisError, setAnalysisError] = useState(null);
   const [isInputFocused, setIsInputFocused] = useState(false);
   const [route, setRoute] = useState(window.location.hash || '#/');
+  const [capturedImages, setCapturedImages] = useState([]);
+  const [abortController, setAbortController] = useState(null);
 
   // Sync hash routing
   useEffect(() => {
@@ -156,21 +158,48 @@ export default function App() {
     }
   };
 
-  const handleAnalysisStart = () => {
+  const handleUploadAndAnalyze = async () => {
+    if (capturedImages.length === 0) return;
+
     setAnalysisError(null);
     setView('analyzing');
+
+    const controller = new AbortController();
+    setAbortController(controller);
+
+    try {
+      const filesToSend = capturedImages.map(img => img.file);
+      const result = await uploadAndAnalyze(filesToSend, controller.signal);
+
+      // Revoke preview URLs on success
+      capturedImages.forEach(img => URL.revokeObjectURL(img.previewUrl));
+      setCapturedImages([]);
+      setAbortController(null);
+
+      // Add to drafts list and show details
+      setDrafts((prev) => [result, ...prev]);
+      setSelectedDraft(result);
+      setView('detail');
+    } catch (err) {
+      if (err.name === 'AbortError') {
+        console.log("Analysis cancelled by user.");
+        setView('capture');
+      } else {
+        console.error("Analysis failed:", err);
+        const errMsg = err.message || 'Die Analyse ist fehlgeschlagen. Versuche es erneut.';
+        setAnalysisError(errMsg);
+        setView('capture');
+      }
+      setAbortController(null);
+    }
   };
 
-  const handleAnalysisSuccess = (newDraft) => {
-    setAnalysisError(null);
-    setDrafts((prev) => [newDraft, ...prev]);
-    setSelectedDraft(newDraft);
-    setView('detail');
-  };
-
-  const handleAnalysisError = (errMsg) => {
-    setAnalysisError(errMsg);
-    setView('capture');
+  const handleCancelAnalysis = () => {
+    if (abortController) {
+      abortController.abort();
+    } else {
+      setView('capture');
+    }
   };
 
   const handleUpdateSuccess = (updatedDraft) => {
@@ -290,17 +319,21 @@ export default function App() {
         >
           {view === 'capture' && (
             <CameraCapture
-              onAnalysisStart={handleAnalysisStart}
-              onAnalysisSuccess={handleAnalysisSuccess}
-              onAnalysisError={handleAnalysisError}
+              selectedImages={capturedImages}
+              setSelectedImages={setCapturedImages}
+              onAnalysisStart={handleUploadAndAnalyze}
               initialError={analysisError}
-              onClose={() => setView('list')}
+              onClose={() => {
+                capturedImages.forEach(img => URL.revokeObjectURL(img.previewUrl));
+                setCapturedImages([]);
+                setView('list');
+              }}
             />
           )}
 
           {view === 'analyzing' && (
             <div className="glass-panel" style={{ borderRadius: 'var(--radius-md)' }}>
-              <AnalysisLoader />
+              <AnalysisLoader onCancel={handleCancelAnalysis} />
             </div>
           )}
 
@@ -338,7 +371,7 @@ export default function App() {
       </main>
 
       {/* Responsive Sticky Footer Navigation (Tinder style flat bottom bar) */}
-      {!isInputFocused && (
+      {!isInputFocused && view !== 'analyzing' && (
         <nav className="app-nav">
           {/* Left: Entwürfe */}
           <button

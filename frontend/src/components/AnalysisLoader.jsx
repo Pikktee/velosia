@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Sparkles } from 'lucide-react';
 
-export default function AnalysisLoader() {
+export default function AnalysisLoader({ onCancel }) {
   const [activeStep, setActiveStep] = useState(0);
 
   const steps = [
@@ -91,6 +91,38 @@ export default function AnalysisLoader() {
           {steps[activeStep]}
         </p>
       </div>
+
+      {/* Abbrechen Button */}
+      {onCancel && (
+        <button
+          onClick={onCancel}
+          className="btn btn-secondary"
+          style={{
+            marginTop: '1rem',
+            padding: '0.6rem 1.8rem',
+            borderRadius: '99px',
+            fontSize: '0.9rem',
+            fontWeight: '600',
+            background: 'rgba(255, 255, 255, 0.08)',
+            border: '1px solid rgba(255, 255, 255, 0.15)',
+            color: 'var(--text-secondary)',
+            cursor: 'pointer',
+            transition: 'all 0.2s ease',
+          }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.background = 'rgba(239, 68, 68, 0.15)';
+            e.currentTarget.style.color = '#ef4444';
+            e.currentTarget.style.borderColor = 'rgba(239, 68, 68, 0.3)';
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.background = 'rgba(255, 255, 255, 0.08)';
+            e.currentTarget.style.color = 'var(--text-secondary)';
+            e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.15)';
+          }}
+        >
+          Analyse abbrechen
+        </button>
+      )}
     </div>
   );
 }
