@@ -133,6 +133,10 @@ class MainActivity : AppCompatActivity() {
                     request.grant(request.resources)
                 }
             }
+
+            override fun getDefaultVideoPoster(): android.graphics.Bitmap? {
+                return android.graphics.Bitmap.createBitmap(1, 1, android.graphics.Bitmap.Config.ARGB_8888)
+            }
         }
 
         // Configure floating fill action button
