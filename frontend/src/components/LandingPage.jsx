@@ -79,7 +79,7 @@ export default function LandingPage() {
           WebkitTextFillColor: 'transparent',
           padding: '0 0.5rem'
         }}>
-          Kleidung fotografieren, Anzeige fertig
+          Artikel fotografieren, Anzeige fertig
         </h1>
 
         {/* Hero Description */}
@@ -93,7 +93,7 @@ export default function LandingPage() {
           zIndex: 1,
           padding: '0 0.75rem'
         }}>
-          Mache ein Foto deiner Kleidung. Vintamie erkennt automatisch Marke, Zustand sowie Farbe und schlägt dir den optimalen Preis vor. Danach kannst du deine Anzeige direkt bei Vinted und Kleinanzeigen einstellen.
+          Mache ein Foto deines Artikels. Vintamie erkennt automatisch Details, Zustand sowie Kategorie und schlägt dir den optimalen Preis vor. Danach kannst du deine Anzeige direkt bei Kleinanzeigen und Vinted einstellen.
         </p>
 
         {/* CTA Buttons */}
@@ -201,7 +201,7 @@ export default function LandingPage() {
               1. Foto machen
             </h3>
             <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', lineHeight: '1.45' }}>
-              Knipse ein Bild deines Kleidungsstücks oder wähle es aus deiner Galerie aus.
+              Knipse ein Bild deines Artikels oder wähle es aus deiner Galerie aus.
             </p>
           </div>
         </div>
@@ -421,7 +421,7 @@ export default function LandingPage() {
                     <strong>Registrierungsdaten:</strong> Für die Nutzung unserer Entwurfs-Automatisierung erheben wir deine E-Mail-Adresse und ein verschlüsseltes Passwort. Diese Daten dienen ausschließlich zur Authentifizierung und Zuordnung deiner Entwürfe.
                   </p>
                   <p style={{ marginBottom: '1.5rem' }}>
-                    <strong>Bilder und Entwürfe:</strong> Wenn du Fotos deiner Kleidung hochlädst, werden diese temporär zur Analyse an den Google Gemini API Dienst übertragen. Es werden keine Metadaten oder Standortdaten deiner Bilder dauerhaft gespeichert oder für Werbezwecke verwendet.
+                    <strong>Bilder und Entwürfe:</strong> Wenn du Fotos deiner Artikel hochlädst, werden diese temporär zur Analyse an den Google Gemini API Dienst übertragen. Es werden keine Metadaten oder Standortdaten deiner Bilder dauerhaft gespeichert oder für Werbezwecke verwendet.
                   </p>
 
                   <h3 style={{ fontSize: '1rem', color: '#fff', marginBottom: '0.5rem', fontFamily: 'var(--font-title)' }}>
