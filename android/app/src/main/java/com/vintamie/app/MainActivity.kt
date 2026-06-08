@@ -42,6 +42,15 @@ class MainActivity : AppCompatActivity() {
     private var activePlatform: String? = null
 
     private val okHttpClient = OkHttpClient()
+    
+    private var isUpdateDialogShowing = false
+    private val updateCheckHandler = android.os.Handler(android.os.Looper.getMainLooper())
+    private val updateCheckRunnable = object : Runnable {
+        override fun run() {
+            checkForUpdates()
+            updateCheckHandler.postDelayed(this, 900000) // Check every 15 minutes
+        }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -134,8 +143,8 @@ class MainActivity : AppCompatActivity() {
         // Load the frontend dashboard
         webView.loadUrl(frontendUrl)
 
-        // Check for OTA updates
-        checkForUpdates()
+        // Start periodic update checks
+        startPeriodicUpdateChecks()
     }
 
     // Javascript Interface definition
@@ -477,15 +486,39 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun showUpdateDialog(latestVersion: String) {
+        if (isUpdateDialogShowing) return
+        isUpdateDialogShowing = true
+
         androidx.appcompat.app.AlertDialog.Builder(this)
             .setTitle("Update verfügbar")
             .setMessage("Eine neue App-Version ($latestVersion) ist verfügbar. Möchtest du sie jetzt herunterladen?")
             .setPositiveButton("Herunterladen") { _, _ ->
+                isUpdateDialogShowing = false
                 val browserIntent = Intent(Intent.ACTION_VIEW, Uri.parse("$backendUrl/api/app/latest-apk"))
                 startActivity(browserIntent)
             }
-            .setNegativeButton("Später", null)
+            .setNegativeButton("Später") { _, _ ->
+                isUpdateDialogShowing = false
+            }
+            .setOnCancelListener {
+                isUpdateDialogShowing = false
+            }
             .show()
+    }
+
+    private fun startPeriodicUpdateChecks() {
+        updateCheckHandler.removeCallbacks(updateCheckRunnable)
+        updateCheckHandler.post(updateCheckRunnable)
+    }
+
+    override fun onResume() {
+        super.onResume()
+        checkForUpdates()
+    }
+
+    override fun onDestroy() {
+        updateCheckHandler.removeCallbacks(updateCheckRunnable)
+        super.onDestroy()
     }
 
     @Deprecated("Deprecated in Java")
