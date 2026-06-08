@@ -92,7 +92,7 @@ export default function IssueManagement({ user, onBack }) {
           <ArrowLeft size={20} />
           <span>Zurück</span>
         </button>
-        <h2 className="issue-title">Issue Management</h2>
+        <h2 className="page-title" style={{ flexGrow: 1 }}>Issue Management</h2>
         <div className="issue-count-badge">{issues.length} {issues.length === 1 ? 'Report' : 'Reports'}</div>
       </div>
 

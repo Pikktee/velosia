@@ -57,7 +57,7 @@ export default function AnalysisSpecs({ images = [], onBack, onStartAnalysis }) 
           <ArrowLeft size={18} />
         </button>
         <div>
-          <h2 style={{ fontFamily: 'var(--font-title)', fontSize: '1.35rem', fontWeight: 800, color: 'var(--text-primary)', margin: 0 }}>
+          <h2 className="page-title">
             Angaben verfeinern
           </h2>
           <p style={{ color: 'var(--text-secondary)', fontSize: '0.825rem', margin: '0.15rem 0 0 0' }}>

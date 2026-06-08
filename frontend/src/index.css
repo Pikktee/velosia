@@ -1938,8 +1938,10 @@ select.form-control {
   margin-top: 0.5rem;
 }
 
-.spinner {
+.spinner,
+.animate-spin {
   animation: spin 1s linear infinite;
+  transform-origin: center;
 }
 
 @keyframes spin {
@@ -2305,10 +2307,10 @@ select.form-control {
 
 .stepper-item {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 0.75rem;
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-  padding: 0.2rem 0;
+  padding: 0.25rem 0;
 }
 
 .stepper-icon-wrapper {
@@ -2321,6 +2323,11 @@ select.form-control {
   flex-shrink: 0;
   transition: all 0.3s ease;
   font-size: 0.75rem;
+  margin-top: -1px; /* Center-aligns icon perfectly with first line of text */
+}
+
+.stepper-icon-wrapper svg {
+  display: block; /* Avoid inline/baseline displacement */
 }
 
 .stepper-item.completed {
@@ -2720,3 +2727,47 @@ select.form-control {
     padding: 0 0.5rem !important;
   }
 }
+
+/* Unified Page Header Style */
+.page-title {
+  font-size: 1.35rem;
+  font-weight: 800;
+  font-family: var(--font-title);
+  color: var(--text-primary);
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+/* Interactive Tone Selection Card */
+.tone-card-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.4rem;
+  padding: 0.85rem 1rem;
+  background: rgba(0, 0, 0, 0.2);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+  cursor: pointer;
+  text-align: left;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  min-height: 80px;
+  box-sizing: border-box;
+}
+
+.tone-card-btn:hover {
+  border-color: rgba(9, 176, 183, 0.35);
+  background: rgba(255, 255, 255, 0.02) !important;
+  transform: translateY(-1px);
+}
+
+.tone-card-btn.active {
+  background: rgba(9, 176, 183, 0.08) !important;
+  border: 1.5px solid var(--primary) !important;
+  color: var(--text-primary);
+  box-shadow: 0 0 12px var(--primary-glow);
+}
+

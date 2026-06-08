@@ -104,10 +104,10 @@ export default function AnalysisLoader({ isFinished = false, onComplete = () => 
 
           if (idx < activeStep) {
             statusClass = "completed";
-            icon = <Check size={11} strokeWidth={3} />;
+            icon = <Check size={12} strokeWidth={3} />;
           } else if (idx === activeStep) {
             statusClass = "active";
-            icon = <Loader2 className="animate-spin" size={11} strokeWidth={2.5} />;
+            icon = <Loader2 className="animate-spin" size={12} strokeWidth={2.5} />;
           } else {
             statusClass = "pending";
             icon = <span style={{ width: '4px', height: '4px', borderRadius: '50%', background: 'currentColor' }} />;

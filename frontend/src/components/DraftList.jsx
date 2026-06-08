@@ -95,7 +95,7 @@ export default function DraftList({ drafts, onSelectDraft, onDeleteDraft }) {
   return (
     <div className="fade-in">
       <div className="drafts-header-row">
-        <h2 style={{ fontSize: '1.25rem', fontFamily: 'var(--font-title)', fontWeight: 700, margin: 0 }}>
+        <h2 className="page-title">
           Deine Angebote <span className="drafts-count-badge">{drafts.length}</span>
         </h2>
         <span style={{ fontSize: '0.725rem', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
