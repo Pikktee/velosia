@@ -34,113 +34,48 @@ export default function DraftList({ drafts, onSelectDraft, onDeleteDraft }) {
         Deine Entwürfe ({drafts.length})
       </h2>
       
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(250px, 1fr))', gap: '1.25rem' }}>
+      <div className="drafts-grid">
         {drafts.map((draft) => (
           <div 
             key={draft.id} 
-            className="glass-panel glass-card"
-            style={{ 
-              display: 'flex', 
-              flexDirection: 'column', 
-              overflow: 'hidden', 
-              cursor: 'pointer',
-              height: '100%',
-              minHeight: '380px'
-            }}
+            className="glass-panel glass-card draft-card"
             onClick={() => onSelectDraft(draft)}
           >
             {/* Image Thumbnail */}
-            <div style={{ position: 'relative', width: '100%', paddingTop: '100%', background: '#000' }}>
+            <div className="draft-card-thumbnail">
               <img 
                 src={getImageUrl(draft.image_path)} 
                 alt={draft.title}
-                style={{ 
-                  position: 'absolute', 
-                  top: 0, 
-                  left: 0, 
-                  width: '100%', 
-                  height: '100%', 
-                  objectFit: 'cover' 
-                }}
+                className="draft-card-img"
               />
               
               {/* Price Tag Overlay */}
-              <div style={{ 
-                position: 'absolute', 
-                bottom: '0.75rem', 
-                right: '0.75rem',
-                background: 'var(--primary)',
-                color: '#000',
-                padding: '0.4rem 0.8rem',
-                borderRadius: '99px',
-                fontWeight: '700',
-                fontSize: '0.95rem',
-                boxShadow: '0 4px 10px rgba(0,0,0,0.3)'
-              }}>
+              <div className="draft-card-price">
                 {Math.round(draft.price)} €
               </div>
             </div>
 
             {/* Content Details */}
-            <div style={{ padding: '1rem', display: 'flex', flexDirection: 'column', flexGrow: 1 }}>
-              <h3 style={{ 
-                fontSize: '1.1rem', 
-                lineHeight: '1.3', 
-                marginBottom: '0.5rem', 
-                overflow: 'hidden', 
-                textOverflow: 'ellipsis',
-                display: '-webkit-box',
-                WebkitLineClamp: 2,
-                WebkitBoxOrient: 'vertical',
-                height: '2.8rem'
-              }}>
+            <div className="draft-card-content">
+              <h3 className="draft-card-title">
                 {draft.title || 'Unbenannter Entwurf'}
               </h3>
               
               {/* Badges */}
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.4rem', marginBottom: '1rem' }}>
-                <span style={{ 
-                  display: 'inline-flex', 
-                  alignItems: 'center', 
-                  gap: '0.25rem', 
-                  fontSize: '0.75rem', 
-                  background: 'rgba(255,255,255,0.04)', 
-                  border: '1px solid var(--glass-border)',
-                  color: 'var(--text-secondary)',
-                  padding: '0.2rem 0.5rem',
-                  borderRadius: '4px'
-                }}>
+              <div className="draft-card-badges">
+                <span className="draft-card-badge draft-card-badge-secondary">
                   <Tag size={10} />
                   {draft.category}
                 </span>
                 
-                <span style={{ 
-                  display: 'inline-flex', 
-                  alignItems: 'center', 
-                  gap: '0.25rem', 
-                  fontSize: '0.75rem', 
-                  background: 'rgba(9, 176, 183, 0.05)', 
-                  border: '1px solid rgba(9, 176, 183, 0.15)',
-                  color: 'var(--primary)',
-                  padding: '0.2rem 0.5rem',
-                  borderRadius: '4px'
-                }}>
+                <span className="draft-card-badge draft-card-badge-primary">
                   <Sparkles size={10} />
                   {draft.condition}
                 </span>
               </div>
 
               {/* Footer row */}
-              <div style={{ 
-                marginTop: 'auto', 
-                display: 'flex', 
-                alignItems: 'center', 
-                justifyContent: 'space-between',
-                paddingTop: '0.75rem',
-                borderTop: '1px solid rgba(255,255,255,0.05)',
-                fontSize: '0.75rem',
-                color: 'var(--text-muted)'
-              }}>
+              <div className="draft-card-footer">
                 <span style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
                   <Calendar size={12} />
                   {formatDate(draft.created_at)}

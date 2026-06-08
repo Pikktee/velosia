@@ -688,3 +688,245 @@ select.form-control {
     grid-template-columns: 1fr 1.2fr;
   }
 }
+
+/* Drafts List Grid and Card Styles */
+.drafts-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+  gap: 1.25rem;
+}
+
+.draft-card {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  cursor: pointer;
+  height: 100%;
+  min-height: 380px;
+}
+
+.draft-card-thumbnail {
+  position: relative;
+  width: 100%;
+  padding-top: 100%;
+  background: #000;
+}
+
+.draft-card-img {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.draft-card-price {
+  position: absolute;
+  bottom: 0.75rem;
+  right: 0.75rem;
+  background: var(--primary);
+  color: #000;
+  padding: 0.4rem 0.8rem;
+  border-radius: 99px;
+  font-weight: 700;
+  font-size: 0.95rem;
+  box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+}
+
+.draft-card-content {
+  padding: 1rem;
+  display: flex;
+  flex-direction: column;
+  flex-grow: 1;
+}
+
+.draft-card-title {
+  font-size: 1.1rem;
+  line-height: 1.3;
+  margin-bottom: 0.5rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  height: 2.8rem;
+}
+
+.draft-card-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin-bottom: 1rem;
+}
+
+.draft-card-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  font-size: 0.75rem;
+  padding: 0.2rem 0.5rem;
+  border-radius: 4px;
+}
+
+.draft-card-badge-secondary {
+  background: rgba(255,255,255,0.04);
+  border: 1px solid var(--glass-border);
+  color: var(--text-secondary);
+}
+
+.draft-card-badge-primary {
+  background: rgba(9, 176, 183, 0.05);
+  border: 1px solid rgba(9, 176, 183, 0.15);
+  color: var(--primary);
+}
+
+.draft-card-footer {
+  margin-top: auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-top: 0.75rem;
+  border-top: 1px solid rgba(255,255,255,0.05);
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+/* Landscape Mobile Optimization (Height <= 550px) */
+@media (orientation: landscape) and (max-height: 550px) {
+  /* Hide global header to reclaim space */
+  .app-shell:not(.camera-mode) .app-header {
+    display: none;
+  }
+
+  /* Left-docked Sidebar Navigation */
+  .app-shell:not(.camera-mode) .app-nav {
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: 72px;
+    height: 100vh;
+    height: 100dvh;
+    flex-direction: column;
+    justify-content: center;
+    gap: 1.5rem;
+    padding: 1rem 0;
+    border-right: 1px solid var(--glass-border);
+    border-top: none;
+    box-shadow: 4px 0 20px rgba(0, 0, 0, 0.4);
+    background: #0e121a;
+  }
+
+  /* Adjust navigation tabs */
+  .app-shell:not(.camera-mode) .nav-tab-btn {
+    flex: none;
+    width: 100%;
+    height: auto;
+    padding: 0.5rem 0;
+  }
+
+  /* Adjust camera button placement in sidebar */
+  .app-shell:not(.camera-mode) .app-nav > div {
+    position: relative !important;
+    top: 0 !important;
+    margin: 0.5rem auto !important;
+  }
+
+  /* Right-side main content */
+  .app-shell:not(.camera-mode) .app-main {
+    position: absolute;
+    left: 72px;
+    right: 0;
+    top: 0;
+    bottom: 0;
+    height: 100vh;
+    height: 100dvh;
+  }
+
+  /* Re-adjust container spacing */
+  .app-shell:not(.camera-mode) .app-main .container {
+    padding-top: 1rem;
+    padding-bottom: 1.5rem !important;
+    max-width: 100%;
+  }
+
+  /* Shift main content to full width if keyboard is open (nav hidden) */
+  .app-shell.keyboard-open .app-main {
+    left: 0 !important;
+  }
+
+  /* Row layout for Draft Cards in landscape-mobile */
+  .drafts-grid {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+  }
+
+  .draft-card {
+    flex-direction: row;
+    min-height: 80px;
+    height: 80px;
+  }
+
+  .draft-card-thumbnail {
+    width: 80px;
+    height: 80px;
+    padding-top: 0;
+    flex-shrink: 0;
+  }
+
+  .draft-card-img {
+    position: relative;
+    border-radius: var(--radius-sm) 0 0 var(--radius-sm);
+  }
+
+  .draft-card-price {
+    position: absolute;
+    bottom: 0.25rem;
+    right: 0.25rem;
+    padding: 0.2rem 0.45rem;
+    font-size: 0.75rem;
+  }
+
+  .draft-card-content {
+    padding: 0.5rem 1rem;
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1.5rem;
+    width: calc(100% - 80px);
+  }
+
+  .draft-card-title {
+    font-size: 0.95rem;
+    margin-bottom: 0;
+    height: auto;
+    max-width: 250px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    display: block;
+  }
+
+  .draft-card-badges {
+    margin-bottom: 0;
+    gap: 0.4rem;
+  }
+
+  .draft-card-badge {
+    padding: 0.15rem 0.4rem;
+    font-size: 0.7rem;
+  }
+
+  .draft-card-footer {
+    margin-top: 0;
+    padding-top: 0;
+    border-top: none;
+    flex-direction: row;
+    align-items: center;
+    gap: 1rem;
+    flex-shrink: 0;
+  }
+}
+
