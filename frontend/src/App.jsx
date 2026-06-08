@@ -24,6 +24,8 @@ export default function App() {
   const [route, setRoute] = useState(window.location.hash || '#/');
   const [capturedImages, setCapturedImages] = useState([]);
   const [abortController, setAbortController] = useState(null);
+  const [isAnalysisFinished, setIsAnalysisFinished] = useState(false);
+  const [tempAnalysisResult, setTempAnalysisResult] = useState(null);
   const [prevView, setPrevView] = useState('list');
   const [showBugReportModal, setShowBugReportModal] = useState(false);
 
@@ -203,6 +205,8 @@ export default function App() {
     if (capturedImages.length === 0) return;
 
     setAnalysisError(null);
+    setIsAnalysisFinished(false);
+    setTempAnalysisResult(null);
     setView('analyzing');
 
     const controller = new AbortController();
@@ -212,15 +216,8 @@ export default function App() {
       const filesToSend = capturedImages.map(img => img.file);
       const result = await uploadAndAnalyze(filesToSend, controller.signal);
 
-      // Revoke preview URLs on success
-      capturedImages.forEach(img => URL.revokeObjectURL(img.previewUrl));
-      setCapturedImages([]);
-      setAbortController(null);
-
-      // Add to drafts list and show details
-      setDrafts((prev) => [result, ...prev]);
-      setSelectedDraft(result);
-      setView('detail');
+      setTempAnalysisResult(result);
+      setIsAnalysisFinished(true);
     } catch (err) {
       if (err.name === 'AbortError') {
         console.log("Analysis cancelled by user.");
@@ -233,6 +230,22 @@ export default function App() {
       }
       setAbortController(null);
     }
+  };
+
+  const handleAnalysisLoaderComplete = () => {
+    if (!tempAnalysisResult) return;
+
+    // Revoke preview URLs on success
+    capturedImages.forEach(img => URL.revokeObjectURL(img.previewUrl));
+    setCapturedImages([]);
+    setAbortController(null);
+
+    // Add to drafts list and show details
+    setDrafts((prev) => [tempAnalysisResult, ...prev]);
+    setSelectedDraft(tempAnalysisResult);
+    setIsAnalysisFinished(false);
+    setTempAnalysisResult(null);
+    setView('detail');
   };
 
   const handleCancelAnalysis = () => {
@@ -384,7 +397,11 @@ export default function App() {
           )}
 
           {view === 'analyzing' && (
-            <AnalysisLoader onCancel={handleCancelAnalysis} />
+            <AnalysisLoader 
+              isFinished={isAnalysisFinished}
+              onComplete={handleAnalysisLoaderComplete}
+              onCancel={handleCancelAnalysis} 
+            />
           )}
 
           {view === 'list' && (

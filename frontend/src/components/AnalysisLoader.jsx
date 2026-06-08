@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Check, Loader2 } from 'lucide-react';
 
-export default function AnalysisLoader({ onCancel }) {
+export default function AnalysisLoader({ isFinished = false, onComplete = () => {}, onCancel }) {
   const [activeStep, setActiveStep] = useState(0);
 
   const steps = [
@@ -11,14 +11,33 @@ export default function AnalysisLoader({ onCancel }) {
   ];
 
   useEffect(() => {
-    const interval = setInterval(() => {
-      setActiveStep((prev) => (prev < steps.length - 1 ? prev + 1 : prev));
-    }, 3000); // Slower pacing for fewer steps
+    if (!isFinished) {
+      const interval = setInterval(() => {
+        setActiveStep((prev) => (prev < steps.length - 1 ? prev + 1 : prev));
+      }, 3000); // Slower pacing for fewer steps
+      return () => clearInterval(interval);
+    } else {
+      if (activeStep < steps.length) {
+        const interval = setInterval(() => {
+          setActiveStep((prev) => {
+            if (prev < steps.length) {
+              return prev + 1;
+            }
+            clearInterval(interval);
+            return prev;
+          });
+        }, 250); // Fast-forward speed for satisfying checklist complete
+        return () => clearInterval(interval);
+      } else {
+        const timeout = setTimeout(() => {
+          onComplete();
+        }, 600); // Satisfying pause on all-completed
+        return () => clearTimeout(timeout);
+      }
+    }
+  }, [isFinished, activeStep, steps.length, onComplete]);
 
-    return () => clearInterval(interval);
-  }, [steps.length]);
-
-  const progressPercentage = ((activeStep + 0.5) / steps.length) * 100;
+  const progressPercentage = Math.min(100, ((activeStep + 0.5) / steps.length) * 100);
 
   return (
     <div className="loader-wrapper fade-in" style={{ width: '100%' }}>
@@ -114,7 +133,7 @@ export default function AnalysisLoader({ onCancel }) {
       </div>
 
       {/* Abbrechen Button */}
-      {onCancel && (
+      {onCancel && !isFinished && (
         <button
           onClick={onCancel}
           className="btn btn-secondary"
