@@ -2,6 +2,7 @@ package com.vintamie.app
 
 import android.Manifest
 import android.annotation.SuppressLint
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
@@ -13,6 +14,9 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
+import com.google.android.gms.auth.api.signin.GoogleSignIn
+import com.google.android.gms.auth.api.signin.GoogleSignInOptions
+import com.google.android.gms.common.api.ApiException
 import com.google.android.material.floatingactionbutton.ExtendedFloatingActionButton
 import okhttp3.*
 import org.json.JSONObject
@@ -24,6 +28,8 @@ class MainActivity : AppCompatActivity() {
 
     private lateinit var webView: WebView
     private lateinit var fabFill: ExtendedFloatingActionButton
+    
+    private val RC_SIGN_IN = 9001
     
     // Server addresses (default to production for physical devices)
     private var frontendUrl = "https://vintamie.henrikheil.net"
@@ -134,6 +140,13 @@ class MainActivity : AppCompatActivity() {
             runOnUiThread {
                 Toast.makeText(this@MainActivity, "Lade Entwurf #$draftId...", Toast.LENGTH_SHORT).show()
                 fetchDraftAndPrepare(draftId, platform, token)
+            }
+        }
+
+        @JavascriptInterface
+        fun loginWithGoogle(clientId: String) {
+            runOnUiThread {
+                startGoogleSignIn(clientId)
             }
         }
     }
@@ -330,6 +343,87 @@ class MainActivity : AppCompatActivity() {
                 || product.indexOf("sdk_x86") != -1
                 || product.indexOf("vbox86p") != -1
                 || device.indexOf("emulator") != -1
+    }
+
+    private fun startGoogleSignIn(clientId: String) {
+        val gso = GoogleSignInOptions.Builder(GoogleSignInOptions.DEFAULT_SIGN_IN)
+            .requestEmail()
+            .requestIdToken(clientId)
+            .build()
+        val googleSignInClient = GoogleSignIn.getClient(this, gso)
+        googleSignInClient.signOut().addOnCompleteListener {
+            val signInIntent = googleSignInClient.signInIntent
+            startActivityForResult(signInIntent, RC_SIGN_IN)
+        }
+    }
+
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode == RC_SIGN_IN) {
+            val task = GoogleSignIn.getSignedInAccountFromIntent(data)
+            try {
+                val account = task.getResult(ApiException::class.java)
+                val idToken = account?.idToken
+                if (idToken != null) {
+                    exchangeGoogleToken(idToken)
+                } else {
+                    runOnUiThread { Toast.makeText(this, "Google ID Token fehlt.", Toast.LENGTH_SHORT).show() }
+                }
+            } catch (e: ApiException) {
+                runOnUiThread { Toast.makeText(this, "Google Login abgebrochen: ${e.statusCode}", Toast.LENGTH_SHORT).show() }
+            }
+        }
+    }
+
+    private fun exchangeGoogleToken(idToken: String) {
+        val json = JSONObject()
+        json.put("credential", idToken)
+        
+        val body = RequestBody.create(
+            MediaType.parse("application/json; charset=utf-8"),
+            json.toString()
+        )
+        
+        val request = Request.Builder()
+            .url("$backendUrl/api/auth/google")
+            .post(body)
+            .build()
+            
+        okHttpClient.newCall(request).enqueue(object : Callback {
+            override fun onFailure(call: Call, e: IOException) {
+                runOnUiThread { Toast.makeText(this@MainActivity, "Server-Authentifizierung fehlgeschlagen: ${e.message}", Toast.LENGTH_LONG).show() }
+            }
+            
+            override fun onResponse(call: Call, response: Response) {
+                response.use {
+                    if (!response.isSuccessful) {
+                        runOnUiThread { Toast.makeText(this@MainActivity, "Fehler beim Google-Login im Backend.", Toast.LENGTH_LONG).show() }
+                        return
+                    }
+                    val bodyString = response.body?.string() ?: return
+                    val tokenData = JSONObject(bodyString)
+                    val jwtToken = tokenData.optString("access_token")
+                    
+                    if (jwtToken.isNotEmpty()) {
+                        runOnUiThread {
+                            injectJwtToken(jwtToken)
+                        }
+                    }
+                }
+            }
+        })
+    }
+
+    private fun injectJwtToken(jwtToken: String) {
+        val js = """
+            (function() {
+                localStorage.setItem('vintamie_token', '$jwtToken');
+                localStorage.setItem('vintamie_user_email', 'Google-Nutzer');
+                window.location.reload();
+            })();
+        """.trimIndent()
+        webView.evaluateJavascript(js, null)
+        Toast.makeText(this, "Erfolgreich mit Google angemeldet!", Toast.LENGTH_SHORT).show()
     }
 
     @Deprecated("Deprecated in Java")
