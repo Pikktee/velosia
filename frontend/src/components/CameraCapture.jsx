@@ -425,7 +425,7 @@ const CameraCapture = ({
         {/* Action Buttons Row */}
         <div className="camera-actions-row">
           {/* Left: Gallery Button Wrapper */}
-          <div style={{ width: '110px', display: 'flex', justifyContent: 'flex-start', alignItems: 'center' }}>
+          <div className="camera-action-left">
             <button
               className="btn btn-secondary"
               onClick={triggerFileInput}
@@ -450,7 +450,7 @@ const CameraCapture = ({
           </div>
 
           {/* Center: Shutter Button */}
-          <div style={{ width: '72px', height: '72px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div className="camera-action-center">
             {!error && (
               <button
                 className="camera-shutter-btn"
@@ -463,7 +463,7 @@ const CameraCapture = ({
           </div>
 
           {/* Right: Done/Analyze Button Wrapper */}
-          <div style={{ width: '110px', display: 'flex', justifyContent: 'flex-end', alignItems: 'center' }}>
+          <div className="camera-action-right">
             {selectedImages.length > 0 && (
               <button
                 className="btn btn-primary"

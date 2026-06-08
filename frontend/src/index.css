@@ -591,6 +591,28 @@ select.form-control {
   max-width: 340px;
 }
 
+.camera-action-left {
+  width: 110px;
+  display: flex;
+  justify-content: flex-start;
+  align-items: center;
+}
+
+.camera-action-center {
+  width: 72px;
+  height: 72px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.camera-action-right {
+  width: 110px;
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+}
+
 .camera-thumbnails-container {
   display: flex;
   gap: 0.6rem;
@@ -647,7 +669,7 @@ select.form-control {
     bottom: 0;
     right: 0;
     left: auto;
-    width: 100px;
+    width: 120px;
     height: 100%;
     background: linear-gradient(to left, rgba(14, 18, 26, 0.95) 0%, rgba(14, 18, 26, 0.5) 60%, rgba(14, 18, 26, 0) 100%);
     padding: calc(15px + env(safe-area-inset-top, 0px)) 1rem calc(15px + env(safe-area-inset-bottom, 0px)) 1rem;
@@ -664,6 +686,17 @@ select.form-control {
     align-items: center;
     max-width: none;
     padding: 1.5rem 0;
+  }
+
+  .camera-action-left,
+  .camera-action-center,
+  .camera-action-right {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .camera-action-center {
+    height: 72px;
   }
 
   .camera-thumbnails-container {
