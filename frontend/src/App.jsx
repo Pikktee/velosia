@@ -121,17 +121,17 @@ export default function App() {
         borderBottom: '1px solid var(--glass-border)',
         borderRadius: 'var(--radius-md)'
       }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-          <div style={{
-            background: 'linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%)',
-            padding: '0.4rem',
-            borderRadius: '10px',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center'
-          }}>
-            <Sparkles size={20} style={{ color: '#000' }} />
-          </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
+          <img 
+            src="/favicon.svg" 
+            alt="Vintamie Logo" 
+            style={{ 
+              width: '36px', 
+              height: '36px', 
+              borderRadius: '8px',
+              border: '1px solid var(--glass-border)'
+            }} 
+          />
           <div>
             <h1 style={{ fontSize: '1.25rem', fontFamily: 'var(--font-title)', fontWeight: '800', display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
               Vintamie

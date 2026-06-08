@@ -105,17 +105,17 @@ export default function Login({ onLoginSuccess }) {
       <div className="glass-panel" style={{ width: '100%', maxWidth: '400px', padding: '2.5rem 2rem' }}>
         
         {/* Brand Header */}
-        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.5rem', marginBottom: '2rem', textAlign: 'center' }}>
-          <div style={{
-            background: 'linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%)',
-            padding: '0.5rem',
-            borderRadius: '12px',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center'
-          }}>
-            <Sparkles size={24} style={{ color: '#000' }} />
-          </div>
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.75rem', marginBottom: '2rem', textAlign: 'center' }}>
+          <img 
+            src="/favicon.svg" 
+            alt="Vintamie Logo" 
+            style={{ 
+              width: '48px', 
+              height: '48px', 
+              borderRadius: '10px',
+              border: '1px solid var(--glass-border)'
+            }} 
+          />
           <div>
             <h2 style={{ fontSize: '1.5rem', fontFamily: 'var(--font-title)', fontWeight: '800' }}>
               Vintamie
