@@ -240,11 +240,6 @@ export default function App() {
           <h1 className="header-title">vintamie</h1>
         </div>
         <div className="header-actions">
-          {view === 'list' && (
-            <span className="drafts-badge">
-              {drafts.length} {drafts.length === 1 ? 'Entwurf' : 'Entwürfe'}
-            </span>
-          )}
           {view === 'capture' && (
             <div className="status-badge">
               <Camera size={12} style={{ color: 'var(--primary)' }} />
