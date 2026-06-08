@@ -334,7 +334,7 @@ export default function App() {
   }
 
   return (
-    <div className={`app-shell ${view === 'capture' ? 'camera-mode' : ''} ${isInputFocused ? 'keyboard-open' : ''}`}>
+    <div className={`app-shell ${view === 'capture' ? 'camera-mode' : ''} ${view === 'detail' ? 'detail-mode' : ''} ${isInputFocused ? 'keyboard-open' : ''}`}>
       {/* Top Header Brand Bar */}
       <header className="app-header">
         <div className="header-brand">

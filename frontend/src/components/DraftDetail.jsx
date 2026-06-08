@@ -255,7 +255,6 @@ export default function DraftDetail({ draft, onBack, onUpdateSuccess }) {
             <Share2 size={18} style={{ color: 'var(--primary)' }} />
             <span>Veröffentlichen</span>
           </h3>
-          {isMobile && renderSaveStatus()}
         </div>
         
         {isAndroidApp ? (
@@ -473,7 +472,6 @@ export default function DraftDetail({ draft, onBack, onUpdateSuccess }) {
             <FileText size={18} style={{ color: 'var(--primary)' }} />
             <span>Details</span>
           </h3>
-          {isMobile && renderSaveStatus()}
         </div>
         
         {/* Title */}
@@ -600,18 +598,23 @@ export default function DraftDetail({ draft, onBack, onUpdateSuccess }) {
 
   const renderSaveStatus = () => {
     return (
-      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.85rem', fontWeight: '600' }}>
-        {saveStatus === 'saved' && null}
+      <div className="detail-save-status">
+        {saveStatus === 'saved' && (
+          <span className="status-saved">
+            <Check size={12} />
+            <span>Gespeichert</span>
+          </span>
+        )}
         {saveStatus === 'saving' && (
-          <span style={{ color: 'var(--warning)', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
-            <RefreshCw size={12} style={{ animation: 'spin 1.5s linear infinite' }} />
-            <span style={{ fontSize: '0.8rem' }}>Sichert...</span>
+          <span className="status-saving">
+            <RefreshCw size={12} className="spin-animation" />
+            <span>Sichert...</span>
           </span>
         )}
         {saveStatus === 'error' && (
-          <span style={{ color: 'var(--danger)', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
-            <AlertCircle size={14} />
-            <span style={{ fontSize: '0.8rem' }}>Speicherfehler</span>
+          <span className="status-error">
+            <AlertCircle size={12} />
+            <span>Fehler</span>
           </span>
         )}
       </div>
@@ -619,63 +622,52 @@ export default function DraftDetail({ draft, onBack, onUpdateSuccess }) {
   };
 
   return (
-    <div className="fade-in" style={{ position: 'relative' }}>
-      {/* Sticky Tab Header on Mobile */}
-      {isMobile && (
-        <div className="detail-tabs-header">
-          <div className="segmented-control" style={{ width: '100%' }}>
+    <div className="fade-in">
+      {/* Sticky Tinder-style Header */}
+      <div className="detail-sticky-header">
+        <div className="detail-header-inner">
+          <div className="detail-header-title-row">
+            <div className="detail-header-title-container">
+              <h2 className="detail-header-title">Angebot bearbeiten</h2>
+              {renderSaveStatus()}
+            </div>
+            <button className="detail-done-btn" onClick={onBack}>
+              Fertig
+            </button>
+          </div>
+          <div className="detail-tabs-row">
             <button 
-              className={`segmented-control-btn ${activeTab === 'edit' ? 'active' : ''}`}
+              className={`detail-tab ${activeTab === 'edit' ? 'active' : ''}`}
               onClick={() => setActiveTab('edit')}
             >
-              <FileText size={15} />
+              <FileText size={16} />
               <span>Übersicht</span>
             </button>
             <button 
-              className={`segmented-control-btn ${activeTab === 'publish' ? 'active' : ''}`}
+              className={`detail-tab ${activeTab === 'publish' ? 'active' : ''}`}
               onClick={() => setActiveTab('publish')}
             >
-              <Share2 size={15} />
+              <Share2 size={16} />
               <span>Veröffentlichen</span>
             </button>
           </div>
         </div>
-      )}
+      </div>
 
-      {/* Save Status on Desktop */}
-      {!isMobile && (
-        <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '1rem', width: '100%' }}>
-          {renderSaveStatus()}
-        </div>
-      )}
-
-      {/* Main Grid */}
-      {isMobile ? (
-        <div className="draft-detail-grid fade-in">
-          {activeTab === 'edit' ? (
-            <>
-              {renderImageBox()}
-              {renderFormFields()}
-            </>
-          ) : (
-            <>
-              {renderPublishingAssist()}
-              {renderPriceComparison()}
-            </>
-          )}
-        </div>
-      ) : (
-        <div className="draft-detail-grid">
-          {/* Left Column */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+      {/* Content Container */}
+      <div className="detail-content-container">
+        {activeTab === 'edit' ? (
+          <div className="draft-detail-grid fade-in">
             {renderImageBox()}
+            {renderFormFields()}
+          </div>
+        ) : (
+          <div className="draft-detail-grid fade-in">
             {renderPublishingAssist()}
             {renderPriceComparison()}
           </div>
-          {/* Right Column */}
-          {renderFormFields()}
-        </div>
-      )}
+        )}
+      </div>
 
       {/* Image Detail Popup Modal */}
       {selectedModalImage && (

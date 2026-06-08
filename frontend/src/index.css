@@ -969,27 +969,178 @@ select.form-control {
 
 /* --- Vintamie Redesign Details View Styles --- */
 
-.detail-tabs-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.75rem;
+/* Detail Mode Layout (Full Screen Tinder Style) */
+.app-shell.detail-mode .app-header,
+.app-shell.detail-mode .app-nav {
+  display: none !important;
+}
+
+.app-shell.detail-mode .app-main .container {
+  padding-left: 0 !important;
+  padding-right: 0 !important;
+  padding-top: 0 !important;
+  padding-bottom: 0 !important;
+  max-width: 100% !important;
+}
+
+/* Sticky Tinder-style Detail Header */
+.detail-sticky-header {
   position: sticky;
   top: 0;
   z-index: 100;
-  background: rgba(14, 18, 26, 0.92);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
-  padding: 0.75rem 0.25rem;
-  margin-top: -1rem; /* Offset App container padding-top */
-  margin-bottom: 1.25rem;
+  background: rgba(10, 13, 20, 0.82);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border-bottom: 1px solid var(--glass-border);
+  width: 100%;
+}
+
+.detail-header-inner {
+  max-width: 1000px;
+  margin: 0 auto;
+  padding: 0 1.25rem;
+}
+
+.detail-header-title-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  height: 56px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.04);
 }
 
-@media (min-width: 768px) or (orientation: landscape) {
-  .detail-tabs-header {
-    display: none !important;
-  }
+.detail-header-title-container {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.detail-header-title {
+  font-family: var(--font-title);
+  font-weight: 700;
+  font-size: 1.2rem;
+  color: var(--text-primary);
+  margin: 0;
+}
+
+.detail-done-btn {
+  background: transparent;
+  border: none;
+  color: var(--primary);
+  font-weight: 700;
+  font-size: 0.95rem;
+  cursor: pointer;
+  padding: 0.5rem 0.75rem;
+  margin-right: -0.75rem;
+  transition: opacity 0.2s ease, transform 0.1s ease;
+  outline: none;
+}
+
+.detail-done-btn:hover {
+  opacity: 0.85;
+}
+
+.detail-done-btn:active {
+  transform: scale(0.96);
+}
+
+.detail-tabs-row {
+  display: flex;
+  gap: 1.5rem;
+  height: 48px;
+}
+
+.detail-tab {
+  background: transparent;
+  border: none;
+  font-family: var(--font-title);
+  font-weight: 600;
+  font-size: 0.9rem;
+  color: var(--text-secondary);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0;
+  position: relative;
+  transition: color 0.2s ease;
+  min-height: auto;
+  outline: none;
+}
+
+.detail-tab:hover {
+  color: var(--text-primary);
+}
+
+.detail-tab.active {
+  color: var(--primary);
+}
+
+.detail-tab.active::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: var(--primary);
+  border-radius: 99px 99px 0 0;
+  box-shadow: 0 -2px 10px var(--primary-glow);
+}
+
+/* Save status inside Header */
+.detail-save-status {
+  display: flex;
+  align-items: center;
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.status-saved {
+  color: #10b981;
+  background: rgba(16, 185, 129, 0.08);
+  border: 1px solid rgba(16, 185, 129, 0.15);
+  padding: 0.2rem 0.5rem;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.status-saving {
+  color: #f59e0b;
+  background: rgba(245, 158, 11, 0.08);
+  border: 1px solid rgba(245, 158, 11, 0.15);
+  padding: 0.2rem 0.5rem;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.status-error {
+  color: #ef4444;
+  background: rgba(239, 68, 68, 0.08);
+  border: 1px solid rgba(239, 68, 68, 0.15);
+  padding: 0.2rem 0.5rem;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+/* Content Container styling */
+.detail-content-container {
+  max-width: 1000px;
+  margin: 0 auto;
+  padding: 1.5rem 1.25rem;
+  padding-bottom: calc(3rem + env(safe-area-inset-bottom, 0px)) !important;
+  box-sizing: border-box;
+  width: 100%;
+}
+
+.spin-animation {
+  animation: spin 1.5s linear infinite;
 }
 
 /* Unboxed layout for Draft Detail */
