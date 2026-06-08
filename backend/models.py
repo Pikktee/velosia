@@ -46,6 +46,8 @@ class Draft(Base):
     image_paths = Column(String, nullable=True)
     # JSON string to store price comparison source links: [{"title": "...", "price": 12.0, "url": "..."}]
     sources = Column(String, nullable=True)
+    # JSON string of Kleinanzeigen attribute fields: {"Größe": "M", "Marke": "Nike", ...}
+    attributes = Column(String, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
 
     # Relationships

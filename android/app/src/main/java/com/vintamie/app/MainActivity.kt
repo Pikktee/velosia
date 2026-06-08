@@ -30,11 +30,11 @@ class MainActivity : AppCompatActivity() {
 
     private lateinit var webView: WebView
     private lateinit var fabFill: ExtendedFloatingActionButton
-    
+    private lateinit var fabClose: ExtendedFloatingActionButton
+
     private val RC_SIGN_IN = 9001
     private val RC_FILE_CHOOSER = 9002
     private var fileUploadCallback: ValueCallback<Array<Uri>>? = null
-    
     // Server addresses (default to production for physical devices)
     private var frontendUrl = "https://vintamie.henrikheil.net"
     private var backendUrl = "https://api.vintamie.henrikheil.net"
@@ -42,6 +42,11 @@ class MainActivity : AppCompatActivity() {
     private var activeDraftJson: String? = null
     private var activeImageUri: Uri? = null
     private var activePlatform: String? = null
+    private var userZip: String? = null
+    // Guards the automatic one-shot fill so it does not re-trigger on every SPA page event
+    private var hasAutoFilled = false
+    // Guards the automatic category pre-selection on the Kleinanzeigen step 1 page
+    private var hasAutoCategory = false
 
     private val okHttpClient = OkHttpClient()
     
@@ -70,6 +75,7 @@ class MainActivity : AppCompatActivity() {
 
         webView = findViewById(R.id.webView)
         fabFill = findViewById(R.id.fabFill)
+        fabClose = findViewById(R.id.fabClose)
 
         // Configure WebView settings
         val settings = webView.settings
@@ -94,14 +100,32 @@ class MainActivity : AppCompatActivity() {
 
             override fun onPageFinished(view: WebView, url: String) {
                 super.onPageFinished(view, url)
-                
-                // Show or hide the FAB based on the current URL
-                if (url.contains("vinted.de/items/new") || 
-                    url.contains("vinted.fr/items/new") ||
-                    url.contains("kleinanzeigen.de/p-anzeige-aufgeben.html")
-                ) {
-                    if (activeDraftJson != null) {
-                        fabFill.visibility = View.VISIBLE
+
+                // Allow the user to bail out of any external listing page at any time
+                val isDashboard = url.startsWith(frontendUrl)
+                fabClose.visibility = if (isDashboard) View.GONE else View.VISIBLE
+
+                val isVintedForm = url.contains("vinted.de/items/new") ||
+                    url.contains("vinted.fr/items/new")
+                // Kleinanzeigen step 1 is only the category picker; the real form lives on
+                // p-anzeige-aufgeben-schritt2.html, so we treat that as the fillable page.
+                val isKleinanzeigenCategory = url.contains("kleinanzeigen.de/p-anzeige-aufgeben.html")
+                val isKleinanzeigenForm = url.contains("kleinanzeigen.de/p-anzeige-aufgeben-schritt2")
+                val isFormPage = isVintedForm || isKleinanzeigenForm
+
+                if (activeDraftJson != null && (isFormPage || isKleinanzeigenCategory)) {
+                    fabFill.visibility = View.VISIBLE
+                    // On the actual form, fill (and submit) automatically once it has loaded.
+                    if (isFormPage && !hasAutoFilled) {
+                        hasAutoFilled = true
+                        // The forms render dynamically; give them a moment before injecting.
+                        webView.postDelayed({ injectAutofillScript(autoSubmit = true) }, 1200)
+                    }
+                    // On the category picker, try to auto-select the category via the
+                    // keyword suggestion field so the user reaches the form hands-free.
+                    if (isKleinanzeigenCategory && !hasAutoCategory) {
+                        hasAutoCategory = true
+                        webView.postDelayed({ injectCategorySelectScript() }, 1200)
                     }
                 } else {
                     fabFill.visibility = View.GONE
@@ -153,9 +177,15 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
-        // Configure floating fill action button
+        // Configure floating fill action button (manual fill, no auto-submit so the
+        // user can review before publishing)
         fabFill.setOnClickListener {
-            injectAutofillScript()
+            injectAutofillScript(autoSubmit = false)
+        }
+
+        // Close button: leave the external listing page and return to the dashboard
+        fabClose.setOnClickListener {
+            closeListingView()
         }
 
         // Load the frontend dashboard
@@ -171,6 +201,9 @@ class MainActivity : AppCompatActivity() {
         fun postToPlatform(draftId: Int, platform: String, token: String) {
             runOnUiThread {
                 Toast.makeText(this@MainActivity, "Lade Angebot #$draftId...", Toast.LENGTH_SHORT).show()
+                hasAutoFilled = false
+                hasAutoCategory = false
+                fetchUserProfile(token)
                 fetchDraftAndPrepare(draftId, platform, token)
             }
         }
@@ -275,76 +308,362 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun navigateToPlatformListing(platform: String) {
+        hasAutoFilled = false
+        hasAutoCategory = false
         val url = if (platform == "vinted") {
             "https://www.vinted.de/items/new"
         } else {
+            // Kleinanzeigen requires picking a category first; the form on
+            // p-anzeige-aufgeben-schritt2.html is then auto-filled once it loads.
             "https://www.kleinanzeigen.de/p-anzeige-aufgeben.html"
         }
         webView.loadUrl(url)
     }
 
-    // Injects Javascript to autofill fields and trigger the file upload chooser click
-    private fun injectAutofillScript() {
+    // Fetch the user's saved profile so we can prefill the postcode (required for
+    // Kleinanzeigen submission). Best-effort: failures are silently ignored.
+    private fun fetchUserProfile(token: String) {
+        val request = Request.Builder()
+            .url("$backendUrl/api/auth/me")
+            .header("Authorization", "Bearer $token")
+            .build()
+
+        okHttpClient.newCall(request).enqueue(object : Callback {
+            override fun onFailure(call: Call, e: IOException) {
+                // Ignore - postcode prefill is optional
+            }
+
+            override fun onResponse(call: Call, response: Response) {
+                response.use {
+                    if (!response.isSuccessful) return
+                    val bodyString = response.body?.string() ?: return
+                    try {
+                        val json = JSONObject(bodyString)
+                        val zip = json.optString("default_zip")
+                        userZip = if (zip.isNullOrEmpty() || zip == "null") null else zip
+                    } catch (e: Exception) {
+                        // Ignore malformed profile responses
+                    }
+                }
+            }
+        })
+    }
+
+    // Close the external listing page: drop the active draft session and return
+    // to the Vintamie dashboard.
+    private fun closeListingView() {
+        activeDraftJson = null
+        activeImageUri = null
+        activePlatform = null
+        hasAutoFilled = false
+        hasAutoCategory = false
+        fabFill.visibility = View.GONE
+        fabClose.visibility = View.GONE
+        webView.loadUrl(frontendUrl)
+    }
+
+    // Injects Javascript on the Kleinanzeigen category picker (step 1). Kleinanzeigen has
+    // no plain category field; instead it matches a keyword to a category via a suggestion
+    // dropdown. We type our category (or, as a fallback, the title) and click the first
+    // suggestion, which navigates to the form (step 2). If no suggestion can be clicked the
+    // field stays prefilled so the user only needs a single tap.
+    private fun injectCategorySelectScript() {
         val draftJson = activeDraftJson ?: return
-        val escapedJson = draftJson.replace("'", "\\'")
+        val escapedJson = draftJson.replace("\\", "\\\\").replace("'", "\\'")
 
         val js = """
             (function() {
                 const draft = JSON.parse('$escapedJson');
-                const isVinted = window.location.hostname.includes('vinted');
-                
-                if (isVinted) {
-                    // Vinted Form Filling
-                    const title = document.querySelector("input[name='title']") || document.querySelector("input[placeholder*='titel']") || document.querySelector("input[id*='title']");
-                    if (title) { title.value = draft.title; title.dispatchEvent(new Event('input', { bubbles: true })); }
-                    
-                    const desc = document.querySelector("textarea[name='description']") || document.querySelector("textarea[placeholder*='beschreib']") || document.querySelector("textarea[id*='desc']");
-                    if (desc) { desc.value = draft.description; desc.dispatchEvent(new Event('input', { bubbles: true })); }
-                    
-                    const price = document.querySelector("input[name='price']") || document.querySelector("input[placeholder*='0,00']") || document.querySelector("input[id*='price']");
-                    if (price) { price.value = Math.round(draft.price); price.dispatchEvent(new Event('input', { bubbles: true })); }
-                    
-                    // Click file upload element to trigger onShowFileChooser
-                    const fileInput = document.querySelector("input[type='file']");
-                    if (fileInput) {
-                        fileInput.click();
+                const keyword = (draft.category && draft.category.trim()) ? draft.category.trim() : (draft.title || '').trim();
+                if (!keyword) return;
+
+                function findInput() {
+                    let el = document.querySelector("#pstad-keyword")
+                        || document.querySelector("#postad-keyword")
+                        || document.querySelector("input[name='keyword']")
+                        || document.querySelector("input[type='search']");
+                    if (el) return el;
+                    const inputs = document.querySelectorAll("input[type='text'], input:not([type])");
+                    for (const i of inputs) {
+                        const p = (i.placeholder || '').toLowerCase();
+                        if (p.includes('verkauf') || p.includes('was ') || p.includes('suchst') || p.includes('bieten') || p.includes('artikel')) {
+                            return i;
+                        }
                     }
-                } else {
-                    // Kleinanzeigen Form Filling
-                    const title = document.querySelector("#postad-title") || document.querySelector("input[name='title']");
-                    if (title) { title.value = draft.title; title.dispatchEvent(new Event('input', { bubbles: true })); }
-                    
-                    const desc = document.querySelector("#pstad-descrptn") || document.querySelector("textarea[name='description']");
-                    if (desc) { desc.value = draft.description; desc.dispatchEvent(new Event('input', { bubbles: true })); }
-                    
-                    const price = document.querySelector("#pstad-price") || document.querySelector("input[name='price']");
-                    if (price) { price.value = Math.round(draft.price); price.dispatchEvent(new Event('input', { bubbles: true })); }
-                    
-                    const priceRadios = document.querySelectorAll("input[name='priceType']");
-                    if (priceRadios) {
+                    return null;
+                }
+
+                let tries = 0;
+                function start() {
+                    tries++;
+                    const input = findInput();
+                    if (!input) {
+                        if (tries < 20) setTimeout(start, 500);
+                        return;
+                    }
+                    input.focus();
+                    input.value = keyword;
+                    input.dispatchEvent(new Event('input', { bubbles: true }));
+                    input.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true }));
+                    input.dispatchEvent(new KeyboardEvent('keyup', { bubbles: true }));
+                    setTimeout(pickSuggestion, 1500);
+                }
+
+                let pickTries = 0;
+                function pickSuggestion() {
+                    pickTries++;
+                    const selectors = [
+                        "#pstad-keyword-suggestions li",
+                        "#postad-keyword-suggestions li",
+                        "ul[role='listbox'] li[role='option']",
+                        "ul[role='listbox'] li",
+                        "[class*='uggestion'] li",
+                        "[class*='uggestion'] a",
+                        "li[role='option']",
+                        "a[href*='p-kategorie']"
+                    ];
+                    let item = null;
+                    for (const s of selectors) {
+                        const el = document.querySelector(s);
+                        if (el) { item = el; break; }
+                    }
+                    if (item) {
+                        item.click();
+                        return;
+                    }
+                    if (pickTries < 6) setTimeout(pickSuggestion, 1000);
+                    // Otherwise: leave the field prefilled for a manual tap.
+                }
+
+                start();
+            })();
+        """.trimIndent()
+
+        webView.evaluateJavascript(js, null)
+    }
+
+    // Injects Javascript to autofill fields, trigger the file upload chooser click and
+    // (optionally) submit the listing automatically. The form on both platforms renders
+    // dynamically, so the injected script polls for the fields before filling them.
+    private fun injectAutofillScript(autoSubmit: Boolean) {
+        val draftJson = activeDraftJson ?: return
+        val escapedJson = draftJson.replace("\\", "\\\\").replace("'", "\\'")
+        val zip = userZip?.replace("\\", "\\\\")?.replace("'", "\\'") ?: ""
+
+        val js = """
+            (function() {
+                const draft = JSON.parse('$escapedJson');
+                const userZip = '$zip';
+                const autoSubmit = $autoSubmit;
+                const isVinted = window.location.hostname.includes('vinted');
+
+                function setVal(el, val) {
+                    if (!el || val === undefined || val === null) return false;
+                    try { el.focus(); } catch (e) {}
+                    el.value = val;
+                    el.dispatchEvent(new Event('input', { bubbles: true }));
+                    el.dispatchEvent(new Event('change', { bubbles: true }));
+                    return true;
+                }
+
+                // --- Generic attribute (Zusatzfelder) matching --------------------
+                function norm(s) {
+                    return (s == null ? '' : String(s)).toLowerCase()
+                        .replace(/[^a-z0-9äöüß]+/g, ' ').trim();
+                }
+
+                // Collect label-ish text describing a form control
+                function labelTextFor(el) {
+                    let txt = '';
+                    if (el.id) {
+                        const lab = document.querySelector("label[for='" + el.id + "']");
+                        if (lab) txt += ' ' + lab.textContent;
+                    }
+                    txt += ' ' + (el.getAttribute('aria-label') || '');
+                    txt += ' ' + (el.getAttribute('name') || '');
+                    txt += ' ' + (el.getAttribute('placeholder') || '');
+                    let node = el.parentElement;
+                    let depth = 0;
+                    while (node && depth < 3) {
+                        if (node.tagName === 'LABEL' || node.tagName === 'LEGEND') {
+                            txt += ' ' + node.textContent;
+                        }
+                        const lab = node.querySelector ? node.querySelector('label, legend') : null;
+                        if (lab) txt += ' ' + lab.textContent;
+                        node = node.parentElement; depth++;
+                    }
+                    return norm(txt);
+                }
+
+                function pickOption(sel, value) {
+                    const nv = norm(value);
+                    if (!nv) return null;
+                    for (const opt of sel.options) {
+                        if (norm(opt.textContent) === nv) return opt;
+                    }
+                    for (const opt of sel.options) {
+                        const ot = norm(opt.textContent);
+                        if (ot && opt.value && (ot.includes(nv) || nv.includes(ot))) return opt;
+                    }
+                    return null;
+                }
+
+                function parseAttributes() {
+                    let a = draft.attributes;
+                    if (!a) return {};
+                    if (typeof a === 'string') { try { a = JSON.parse(a); } catch (e) { return {}; } }
+                    return (a && typeof a === 'object') ? a : {};
+                }
+
+                function fillAttributes() {
+                    const attrs = parseAttributes();
+                    const entries = Object.keys(attrs).map(function(k){ return [k, attrs[k]]; });
+                    if (entries.length === 0) return;
+
+                    const selects = Array.from(document.querySelectorAll('select'));
+                    const texts = Array.from(document.querySelectorAll("input[type='text'], input:not([type])"));
+
+                    for (const pair of entries) {
+                        const label = norm(pair[0]);
+                        const value = pair[1] == null ? '' : String(pair[1]);
+                        if (!label || !value) continue;
+
+                        // Special-case Kleinanzeigen shipping toggle (often a checkbox)
+                        if (label.indexOf('versand') !== -1) {
+                            const wantsShip = norm(value).indexOf('moglich') !== -1 || norm(value).indexOf('versand') !== -1;
+                            const boxes = document.querySelectorAll("input[type='checkbox'], input[type='radio']");
+                            let toggled = false;
+                            for (const b of boxes) {
+                                if (labelTextFor(b).indexOf('versand') !== -1) {
+                                    if (b.checked !== wantsShip) { b.click(); }
+                                    toggled = true;
+                                }
+                            }
+                            if (toggled) continue;
+                        }
+
+                        let done = false;
+                        for (const sel of selects) {
+                            if (sel.__vintamieKnown) continue;
+                            if (labelTextFor(sel).indexOf(label) === -1) continue;
+                            const opt = pickOption(sel, value);
+                            if (opt) {
+                                sel.value = opt.value;
+                                sel.__vintamieKnown = true;
+                                sel.dispatchEvent(new Event('change', { bubbles: true }));
+                                done = true;
+                                break;
+                            }
+                        }
+                        if (done) continue;
+
+                        for (const inp of texts) {
+                            if (inp.__vintamieKnown) continue;
+                            if (labelTextFor(inp).indexOf(label) === -1) continue;
+                            setVal(inp, value);
+                            inp.__vintamieKnown = true;
+                            break;
+                        }
+                    }
+                }
+
+                let fillAttempts = 0;
+                function fill() {
+                    fillAttempts++;
+                    let title, desc, price;
+                    if (isVinted) {
+                        title = document.querySelector("input[name='title']") || document.querySelector("input[placeholder*='titel']") || document.querySelector("input[id*='title']");
+                        desc = document.querySelector("textarea[name='description']") || document.querySelector("textarea[placeholder*='beschreib']") || document.querySelector("textarea[id*='desc']");
+                        price = document.querySelector("input[name='price']") || document.querySelector("input[placeholder*='0,00']") || document.querySelector("input[id*='price']");
+                    } else {
+                        title = document.querySelector("#postad-title") || document.querySelector("input[name='title']") || document.querySelector("input[id*='title']");
+                        desc = document.querySelector("#pstad-descrptn") || document.querySelector("textarea[name='description']") || document.querySelector("textarea[id*='descr']");
+                        price = document.querySelector("#pstad-price") || document.querySelector("input[name='price']") || document.querySelector("input[id*='price']");
+                    }
+
+                    // The form may not be rendered yet - retry for a few seconds.
+                    if (!title && fillAttempts < 20) {
+                        setTimeout(fill, 500);
+                        return;
+                    }
+
+                    setVal(title, draft.title);
+                    setVal(desc, draft.description);
+                    if (title) title.__vintamieKnown = true;
+                    if (desc) desc.__vintamieKnown = true;
+                    if (price) price.__vintamieKnown = true;
+                    if (draft.price !== undefined && draft.price !== null) {
+                        setVal(price, String(Math.round(draft.price)));
+                    }
+
+                    if (!isVinted) {
+                        // Festpreis (fixed price)
+                        const priceRadios = document.querySelectorAll("input[name='priceType']");
                         for (let radio of priceRadios) {
-                            if (radio.value === "FIXED") {
+                            if (radio.value === 'FIXED' || (radio.id && (radio.id.includes('fixed') || radio.id.includes('fest')))) {
                                 radio.checked = true;
                                 radio.dispatchEvent(new Event('change', { bubbles: true }));
                                 break;
                             }
                         }
+                        // Postcode (required for submission) from the user's saved profile
+                        if (userZip) {
+                            const postcode = document.querySelector("#postad-postcode") || document.querySelector("input[name='postcode']") || document.querySelector("input[id*='postcode']") || document.querySelector("input[placeholder*='PLZ']");
+                            if (postcode) {
+                                setVal(postcode, userZip);
+                                postcode.__vintamieKnown = true;
+                                postcode.dispatchEvent(new Event('blur', { bubbles: true }));
+                            }
+                        }
+                        // Category-specific attributes ("Zusatzfelder"). They may render
+                        // slightly after the core fields, so attempt a few times.
+                        fillAttributes();
+                        setTimeout(fillAttributes, 1500);
+                        setTimeout(fillAttributes, 3500);
                     }
-                    
-                    // Trigger image input click
+
+                    // Trigger the native file chooser to upload the draft photo.
                     const fileInput = document.querySelector("input[type='file']");
-                    if (fileInput) {
-                        fileInput.click();
+                    if (fileInput) { fileInput.click(); }
+
+                    // Give the image upload and attribute fills time to settle, then
+                    // submit if requested.
+                    if (autoSubmit) {
+                        setTimeout(trySubmit, 8000);
                     }
                 }
+
+                let submitAttempts = 0;
+                function trySubmit() {
+                    submitAttempts++;
+                    let btn;
+                    if (isVinted) {
+                        btn = document.querySelector("button[data-testid*='submit']") || document.querySelector("button[type='submit']");
+                    } else {
+                        btn = document.querySelector("#pstad-submit") || document.querySelector("button[type='submit']");
+                        if (!btn) {
+                            const candidates = document.querySelectorAll("button, input[type='submit']");
+                            for (let b of candidates) {
+                                const t = (b.innerText || b.value || '').toLowerCase();
+                                if (t.includes('anzeige aufgeben') || t.includes('veröffentlichen') || t.includes('einstellen')) { btn = b; break; }
+                            }
+                        }
+                    }
+                    if (btn) {
+                        btn.click();
+                    } else if (submitAttempts < 5) {
+                        setTimeout(trySubmit, 1500);
+                    }
+                }
+
+                fill();
             })();
         """.trimIndent()
 
         webView.evaluateJavascript(js, null)
-        
-        // Hide FAB after filling
+
+        // Keep the draft loaded so the manual FAB can be used to retry if needed.
         fabFill.visibility = View.GONE
-        activeDraftJson = null
     }
 
     private fun checkCameraPermission() {

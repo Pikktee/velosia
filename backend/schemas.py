@@ -54,6 +54,7 @@ class DraftBase(BaseModel):
     condition: Optional[str] = None
     price: Optional[float] = None
     sources: Optional[str] = None # JSON string: [{"title": "...", "price": 12.0, "url": "..."}]
+    attributes: Optional[str] = None # JSON string: {"Größe": "M", "Marke": "Nike", ...}
     image_paths: Optional[str] = None
 
 class DraftCreate(DraftBase):

@@ -40,6 +40,14 @@ def run_migrations():
         db.rollback()
         print(f"Migration note: image_paths column might already exist. ({e})", flush=True)
 
+    try:
+        db.execute(text("ALTER TABLE drafts ADD COLUMN attributes VARCHAR(2000)"))
+        db.commit()
+        print("Successfully ran migrations: added attributes column to drafts.", flush=True)
+    except Exception as e:
+        db.rollback()
+        print(f"Migration note: attributes column might already exist. ({e})", flush=True)
+
     # User settings migrations
     for col_name, col_type in [
         ("ai_tone", "VARCHAR(50) DEFAULT 'locker'"),
@@ -327,6 +335,7 @@ def upload_and_analyze(
         condition=analysis["condition"],
         price=analysis["price"],
         sources=analysis.get("sources"), # Store JSON string of comparison listings
+        attributes=analysis.get("attributes"), # Store JSON string of Kleinanzeigen attribute fields
         image_path=saved_paths[0], # Primary image for backward compatibility
         image_paths=json.dumps(saved_paths) # Store all images as a JSON list
     )
