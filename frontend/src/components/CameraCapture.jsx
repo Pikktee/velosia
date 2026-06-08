@@ -1,27 +1,17 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Camera, Upload, Image as ImageIcon, Sparkles, AlertCircle, X, RotateCw, Trash2 } from 'lucide-react';
+import { Camera, Upload, Image as ImageIcon, Sparkles, X, RotateCw } from 'lucide-react';
 import { uploadAndAnalyze } from '../utils/api';
 
 const CameraCapture = ({ onAnalysisStart, onAnalysisSuccess, onAnalysisError, initialError, onClose }) => {
+  const [selectedImages, setSelectedImages] = useState([]); // Array of { id, file, previewUrl }
+  const [facingMode, setFacingMode] = useState('environment'); // 'environment' or 'user'
+  const [uploading, setUploading] = useState(false);
+  const [error, setError] = useState(initialError);
+  const [flash, setFlash] = useState(false);
 
-  useEffect(() => {
-    setError(initialError);
-  }, [initialError]);
-
-  // Clean up camera stream on unmount
-  useEffect(() => {
-    return () => {
-      stopCamera();
-    };
-  }, []);
-
-  // Start stream on mount or when facingMode changes
-  useEffect(() => {
-    startCamera();
-    return () => {
-      stopCamera();
-    };
-  }, [facingMode]);
+  const videoRef = useRef(null);
+  const streamRef = useRef(null);
+  const fileInputRef = useRef(null);
 
   const startCamera = async () => {
     stopCamera(); // Make sure previous stream is stopped
@@ -55,6 +45,25 @@ const CameraCapture = ({ onAnalysisStart, onAnalysisSuccess, onAnalysisError, in
       videoRef.current.srcObject = null;
     }
   };
+
+  useEffect(() => {
+    setError(initialError);
+  }, [initialError]);
+
+  // Clean up camera stream on unmount
+  useEffect(() => {
+    return () => {
+      stopCamera();
+    };
+  }, []);
+
+  // Start stream on mount or when facingMode changes
+  useEffect(() => {
+    startCamera();
+    return () => {
+      stopCamera();
+    };
+  }, [facingMode]);
 
   const toggleFacingMode = () => {
     setFacingMode(prev => prev === 'environment' ? 'user' : 'environment');
