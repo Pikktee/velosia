@@ -2362,6 +2362,272 @@ select.form-control {
   box-shadow: 0 0 8px var(--primary-glow);
 }
 
+/* --- Swipeable List & Material Design 3 List Item Styles --- */
 
+.SwipeableList {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+}
 
+.SwipeableList-item {
+  position: relative;
+  contain: content;
+  border-radius: var(--radius-md);
+  background-color: var(--danger); /* Red background under card during swipe */
+  margin-bottom: 0.25rem;
+  transition: opacity 0.25s ease;
+}
 
+/* Scroll snap container track */
+.SwipeableList-item.is-initialized .SwipeableList-track {
+  display: grid;
+  grid-template-columns: 100% 100%;
+  overflow: scroll clip;
+  overscroll-behavior-x: none;
+  scrollbar-width: none;
+  scroll-snap-type: x mandatory;
+  border-radius: var(--radius-md);
+}
+
+.SwipeableList-item.is-initialized .SwipeableList-track::-webkit-scrollbar {
+  display: none;
+}
+
+/* Main card content */
+.SwipeableList-content {
+  position: relative;
+  z-index: 3;
+  scroll-snap-align: start;
+  background: var(--glass-bg);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-sm);
+  transition: border-color 0.25s ease, box-shadow 0.25s ease;
+}
+
+.SwipeableList-content:hover {
+  border-color: rgba(255, 255, 255, 0.12);
+  box-shadow: var(--shadow-md);
+}
+
+.SwipeableList-spacer {
+  scroll-snap-align: start;
+  background-color: var(--danger);
+  z-index: 2;
+  border-radius: 0 var(--radius-md) var(--radius-md) 0;
+}
+
+/* Stationary background action icon */
+.SwipeableList-action-icon {
+  position: absolute;
+  z-index: 1;
+  top: 50%;
+  translate: 0 -50%;
+  transition: scale 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275), opacity 0.2s ease;
+  pointer-events: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.SwipeableList-action-icon.right-action {
+  right: 1.5rem;
+}
+
+/* Icon visual feedback state (pops slightly when past activation threshold) */
+.SwipeableList-item.is-activating .SwipeableList-action-icon {
+  scale: 1.35;
+}
+
+/* Layout collapsing animation styles */
+.SwipeableList-item.is-removing {
+  pointer-events: none;
+  opacity: 0.5;
+  transition: height 0.25s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.25s ease, margin 0.25s ease;
+}
+
+.SwipeableList-item.is-removing .SwipeableList-action-icon {
+  scale: 0.5;
+  opacity: 0;
+}
+
+/* Draft List Item Detail Layout */
+.draft-list-item-content {
+  cursor: pointer;
+  width: 100%;
+}
+
+.draft-list-item-main {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 0.75rem 1rem;
+  min-height: 84px;
+}
+
+.draft-list-item-thumb-container {
+  width: 58px;
+  height: 58px;
+  border-radius: 12px;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  flex-shrink: 0;
+  box-shadow: var(--shadow-sm);
+  background: rgba(0, 0, 0, 0.2);
+}
+
+.draft-list-item-thumb {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transition: transform 0.3s ease;
+}
+
+.SwipeableList-content:hover .draft-list-item-thumb {
+  transform: scale(1.05);
+}
+
+.draft-list-item-details {
+  flex: 1;
+  min-width: 0; /* Ensures truncation works */
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.draft-list-item-title {
+  font-family: var(--font-title);
+  font-size: 0.975rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  line-height: 1.25;
+}
+
+.draft-list-item-meta {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+}
+
+.draft-list-item-badge {
+  font-size: 0.7rem;
+  padding: 0.15rem 0.45rem;
+  border-radius: 6px;
+  font-weight: 500;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.draft-list-item-badge.category-badge {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--glass-border);
+  color: var(--text-secondary);
+}
+
+.draft-list-item-badge.condition-badge {
+  background: rgba(9, 176, 183, 0.05);
+  border: 1px solid rgba(9, 176, 183, 0.15);
+  color: var(--primary);
+}
+
+.draft-list-item-date {
+  font-size: 0.7rem;
+  color: var(--text-muted);
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  margin-left: 0.2rem;
+}
+
+.draft-list-item-right {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-shrink: 0;
+}
+
+.draft-list-item-price-container {
+  background: rgba(9, 176, 183, 0.08);
+  border: 1px solid rgba(9, 176, 183, 0.18);
+  padding: 0.35rem 0.65rem;
+  border-radius: var(--radius-sm);
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.draft-list-item-price {
+  font-family: var(--font-title);
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--primary);
+}
+
+.draft-list-item-delete-btn {
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 0.45rem;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.draft-list-item-delete-btn:hover {
+  background: rgba(239, 68, 68, 0.12);
+  color: var(--danger);
+  transform: scale(1.08);
+}
+
+.draft-list-item-delete-btn:active {
+  transform: scale(0.92);
+}
+
+.draft-list-item-arrow {
+  color: var(--text-muted);
+  opacity: 0.5;
+  transition: transform 0.25s ease, color 0.25s ease;
+}
+
+.SwipeableList-content:hover .draft-list-item-arrow {
+  transform: translateX(3px);
+  color: var(--text-secondary);
+  opacity: 0.85;
+}
+
+/* Header summary elements */
+.drafts-header-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1.25rem;
+  padding: 0 0.25rem;
+}
+
+.drafts-count-badge {
+  font-size: 0.8rem;
+  font-weight: 600;
+  background: rgba(9, 176, 183, 0.08);
+  border: 1px solid rgba(9, 176, 183, 0.2);
+  color: var(--primary);
+  padding: 0.15rem 0.5rem;
+  border-radius: 99px;
+  margin-left: 0.5rem;
+  box-shadow: 0 0 10px rgba(9, 176, 183, 0.1);
+}
