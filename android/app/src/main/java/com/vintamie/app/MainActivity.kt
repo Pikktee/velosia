@@ -491,11 +491,10 @@ class MainActivity : AppCompatActivity() {
 
         androidx.appcompat.app.AlertDialog.Builder(this)
             .setTitle("Update verfügbar")
-            .setMessage("Eine neue App-Version ($latestVersion) ist verfügbar. Möchtest du sie jetzt herunterladen?")
-            .setPositiveButton("Herunterladen") { _, _ ->
+            .setMessage("Eine neue App-Version ($latestVersion) ist verfügbar. Möchtest du sie jetzt herunterladen und installieren?")
+            .setPositiveButton("Installieren") { _, _ ->
                 isUpdateDialogShowing = false
-                val browserIntent = Intent(Intent.ACTION_VIEW, Uri.parse("$backendUrl/api/app/latest-apk"))
-                startActivity(browserIntent)
+                downloadAndInstallApk()
             }
             .setNegativeButton("Später") { _, _ ->
                 isUpdateDialogShowing = false
@@ -504,6 +503,81 @@ class MainActivity : AppCompatActivity() {
                 isUpdateDialogShowing = false
             }
             .show()
+    }
+
+    private fun downloadAndInstallApk() {
+        // Show a progress dialog
+        val progressDialog = android.app.ProgressDialog(this).apply {
+            setTitle("Update wird heruntergeladen")
+            setMessage("Bitte warten...")
+            isIndeterminate = true
+            setCancelable(false)
+            show()
+        }
+
+        val request = Request.Builder()
+            .url("$backendUrl/api/app/latest-apk")
+            .build()
+
+        okHttpClient.newCall(request).enqueue(object : Callback {
+            override fun onFailure(call: Call, e: IOException) {
+                runOnUiThread {
+                    progressDialog.dismiss()
+                    Toast.makeText(this@MainActivity, "Download fehlgeschlagen: ${e.message}", Toast.LENGTH_LONG).show()
+                }
+            }
+
+            override fun onResponse(call: Call, response: Response) {
+                response.use {
+                    if (!response.isSuccessful) {
+                        runOnUiThread {
+                            progressDialog.dismiss()
+                            Toast.makeText(this@MainActivity, "Download fehlgeschlagen (Fehler ${response.code}).", Toast.LENGTH_LONG).show()
+                        }
+                        return
+                    }
+
+                    try {
+                        val apkFile = File(cacheDir, "vintamie-update.apk")
+                        val fos = FileOutputStream(apkFile)
+                        response.body?.byteStream()?.use { input ->
+                            input.copyTo(fos)
+                        }
+                        fos.close()
+
+                        runOnUiThread {
+                            progressDialog.dismiss()
+                            installApk(apkFile)
+                        }
+                    } catch (e: Exception) {
+                        runOnUiThread {
+                            progressDialog.dismiss()
+                            Toast.makeText(this@MainActivity, "Installationsfehler: ${e.message}", Toast.LENGTH_LONG).show()
+                        }
+                    }
+                }
+            }
+        })
+    }
+
+    private fun installApk(apkFile: File) {
+        val apkUri = FileProvider.getUriForFile(
+            this,
+            "com.vintamie.app.fileprovider",
+            apkFile
+        )
+
+        val installIntent = Intent(Intent.ACTION_VIEW).apply {
+            setDataAndType(apkUri, "application/vnd.android.package-archive")
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
+
+        try {
+            startActivity(installIntent)
+        } catch (e: Exception) {
+            Toast.makeText(this, "Paket-Installer konnte nicht geöffnet werden: ${e.message}", Toast.LENGTH_LONG).show()
+        }
     }
 
     private fun startPeriodicUpdateChecks() {
