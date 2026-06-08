@@ -1335,7 +1335,7 @@ select.form-control {
 }
 
 .onboarding-arrow-svg {
-  width: 60px;
+  width: 24px;
   height: 80px;
   animation: arrowBounce 2s ease-in-out infinite;
   filter: drop-shadow(0 0 8px rgba(9, 176, 183, 0.5));
