@@ -1,14 +1,11 @@
 import os
+import bcrypt
 from datetime import datetime, timedelta
 from typing import Optional, Union
 from jose import jwt, JWTError
-from passlib.context import CryptContext
 from dotenv import load_dotenv
 
 load_dotenv()
-
-# Password hashing configuration
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 # JWT configuration
 SECRET_KEY = os.getenv("SECRET_KEY", "vintamie_default_secret_key_change_me_in_production")
@@ -17,11 +14,17 @@ ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "1440
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
     """Verifies that a plain password matches its hashed version."""
-    return pwd_context.verify(plain_password, hashed_password)
+    try:
+        return bcrypt.checkpw(plain_password.encode('utf-8'), hashed_password.encode('utf-8'))
+    except Exception:
+        return False
 
 def get_password_hash(password: str) -> str:
     """Hashes a password using bcrypt."""
-    return pwd_context.hash(password)
+    pw_bytes = password.encode('utf-8')[:72]
+    salt = bcrypt.gensalt()
+    hashed = bcrypt.hashpw(pw_bytes, salt)
+    return hashed.decode('utf-8')
 
 def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -> str:
     """Creates a JWT access token containing the provided data payload."""
