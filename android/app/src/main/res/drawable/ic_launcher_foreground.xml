@@ -14,32 +14,31 @@
         android:translateX="0"
         android:translateY="18">
 
-        <!-- Orbit Ring -->
-        <circle
-            android:cx="256"
-            android:cy="256"
-            android:r="210"
+        <!-- Orbit Ring (r=210, cx=256, cy=256) as path arc -->
+        <path
+            android:pathData="M46,256 A210,210 0 1,1 46,256.01"
             android:strokeWidth="4"
             android:strokeAlpha="0.15"
-            android:strokeLineCap="round">
+            android:fillColor="#00000000">
             <aapt:attr name="android:strokeColor">
                 <gradient
-                    android:startX="0"
-                    android:startY="0"
-                    android:endX="512"
-                    android:endY="512"
+                    android:startX="46"
+                    android:startY="46"
+                    android:endX="466"
+                    android:endY="466"
                     android:type="linear">
                     <item android:offset="0" android:color="#FF09B0B7"/>
                     <item android:offset="1.0" android:color="#FFEC4899"/>
                 </gradient>
             </aapt:attr>
-        </circle>
+        </path>
 
         <!-- Hanger Hook (Sleek abstract curve) -->
         <path
-            android:pathData="M 256,195 V 160 C 256,130 235,110 256,85 C 275,60 295,85 275,105"
+            android:pathData="M256,195 V160 C256,130 235,110 256,85 C275,60 295,85 275,105"
             android:strokeWidth="16"
-            android:strokeLineCap="round">
+            android:strokeLineCap="round"
+            android:fillColor="#00000000">
             <aapt:attr name="android:strokeColor">
                 <gradient
                     android:startX="0"
@@ -53,9 +52,9 @@
             </aapt:attr>
         </path>
 
-        <!-- Sleek Hanger Triangle (representing clothes/fashion) -->
+        <!-- Sleek Hanger Triangle -->
         <path
-            android:pathData="M 110,220 L 256,390 L 402,220 C 412,210 405,195 390,195 L 122,195 C 107,195 100,210 110,220 Z"
+            android:pathData="M110,220 L256,390 L402,220 C412,210 405,195 390,195 L122,195 C107,195 100,210 110,220 Z"
             android:fillColor="#07090d"
             android:strokeWidth="16"
             android:strokeLineJoin="round">
@@ -72,60 +71,54 @@
             </aapt:attr>
         </path>
 
-        <!-- Camera Lens / Vision AI Core (overlapping the V) -->
-        <circle
-            android:cx="256"
-            android:cy="275"
-            android:r="55"
+        <!-- Camera Lens outer ring (cx=256, cy=275, r=55) -->
+        <path
+            android:pathData="M201,275 A55,55 0 1,1 201,275.01"
             android:fillColor="#07090d"
             android:strokeWidth="12">
             <aapt:attr name="android:strokeColor">
                 <gradient
-                    android:startX="0"
-                    android:startY="0"
-                    android:endX="512"
-                    android:endY="512"
+                    android:startX="201"
+                    android:startY="220"
+                    android:endX="311"
+                    android:endY="330"
                     android:type="linear">
                     <item android:offset="0" android:color="#FF09B0B7"/>
                     <item android:offset="1.0" android:color="#FFEC4899"/>
                 </gradient>
             </aapt:attr>
-        </circle>
+        </path>
 
-        <!-- Lens Inner Core -->
-        <circle
-            android:cx="256"
-            android:cy="275"
-            android:r="22">
+        <!-- Lens Inner Core (cx=256, cy=275, r=22) -->
+        <path
+            android:pathData="M234,275 A22,22 0 1,1 234,275.01">
             <aapt:attr name="android:fillColor">
                 <gradient
-                    android:startX="0"
-                    android:startY="0"
-                    android:endX="512"
-                    android:endY="512"
+                    android:startX="234"
+                    android:startY="253"
+                    android:endX="278"
+                    android:endY="297"
                     android:type="linear">
                     <item android:offset="0" android:color="#FF09B0B7"/>
                     <item android:offset="1.0" android:color="#FFEC4899"/>
                 </gradient>
             </aapt:attr>
-        </circle>
+        </path>
 
-        <!-- Lens reflection -->
-        <circle
-            android:cx="264"
-            android:cy="267"
-            android:r="6"
+        <!-- Lens reflection (cx=264, cy=267, r=6) -->
+        <path
+            android:pathData="M258,267 A6,6 0 1,1 258,267.01"
             android:fillColor="#ffffff"
             android:fillAlpha="0.8" />
 
-        <!-- Sparkles -->
         <!-- Top-Right Sparkle -->
         <path
-            android:pathData="M 400,100 c 0,12 -8,20 -20,20 c 12,0 20,8 20,20 c 0,-12 8,-20 20,-20 c -12,0 -20,-8 -20,-20 z"
+            android:pathData="M400,100 c0,12 -8,20 -20,20 c12,0 20,8 20,20 c0,-12 8,-20 20,-20 c-12,0 -20,-8 -20,-20 z"
             android:fillColor="#ec4899" />
+
         <!-- Left Sparkle -->
         <path
-            android:pathData="M 100,320 c 0,8 -5,12 -12,12 c 7,0 12,5 12,12 c 0,-7 5,-12 12,-12 c -7,0 -12,-5 -12,-12 z"
+            android:pathData="M100,320 c0,8 -5,12 -12,12 c7,0 12,5 12,12 c0,-7 5,-12 12,-12 c-7,0 -12,-5 -12,-12 z"
             android:fillColor="#09b0b7" />
     </group>
 </vector>
