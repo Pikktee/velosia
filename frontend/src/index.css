@@ -1172,6 +1172,7 @@ select.form-control {
 /* Onboarding Premium UI */
 .empty-state-container {
   flex: 1;
+  min-height: 100%;
   display: flex;
   flex-direction: column;
   justify-content: space-between;
@@ -1186,6 +1187,7 @@ select.form-control {
   justify-content: space-between;
   width: 100%;
   flex: 1;
+  min-height: 100%;
   max-width: 500px;
   margin: 0 auto;
   padding: 0.5rem 0;
