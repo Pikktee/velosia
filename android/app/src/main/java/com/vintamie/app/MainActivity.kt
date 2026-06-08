@@ -30,9 +30,10 @@ class MainActivity : AppCompatActivity() {
 
     private lateinit var webView: WebView
     private lateinit var fabFill: ExtendedFloatingActionButton
-    
+    private lateinit var fabClose: ExtendedFloatingActionButton
+
     private val RC_SIGN_IN = 9001
-    
+
     // Server addresses (default to production for physical devices)
     private var frontendUrl = "https://vintamie.henrikheil.net"
     private var backendUrl = "https://api.vintamie.henrikheil.net"
@@ -40,6 +41,9 @@ class MainActivity : AppCompatActivity() {
     private var activeDraftJson: String? = null
     private var activeImageUri: Uri? = null
     private var activePlatform: String? = null
+    private var userZip: String? = null
+    // Guards the automatic one-shot fill so it does not re-trigger on every SPA page event
+    private var hasAutoFilled = false
 
     private val okHttpClient = OkHttpClient()
     
@@ -68,6 +72,7 @@ class MainActivity : AppCompatActivity() {
 
         webView = findViewById(R.id.webView)
         fabFill = findViewById(R.id.fabFill)
+        fabClose = findViewById(R.id.fabClose)
 
         // Configure WebView settings
         val settings = webView.settings
@@ -92,14 +97,26 @@ class MainActivity : AppCompatActivity() {
 
             override fun onPageFinished(view: WebView, url: String) {
                 super.onPageFinished(view, url)
-                
-                // Show or hide the FAB based on the current URL
-                if (url.contains("vinted.de/items/new") || 
-                    url.contains("vinted.fr/items/new") ||
-                    url.contains("kleinanzeigen.de/p-anzeige-aufgeben.html")
-                ) {
-                    if (activeDraftJson != null) {
-                        fabFill.visibility = View.VISIBLE
+
+                // Allow the user to bail out of any external listing page at any time
+                val isDashboard = url.startsWith(frontendUrl)
+                fabClose.visibility = if (isDashboard) View.GONE else View.VISIBLE
+
+                val isVintedForm = url.contains("vinted.de/items/new") ||
+                    url.contains("vinted.fr/items/new")
+                // Kleinanzeigen step 1 is only the category picker; the real form lives on
+                // p-anzeige-aufgeben-schritt2.html, so we treat that as the fillable page.
+                val isKleinanzeigenCategory = url.contains("kleinanzeigen.de/p-anzeige-aufgeben.html")
+                val isKleinanzeigenForm = url.contains("kleinanzeigen.de/p-anzeige-aufgeben-schritt2")
+                val isFormPage = isVintedForm || isKleinanzeigenForm
+
+                if (activeDraftJson != null && (isFormPage || isKleinanzeigenCategory)) {
+                    fabFill.visibility = View.VISIBLE
+                    // On the actual form, fill (and submit) automatically once it has loaded.
+                    if (isFormPage && !hasAutoFilled) {
+                        hasAutoFilled = true
+                        // The forms render dynamically; give them a moment before injecting.
+                        webView.postDelayed({ injectAutofillScript(autoSubmit = true) }, 1200)
                     }
                 } else {
                     fabFill.visibility = View.GONE
@@ -135,9 +152,15 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
-        // Configure floating fill action button
+        // Configure floating fill action button (manual fill, no auto-submit so the
+        // user can review before publishing)
         fabFill.setOnClickListener {
-            injectAutofillScript()
+            injectAutofillScript(autoSubmit = false)
+        }
+
+        // Close button: leave the external listing page and return to the dashboard
+        fabClose.setOnClickListener {
+            closeListingView()
         }
 
         // Load the frontend dashboard
@@ -153,6 +176,8 @@ class MainActivity : AppCompatActivity() {
         fun postToPlatform(draftId: Int, platform: String, token: String) {
             runOnUiThread {
                 Toast.makeText(this@MainActivity, "Lade Entwurf #$draftId...", Toast.LENGTH_SHORT).show()
+                hasAutoFilled = false
+                fetchUserProfile(token)
                 fetchDraftAndPrepare(draftId, platform, token)
             }
         }
@@ -257,76 +282,169 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun navigateToPlatformListing(platform: String) {
+        hasAutoFilled = false
         val url = if (platform == "vinted") {
             "https://www.vinted.de/items/new"
         } else {
+            // Kleinanzeigen requires picking a category first; the form on
+            // p-anzeige-aufgeben-schritt2.html is then auto-filled once it loads.
             "https://www.kleinanzeigen.de/p-anzeige-aufgeben.html"
         }
         webView.loadUrl(url)
     }
 
-    // Injects Javascript to autofill fields and trigger the file upload chooser click
-    private fun injectAutofillScript() {
+    // Fetch the user's saved profile so we can prefill the postcode (required for
+    // Kleinanzeigen submission). Best-effort: failures are silently ignored.
+    private fun fetchUserProfile(token: String) {
+        val request = Request.Builder()
+            .url("$backendUrl/api/auth/me")
+            .header("Authorization", "Bearer $token")
+            .build()
+
+        okHttpClient.newCall(request).enqueue(object : Callback {
+            override fun onFailure(call: Call, e: IOException) {
+                // Ignore - postcode prefill is optional
+            }
+
+            override fun onResponse(call: Call, response: Response) {
+                response.use {
+                    if (!response.isSuccessful) return
+                    val bodyString = response.body?.string() ?: return
+                    try {
+                        val json = JSONObject(bodyString)
+                        val zip = json.optString("default_zip")
+                        userZip = if (zip.isNullOrEmpty() || zip == "null") null else zip
+                    } catch (e: Exception) {
+                        // Ignore malformed profile responses
+                    }
+                }
+            }
+        })
+    }
+
+    // Close the external listing page: drop the active draft session and return
+    // to the Vintamie dashboard.
+    private fun closeListingView() {
+        activeDraftJson = null
+        activeImageUri = null
+        activePlatform = null
+        hasAutoFilled = false
+        fabFill.visibility = View.GONE
+        fabClose.visibility = View.GONE
+        webView.loadUrl(frontendUrl)
+    }
+
+    // Injects Javascript to autofill fields, trigger the file upload chooser click and
+    // (optionally) submit the listing automatically. The form on both platforms renders
+    // dynamically, so the injected script polls for the fields before filling them.
+    private fun injectAutofillScript(autoSubmit: Boolean) {
         val draftJson = activeDraftJson ?: return
-        val escapedJson = draftJson.replace("'", "\\'")
+        val escapedJson = draftJson.replace("\\", "\\\\").replace("'", "\\'")
+        val zip = userZip?.replace("\\", "\\\\")?.replace("'", "\\'") ?: ""
 
         val js = """
             (function() {
                 const draft = JSON.parse('$escapedJson');
+                const userZip = '$zip';
+                const autoSubmit = $autoSubmit;
                 const isVinted = window.location.hostname.includes('vinted');
-                
-                if (isVinted) {
-                    // Vinted Form Filling
-                    const title = document.querySelector("input[name='title']") || document.querySelector("input[placeholder*='titel']") || document.querySelector("input[id*='title']");
-                    if (title) { title.value = draft.title; title.dispatchEvent(new Event('input', { bubbles: true })); }
-                    
-                    const desc = document.querySelector("textarea[name='description']") || document.querySelector("textarea[placeholder*='beschreib']") || document.querySelector("textarea[id*='desc']");
-                    if (desc) { desc.value = draft.description; desc.dispatchEvent(new Event('input', { bubbles: true })); }
-                    
-                    const price = document.querySelector("input[name='price']") || document.querySelector("input[placeholder*='0,00']") || document.querySelector("input[id*='price']");
-                    if (price) { price.value = Math.round(draft.price); price.dispatchEvent(new Event('input', { bubbles: true })); }
-                    
-                    // Click file upload element to trigger onShowFileChooser
-                    const fileInput = document.querySelector("input[type='file']");
-                    if (fileInput) {
-                        fileInput.click();
+
+                function setVal(el, val) {
+                    if (!el || val === undefined || val === null) return false;
+                    try { el.focus(); } catch (e) {}
+                    el.value = val;
+                    el.dispatchEvent(new Event('input', { bubbles: true }));
+                    el.dispatchEvent(new Event('change', { bubbles: true }));
+                    return true;
+                }
+
+                let fillAttempts = 0;
+                function fill() {
+                    fillAttempts++;
+                    let title, desc, price;
+                    if (isVinted) {
+                        title = document.querySelector("input[name='title']") || document.querySelector("input[placeholder*='titel']") || document.querySelector("input[id*='title']");
+                        desc = document.querySelector("textarea[name='description']") || document.querySelector("textarea[placeholder*='beschreib']") || document.querySelector("textarea[id*='desc']");
+                        price = document.querySelector("input[name='price']") || document.querySelector("input[placeholder*='0,00']") || document.querySelector("input[id*='price']");
+                    } else {
+                        title = document.querySelector("#postad-title") || document.querySelector("input[name='title']") || document.querySelector("input[id*='title']");
+                        desc = document.querySelector("#pstad-descrptn") || document.querySelector("textarea[name='description']") || document.querySelector("textarea[id*='descr']");
+                        price = document.querySelector("#pstad-price") || document.querySelector("input[name='price']") || document.querySelector("input[id*='price']");
                     }
-                } else {
-                    // Kleinanzeigen Form Filling
-                    const title = document.querySelector("#postad-title") || document.querySelector("input[name='title']");
-                    if (title) { title.value = draft.title; title.dispatchEvent(new Event('input', { bubbles: true })); }
-                    
-                    const desc = document.querySelector("#pstad-descrptn") || document.querySelector("textarea[name='description']");
-                    if (desc) { desc.value = draft.description; desc.dispatchEvent(new Event('input', { bubbles: true })); }
-                    
-                    const price = document.querySelector("#pstad-price") || document.querySelector("input[name='price']");
-                    if (price) { price.value = Math.round(draft.price); price.dispatchEvent(new Event('input', { bubbles: true })); }
-                    
-                    const priceRadios = document.querySelectorAll("input[name='priceType']");
-                    if (priceRadios) {
+
+                    // The form may not be rendered yet - retry for a few seconds.
+                    if (!title && fillAttempts < 20) {
+                        setTimeout(fill, 500);
+                        return;
+                    }
+
+                    setVal(title, draft.title);
+                    setVal(desc, draft.description);
+                    if (draft.price !== undefined && draft.price !== null) {
+                        setVal(price, String(Math.round(draft.price)));
+                    }
+
+                    if (!isVinted) {
+                        // Festpreis (fixed price)
+                        const priceRadios = document.querySelectorAll("input[name='priceType']");
                         for (let radio of priceRadios) {
-                            if (radio.value === "FIXED") {
+                            if (radio.value === 'FIXED' || (radio.id && (radio.id.includes('fixed') || radio.id.includes('fest')))) {
                                 radio.checked = true;
                                 radio.dispatchEvent(new Event('change', { bubbles: true }));
                                 break;
                             }
                         }
+                        // Postcode (required for submission) from the user's saved profile
+                        if (userZip) {
+                            const postcode = document.querySelector("#postad-postcode") || document.querySelector("input[name='postcode']") || document.querySelector("input[id*='postcode']") || document.querySelector("input[placeholder*='PLZ']");
+                            if (postcode) {
+                                setVal(postcode, userZip);
+                                postcode.dispatchEvent(new Event('blur', { bubbles: true }));
+                            }
+                        }
                     }
-                    
-                    // Trigger image input click
+
+                    // Trigger the native file chooser to upload the draft photo.
                     const fileInput = document.querySelector("input[type='file']");
-                    if (fileInput) {
-                        fileInput.click();
+                    if (fileInput) { fileInput.click(); }
+
+                    // Give the upload time to process, then submit if requested.
+                    if (autoSubmit) {
+                        setTimeout(trySubmit, 6000);
                     }
                 }
+
+                let submitAttempts = 0;
+                function trySubmit() {
+                    submitAttempts++;
+                    let btn;
+                    if (isVinted) {
+                        btn = document.querySelector("button[data-testid*='submit']") || document.querySelector("button[type='submit']");
+                    } else {
+                        btn = document.querySelector("#pstad-submit") || document.querySelector("button[type='submit']");
+                        if (!btn) {
+                            const candidates = document.querySelectorAll("button, input[type='submit']");
+                            for (let b of candidates) {
+                                const t = (b.innerText || b.value || '').toLowerCase();
+                                if (t.includes('anzeige aufgeben') || t.includes('veröffentlichen') || t.includes('einstellen')) { btn = b; break; }
+                            }
+                        }
+                    }
+                    if (btn) {
+                        btn.click();
+                    } else if (submitAttempts < 5) {
+                        setTimeout(trySubmit, 1500);
+                    }
+                }
+
+                fill();
             })();
         """.trimIndent()
 
         webView.evaluateJavascript(js, null)
-        
-        // Hide FAB after filling
+
+        // Keep the draft loaded so the manual FAB can be used to retry if needed.
         fabFill.visibility = View.GONE
-        activeDraftJson = null
     }
 
     private fun checkCameraPermission() {
