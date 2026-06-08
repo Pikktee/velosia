@@ -245,7 +245,7 @@ export default function DraftDetail({ draft, onBack, onUpdateSuccess }) {
       </div>
 
       {/* Main Grid */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '1.5rem' }}>
+      <div className="draft-detail-grid">
         
         {/* Left Section: Image and Publishing Helper */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
