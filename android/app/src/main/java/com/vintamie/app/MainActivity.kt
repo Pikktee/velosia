@@ -19,6 +19,8 @@ import com.google.android.gms.auth.api.signin.GoogleSignInOptions
 import com.google.android.gms.common.api.ApiException
 import com.google.android.material.floatingactionbutton.ExtendedFloatingActionButton
 import okhttp3.*
+import okhttp3.MediaType.Companion.toMediaTypeOrNull
+import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONObject
 import java.io.File
 import java.io.FileOutputStream
@@ -382,10 +384,7 @@ class MainActivity : AppCompatActivity() {
         val json = JSONObject()
         json.put("credential", idToken)
         
-        val body = RequestBody.create(
-            MediaType.parse("application/json; charset=utf-8"),
-            json.toString()
-        )
+        val body = json.toString().toRequestBody("application/json; charset=utf-8".toMediaTypeOrNull())
         
         val request = Request.Builder()
             .url("$backendUrl/api/auth/google")
