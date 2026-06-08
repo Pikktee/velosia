@@ -276,7 +276,7 @@ export default function LandingPage() {
           Datenschutz
         </button>
         <span style={{ opacity: 0.3 }}>&bull;</span>
-        <span>&copy; {new Date().getFullYear()} Vintamie</span>
+        <span style={{ whiteSpace: 'nowrap' }}>Made with ❤️</span>
       </footer>
 
       {/* Legal Overlay Modal */}
@@ -367,7 +367,8 @@ export default function LandingPage() {
                   </h3>
                   <p style={{ marginBottom: '1.5rem' }}>
                     Henrik Heil<br />
-                    Darmstadt, Deutschland<br />
+                    Westendstraße 100<br />
+                    60325 Frankfurt<br />
                     E-Mail: mail@henrikheil.net
                   </p>
 
