@@ -1,12 +1,17 @@
 package com.vintamie.app
 
+import android.Manifest
 import android.annotation.SuppressLint
+import android.content.pm.PackageManager
 import android.net.Uri
+import android.os.Build
 import android.os.Bundle
 import android.view.View
 import android.webkit.*
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.app.ActivityCompat
+import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
 import com.google.android.material.floatingactionbutton.ExtendedFloatingActionButton
 import okhttp3.*
@@ -20,9 +25,9 @@ class MainActivity : AppCompatActivity() {
     private lateinit var webView: WebView
     private lateinit var fabFill: ExtendedFloatingActionButton
     
-    // Server addresses (10.0.2.2 is the standard emulator gateway to localhost)
-    private val frontendUrl = "http://10.0.2.2:5173"
-    private val backendUrl = "http://10.0.2.2:8000"
+    // Server addresses (default to production for physical devices)
+    private var frontendUrl = "https://vintamie.henrikheil.net"
+    private var backendUrl = "https://api.vintamie.henrikheil.net"
 
     private var activeDraftJson: String? = null
     private var activeImageUri: Uri? = null
@@ -30,10 +35,19 @@ class MainActivity : AppCompatActivity() {
 
     private val okHttpClient = OkHttpClient()
 
-    @SuppressLint("SetJavaScriptEnabled")
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
+
+        // Request runtime camera permission
+        checkCameraPermission()
+
+        // Detect if running in emulator and override URLs
+        if (isEmulator()) {
+            frontendUrl = "http://10.0.2.2:5173"
+            backendUrl = "http://10.0.2.2:8000"
+            Toast.makeText(this, "Emulator erkannt - Lade lokale Server", Toast.LENGTH_SHORT).show()
+        }
 
         webView = findViewById(R.id.webView)
         fabFill = findViewById(R.id.fabFill)
@@ -76,7 +90,7 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
-        // Setup WebChromeClient to handle automatic image upload injection
+        // Setup WebChromeClient to handle automatic image upload injection & camera permission
         webView.webChromeClient = object : WebChromeClient() {
             override fun onShowFileChooser(
                 webView: WebView,
@@ -94,6 +108,13 @@ class MainActivity : AppCompatActivity() {
                 
                 // If no active photo, return false to let default file picker run
                 return false
+            }
+
+            override fun onPermissionRequest(request: PermissionRequest) {
+                runOnUiThread {
+                    // Grant WebRTC camera permission dynamically
+                    request.grant(request.resources)
+                }
             }
         }
 
@@ -279,6 +300,36 @@ class MainActivity : AppCompatActivity() {
         // Hide FAB after filling
         fabFill.visibility = View.GONE
         activeDraftJson = null
+    }
+
+    private fun checkCameraPermission() {
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) {
+            ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.CAMERA), 101)
+        }
+    }
+
+    private fun isEmulator(): Boolean {
+        val model = Build.MODEL
+        val hardware = Build.HARDWARE
+        val brand = Build.BRAND
+        val device = Build.DEVICE
+        val product = Build.PRODUCT
+        val manufacturer = Build.MANUFACTURER
+        return (brand.startsWith("generic") && device.startsWith("generic"))
+                || Build.FINGERPRINT.startsWith("generic")
+                || Build.FINGERPRINT.startsWith("unknown")
+                || hardware.contains("goldfish")
+                || hardware.contains("ranchu")
+                || model.contains("google_sdk")
+                || model.contains("Emulator")
+                || model.contains("Android SDK built for x86")
+                || manufacturer.contains("Genymotion")
+                || product.indexOf("sdk_google") != -1
+                || product.indexOf("google_sdk") != -1
+                || product.indexOf("sdk") != -1
+                || product.indexOf("sdk_x86") != -1
+                || product.indexOf("vbox86p") != -1
+                || device.indexOf("emulator") != -1
     }
 
     @Deprecated("Deprecated in Java")
