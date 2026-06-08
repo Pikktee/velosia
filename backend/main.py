@@ -63,7 +63,7 @@ def run_migrations():
 
 run_migrations()
 
-app = FastAPI(title="Vintamie API", version="2.2.53")
+app = FastAPI(title="Vintamie API", version="2.2.54")
 
 UPLOAD_DIR = "uploads"
 os.makedirs(UPLOAD_DIR, exist_ok=True)
@@ -581,13 +581,17 @@ from fastapi.responses import FileResponse
 from typing import Optional
 from fastapi import Header
 
+# Use persistent volume for APK storage in production (survives container redeploys)
+APK_DIR = "/data" if os.path.isdir("/data") else UPLOAD_DIR
+APK_FILENAME = "vintamie-latest.apk"
+
 @app.get("/api/app/version")
 def get_app_version():
     return {"version": app.version}
 
 @app.get("/api/app/latest-apk")
 def download_latest_apk():
-    apk_path = os.path.join(UPLOAD_DIR, "vintamie-latest.apk")
+    apk_path = os.path.join(APK_DIR, APK_FILENAME)
     if not os.path.exists(apk_path):
         raise HTTPException(status_code=404, detail="APK-Datei wurde noch nicht generiert. Bitte starte ein Build.")
     return FileResponse(
@@ -607,10 +611,8 @@ async def upload_apk(
     if x_upload_secret != secret:
         raise HTTPException(status_code=401, detail="Ungültiger Upload-Secret-Schlüssel.")
         
-    apk_path = os.path.join(UPLOAD_DIR, "vintamie-latest.apk")
+    apk_path = os.path.join(APK_DIR, APK_FILENAME)
     with open(apk_path, "wb") as buffer:
         shutil.copyfileobj(file.file, buffer)
         
-    return {"status": "success", "message": "APK-Datei erfolgreich aktualisiert."}
-
-
+    return {"status": "success", "message": f"APK-Datei erfolgreich aktualisiert (gespeichert unter {APK_DIR})."}

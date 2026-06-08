@@ -6,6 +6,7 @@ on:
       - main
     paths:
       - 'android/**'
+      - 'VERSION'
       - '.github/workflows/android.yml'
 
 jobs:
@@ -28,9 +29,12 @@ jobs:
           chmod +x gradlew
           ./gradlew assembleDebug
 
+      - name: Wait for backend redeploy
+        run: sleep 120
+
       - name: Upload APK to Vintamie Backend
         working-directory: android
         run: |
-          curl -X POST -H "X-Upload-Secret: ${{ secrets.APP_UPLOAD_SECRET }}" \
+          curl -f -X POST -H "X-Upload-Secret: ${{ secrets.APP_UPLOAD_SECRET }}" \
                -F "file=@app/build/outputs/apk/debug/app-debug.apk" \
                https://api.vintamie.henrikheil.net/api/app/upload-apk
