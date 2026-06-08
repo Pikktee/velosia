@@ -20,8 +20,8 @@ android {
         applicationId "com.vintamie.app"
         minSdk 26
         targetSdk 34
-        versionCode 57
-        versionName "2.2.80"
+        versionCode 58
+        versionName "2.2.81"
 
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
     }

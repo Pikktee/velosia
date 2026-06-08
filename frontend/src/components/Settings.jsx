@@ -16,8 +16,6 @@ export default function Settings({ user, onLogout, onUpdateUser }) {
   const [aiCustomFooter, setAiCustomFooter] = useState('');
   const [pricingOffset, setPricingOffset] = useState(0);
   const [defaultZip, setDefaultZip] = useState('');
-  const [defaultCity, setDefaultCity] = useState('');
-  const [defaultCategory, setDefaultCategory] = useState('Keine Präferenz');
   const [defaultShipping, setDefaultShipping] = useState('');
 
   // Synchronize local state when user prop changes
@@ -28,15 +26,11 @@ export default function Settings({ user, onLogout, onUpdateUser }) {
       setAiCustomFooter(user.ai_custom_footer || '');
       setPricingOffset(user.pricing_offset || 0);
       setDefaultZip(user.default_zip || '');
-      setDefaultCity(user.default_city || '');
-      setDefaultCategory(user.default_category || 'Keine Präferenz');
       setDefaultShipping(user.default_shipping || '');
     }
   }, [user]);
 
   if (!user) return null;
-
-  const loginMethod = user.google_id ? 'Google-Konto' : 'E-Mail & Passwort';
 
   const handleSave = async (e) => {
     e.preventDefault();
@@ -50,8 +44,8 @@ export default function Settings({ user, onLogout, onUpdateUser }) {
         ai_custom_footer: aiCustomFooter,
         pricing_offset: Number(pricingOffset),
         default_zip: defaultZip,
-        default_city: defaultCity,
-        default_category: defaultCategory,
+        default_city: '', // Ort ist überflüssig, PLZ reicht
+        default_category: '', // Standard-Kategorie entfernt (KI bestimmt diese immer)
         default_shipping: defaultShipping
       });
       
@@ -125,7 +119,7 @@ export default function Settings({ user, onLogout, onUpdateUser }) {
       `}</style>
       <div className="profile-container">
         <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '1.5rem' }}>
-          <h2 className="page-title">Profil</h2>
+          <h2 className="page-title">Profil &amp; Einstellungen</h2>
         </div>
 
         {/* Settings Form wrapped around a 2-column grid */}
@@ -135,30 +129,39 @@ export default function Settings({ user, onLogout, onUpdateUser }) {
             {/* Left Column */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
               
-              {/* Section: User Account Info */}
-              <div className="detail-section-unboxed">
-                <h3 className="detail-section-title">
+              {/* Section: Profil & Sitzung */}
+              <div className="detail-section-unboxed" style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+                <h3 className="detail-section-title" style={{ margin: 0 }}>
                   <User size={18} style={{ color: 'var(--primary)' }} />
-                  <span>Konto</span>
+                  <span>Konto &amp; Sitzung</span>
                 </h3>
                 
-                <div className="profile-header-info" style={{ marginBottom: 0 }}>
+                <div className="profile-header-info" style={{ marginBottom: 0, paddingBottom: 0 }}>
                   <div className="profile-avatar-wrapper">
                     <User size={26} />
                   </div>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.2rem', minWidth: 0 }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.2rem', minWidth: 0, flex: 1 }}>
                     <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.08em', fontWeight: 'bold' }}>Eingeloggt als</span>
                     <span style={{ fontSize: '1.15rem', fontWeight: '700', color: 'var(--text-primary)', wordBreak: 'break-all', fontFamily: 'var(--font-title)' }}>{user.email}</span>
-                    <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Anmeldemethode: {loginMethod}</span>
                   </div>
                 </div>
+
+                <button
+                  type="button"
+                  onClick={onLogout}
+                  className="btn btn-secondary"
+                  style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem', borderColor: 'var(--glass-border)', minHeight: '44px' }}
+                >
+                  <LogOut size={18} />
+                  Abmelden
+                </button>
               </div>
  
-              {/* Section: AI Writing Style */}
+              {/* Section: KI-Textgenerierung */}
               <div className="detail-section-unboxed" style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
                 <h3 className="detail-section-title" style={{ margin: 0 }}>
                   <Sparkles size={18} style={{ color: 'var(--primary)' }} />
-                  <span>KI-Schreibstil</span>
+                  <span>KI-Textgestaltung</span>
                 </h3>
                 
                 <div className="form-group" style={{ marginBottom: 0 }}>
@@ -236,97 +239,28 @@ export default function Settings({ user, onLogout, onUpdateUser }) {
             {/* Right Column */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
               
-              {/* Section: Pricing Strategy */}
-              <div className="detail-section-unboxed" style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
-                <h3 className="detail-section-title" style={{ margin: 0 }}>
-                  <Euro size={18} style={{ color: 'var(--primary)' }} />
-                  <span>Preisgestaltung</span>
-                </h3>
-                
-                <div className="form-group" style={{ marginBottom: 0 }}>
-                  <label style={{ display: 'flex', alignItems: 'center' }}>
-                    Preis-Offset (%)
-                    <span className="tooltip-container">
-                      <HelpCircle size={14} />
-                      <span className="tooltip-text">Passt den vorgeschlagenen Preis der KI prozentual an. Z. B. -10% für schnelleren Verkauf oder +5% für Verhandlungsbasis.</span>
-                    </span>
-                  </label>
-                  <input
-                    type="number"
-                    className="form-control"
-                    placeholder="z.B. -10"
-                    value={pricingOffset}
-                    onChange={(e) => setPricingOffset(e.target.value)}
-                  />
-                </div>
-              </div>
-
-              {/* Section: Default Location */}
-              <div className="detail-section-unboxed" style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
-                <h3 className="detail-section-title" style={{ margin: 0 }}>
-                  <MapPin size={18} style={{ color: 'var(--primary)' }} />
-                  <span>Standard-Standort</span>
-                </h3>
-                
-                <div className="form-grid-2col" style={{ gap: '1rem' }}>
-                  <div className="form-group" style={{ marginBottom: 0 }}>
-                    <label style={{ display: 'flex', alignItems: 'center' }}>
-                      Postleitzahl (PLZ)
-                      <span className="tooltip-container">
-                        <HelpCircle size={14} />
-                        <span className="tooltip-text">Wird beim Autofill auf Verkaufsplattformen automatisch eingetragen.</span>
-                      </span>
-                    </label>
-                    <input
-                      type="text"
-                      className="form-control"
-                      placeholder="z.B. 10115"
-                      value={defaultZip}
-                      onChange={(e) => setDefaultZip(e.target.value)}
-                    />
-                  </div>
-                  <div className="form-group" style={{ marginBottom: 0 }}>
-                    <label>Ort</label>
-                    <input
-                      type="text"
-                      className="form-control"
-                      placeholder="z.B. Berlin"
-                      value={defaultCity}
-                      onChange={(e) => setDefaultCity(e.target.value)}
-                    />
-                  </div>
-                </div>
-              </div>
-
-              {/* Section: Listing Preferences */}
+              {/* Section: Verkaufsvorgaben */}
               <div className="detail-section-unboxed" style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
                 <h3 className="detail-section-title" style={{ margin: 0 }}>
                   <Sliders size={18} style={{ color: 'var(--primary)' }} />
-                  <span>Listing-Präferenzen</span>
+                  <span>Verkaufsvorgaben</span>
                 </h3>
                 
                 <div className="form-group" style={{ marginBottom: 0 }}>
                   <label style={{ display: 'flex', alignItems: 'center' }}>
-                    Standard-Kategorie
+                    Postleitzahl (PLZ)
                     <span className="tooltip-container">
                       <HelpCircle size={14} />
-                      <span className="tooltip-text">Bevorzugte Kategorie für deine Angebote bei der KI-Klassifizierung.</span>
+                      <span className="tooltip-text">Wird beim Autofill auf Verkaufsplattformen automatisch eingetragen.</span>
                     </span>
                   </label>
-                  <select
+                  <input
+                    type="text"
                     className="form-control"
-                    value={defaultCategory}
-                    onChange={(e) => setDefaultCategory(e.target.value)}
-                  >
-                    <option value="Keine Präferenz">Keine Präferenz</option>
-                    <option value="Damenbekleidung">Damenbekleidung</option>
-                    <option value="Herrenbekleidung">Herrenbekleidung</option>
-                    <option value="Kinder">Kinder</option>
-                    <option value="Haus &amp; Garten">Haus &amp; Garten</option>
-                    <option value="Elektronik">Elektronik</option>
-                    <option value="Bücher &amp; Medien">Bücher &amp; Medien</option>
-                    <option value="Sonstiges">Sonstiges</option>
-                  </select>
+                    placeholder="z.B. 10115"
+                    value={defaultZip}
+                    onChange={(e) => setDefaultZip(e.target.value)}
+                  />
                 </div>
 
                 <div className="form-group" style={{ marginBottom: 0 }}>
@@ -343,6 +277,23 @@ export default function Settings({ user, onLogout, onUpdateUser }) {
                     placeholder="z.B. DHL Paket versichert"
                     value={defaultShipping}
                     onChange={(e) => setDefaultShipping(e.target.value)}
+                  />
+                </div>
+
+                <div className="form-group" style={{ marginBottom: 0 }}>
+                  <label style={{ display: 'flex', alignItems: 'center' }}>
+                    Preis-Offset (%)
+                    <span className="tooltip-container">
+                      <HelpCircle size={14} />
+                      <span className="tooltip-text">Passt den vorgeschlagenen Preis der KI prozentual an. Z. B. -10% für schnelleren Verkauf oder +5% für Verhandlungsbasis.</span>
+                    </span>
+                  </label>
+                  <input
+                    type="number"
+                    className="form-control"
+                    placeholder="z.B. -10"
+                    value={pricingOffset}
+                    onChange={(e) => setPricingOffset(e.target.value)}
                   />
                 </div>
               </div>
@@ -397,20 +348,10 @@ export default function Settings({ user, onLogout, onUpdateUser }) {
               <div className="detail-section-unboxed" style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem', marginTop: '0.5rem' }}>
                 <h3 className="detail-section-title" style={{ margin: 0 }}>
                   <AlertTriangle size={18} style={{ color: 'var(--primary)' }} />
-                  <span>Konto verwalten</span>
+                  <span>Gefahrenbereich</span>
                 </h3>
                 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                  <button
-                    type="button"
-                    onClick={onLogout}
-                    className="btn btn-secondary"
-                    style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem', borderColor: 'var(--glass-border)', minHeight: '44px' }}
-                  >
-                    <LogOut size={18} />
-                    Abmelden
-                  </button>
-
                   {showConfirm ? (
                     <div className="danger-alert-box fade-in" style={{ padding: '1rem', display: 'flex', flexDirection: 'column', gap: '0.75rem', margin: 0 }}>
                       <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', color: '#fca5a5', fontSize: '0.9rem', fontWeight: '600' }}>
