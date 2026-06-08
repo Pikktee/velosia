@@ -53,7 +53,7 @@ def apply_custom_footer(description: str, user) -> str:
     else:
         return f"{description.rstrip()}\n\n{footer}"
 
-def analyze_item_image(image_paths: List[str], user = None) -> dict:
+def analyze_item_image(image_paths: List[str], user = None, user_condition: str = None, user_details: str = None) -> dict:
     """
     Step 1: Identifies search keywords from the images.
     Step 2: Searches Kleinanzeigen for active listings and price ranges.
@@ -61,7 +61,12 @@ def analyze_item_image(image_paths: List[str], user = None) -> dict:
     """
     if not GEMINI_API_KEY:
         print("WARNING: GEMINI_API_KEY is not set. Returning mock data.")
-        return get_mock_analysis()
+        mock = get_mock_analysis()
+        if user_condition and user_condition.strip() and user_condition.lower() != "automatisch":
+            mock["condition"] = user_condition
+        if user_details:
+            mock["description"] += f"\n\nZusatzdetails: {user_details}"
+        return mock
 
     try:
         # Load, resize, and compress all images immediately to save memory and optimize performance
@@ -83,6 +88,8 @@ def analyze_item_image(image_paths: List[str], user = None) -> dict:
             "den genauen Typ. Gib mir eine kurze Suchanfrage (3-6 Wörter auf Deutsch), die ich auf einem Marktplatz eingeben kann, "
             "um vergleichbare Angebote zu finden. Antworte AUSSCHLIESSLICH mit der Suchanfrage."
         )
+        if user_details and user_details.strip():
+            identify_prompt += f"\nZusätzliche Angaben des Benutzers zum Artikel: '{user_details}'"
 
         models_to_try = []
         if GEMINI_MODEL:
@@ -128,6 +135,14 @@ def analyze_item_image(image_paths: List[str], user = None) -> dict:
         if category_pref and category_pref != "Keine Präferenz":
             category_instruction = f" Bevorzuge dabei die Kategorie '{category_pref}', falls diese zum Artikel passt."
 
+        condition_prompt = "- 'condition': Eine Einschätzung des Zustands. Wähle exakt einen dieser Werte: 'Neu', 'Sehr gut', 'Gut', 'Zufriedenstellend'."
+        if user_condition and user_condition.strip() and user_condition.lower() != "automatisch":
+            condition_prompt = f"- 'condition': Setze den Zustand exakt auf den Wert '{user_condition}'."
+
+        details_instruction = ""
+        if user_details and user_details.strip():
+            details_instruction = f"\nBerücksichtige unbedingt diese zusätzlichen Benutzer-Details beim Verfassen des Titels und der Beschreibung (wie Material, Schnitt, Mängel, Besonderheiten): '{user_details}'"
+
         final_prompt = (
             "Du bist Vintamie, eine visionäre Verkaufs-Assistentin für Second-Hand-Plattformen wie Vinted und Kleinanzeigen.\n"
             "Analysiere die Fotos dieses Artikels und erstelle eine Verkaufsanzeige. Nutze als zusätzlichen Kontext "
@@ -137,9 +152,9 @@ def analyze_item_image(image_paths: List[str], user = None) -> dict:
             f"- Vergleichsangebote: {sources_str}\n\n"
             "Erstelle eine strukturierte JSON-Antwort mit folgenden Feldern auf Deutsch:\n"
             "- 'title': Ein aussagekräftiger Titel (max. 80 Zeichen), optimiert für Vinted/Kleinanzeigen.\n"
-            f"- 'description': {tone_instruction} Nenne wichtige Details (wie Schnitt, Muster) und füge am Ende 3-4 relevante Hashtags hinzu.\n"
+            f"- 'description': {tone_instruction} Nenne wichtige Details (wie Schnitt, Muster) und füge am Ende 3-4 relevante Hashtags hinzu.{details_instruction}\n"
             f"- 'category': Eine passende Hauptkategorie auf Deutsch (z.B. 'Damenbekleidung', 'Herrenbekleidung', 'Kinder', 'Haus & Garten', 'Elektronik', 'Bücher & Medien', 'Sonstiges').{category_instruction}\n"
-            "- 'condition': Eine Einschätzung des Zustands. Wähle exakt einen dieser Werte: 'Neu', 'Sehr gut', 'Gut', 'Zufriedenstellend'.\n"
+            f"{condition_prompt}\n"
             "- 'price': Ein realistischer, geschätzter Verkaufspreis in Euro als ganze Zahl (Integer), orientiere dich eng an dem Medianpreis der Vergleichsangebote.\n\n"
             "Gib ausschließlich das JSON-Objekt zurück. Verwende kein Markdown-Formatting wie ```json."
         )

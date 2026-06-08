@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Depends, HTTPException, File, UploadFile, status
+from fastapi import FastAPI, Depends, HTTPException, File, UploadFile, status, Form
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
@@ -63,7 +63,7 @@ def run_migrations():
 
 run_migrations()
 
-app = FastAPI(title="Vintamie API", version="2.2.70")
+app = FastAPI(title="Vintamie API", version="2.2.71")
 
 UPLOAD_DIR = "uploads"
 os.makedirs(UPLOAD_DIR, exist_ok=True)
@@ -257,6 +257,8 @@ import json
 def upload_and_analyze(
     file: Optional[UploadFile] = File(None), 
     files: Optional[List[UploadFile]] = File(None),
+    condition: Optional[str] = Form(None),
+    details: Optional[str] = Form(None),
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user)
 ):
@@ -303,7 +305,7 @@ def upload_and_analyze(
 
     # Step-by-step AI + Live Scraper analysis
     try:
-        analysis = analyze_item_image(local_paths, user=current_user)
+        analysis = analyze_item_image(local_paths, user=current_user, user_condition=condition, user_details=details)
     except Exception as e:
         for p in local_paths:
             if os.path.exists(p):

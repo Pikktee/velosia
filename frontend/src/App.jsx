@@ -4,6 +4,7 @@ import CameraCapture from './components/CameraCapture';
 import DraftList from './components/DraftList';
 import DraftDetail from './components/DraftDetail';
 import AnalysisLoader from './components/AnalysisLoader';
+import AnalysisSpecs from './components/AnalysisSpecs';
 import Login from './components/Login';
 import Settings from './components/Settings';
 import LandingPage from './components/LandingPage';
@@ -49,7 +50,10 @@ export default function App() {
   // Handle Android physical back gesture
   useEffect(() => {
     window.onAndroidBack = () => {
-      if (view === 'capture') {
+      if (view === 'specs') {
+        setView('capture');
+        return true;
+      } else if (view === 'capture') {
         capturedImages.forEach(img => URL.revokeObjectURL(img.previewUrl));
         setCapturedImages([]);
         setAnalysisError(null);
@@ -201,7 +205,7 @@ export default function App() {
     }
   };
 
-  const handleUploadAndAnalyze = async () => {
+  const handleUploadAndAnalyze = async (condition, details) => {
     if (capturedImages.length === 0) return;
 
     setAnalysisError(null);
@@ -214,7 +218,7 @@ export default function App() {
 
     try {
       const filesToSend = capturedImages.map(img => img.file);
-      const result = await uploadAndAnalyze(filesToSend, controller.signal);
+      const result = await uploadAndAnalyze(filesToSend, condition, details, controller.signal);
 
       setTempAnalysisResult(result);
       setIsAnalysisFinished(true);
@@ -384,7 +388,7 @@ export default function App() {
             <CameraCapture
               selectedImages={capturedImages}
               setSelectedImages={setCapturedImages}
-              onAnalysisStart={handleUploadAndAnalyze}
+              onAnalysisStart={() => setView('specs')}
               analysisError={analysisError}
               onClearError={() => setAnalysisError(null)}
               onClose={() => {
@@ -393,6 +397,14 @@ export default function App() {
                 setAnalysisError(null);
                 setView(prevView || 'list');
               }}
+            />
+          )}
+
+          {view === 'specs' && (
+            <AnalysisSpecs
+              images={capturedImages}
+              onBack={() => setView('capture')}
+              onStartAnalysis={(condition, details) => handleUploadAndAnalyze(condition, details)}
             />
           )}
 
@@ -448,7 +460,7 @@ export default function App() {
       </main>
 
       {/* Responsive Sticky Footer Navigation (Tinder style flat bottom bar) */}
-      {!isInputFocused && view !== 'analyzing' && view !== 'issues' && (
+      {!isInputFocused && view !== 'analyzing' && view !== 'specs' && view !== 'issues' && (
         <nav className="app-nav">
           {/* Left: Angebote */}
           <button

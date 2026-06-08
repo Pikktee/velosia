@@ -133,7 +133,7 @@ export const updateMe = async (settingsData) => {
 
 // --- DRAFTS API (AUTHENTICATED) ---
 
-export const uploadAndAnalyze = async (files, signal) => {
+export const uploadAndAnalyze = async (files, condition, details, signal) => {
   const formData = new FormData();
   if (Array.isArray(files)) {
     files.forEach(file => {
@@ -141,6 +141,12 @@ export const uploadAndAnalyze = async (files, signal) => {
     });
   } else {
     formData.append('files', files);
+  }
+  if (condition) {
+    formData.append('condition', condition);
+  }
+  if (details) {
+    formData.append('details', details);
   }
 
   // For multipart/form-data, fetch determines the boundary automatically.
