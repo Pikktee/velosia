@@ -31,3 +31,6 @@ android/.idea/
 android/app/src/main/res/xml/file_paths.xml.user
 *.apk
 *.aar
+*.aab
+*.jks
+android/keystore.properties

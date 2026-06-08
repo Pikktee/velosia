@@ -63,7 +63,7 @@ def run_migrations():
 
 run_migrations()
 
-app = FastAPI(title="Vintamie API", version="2.2.18")
+app = FastAPI(title="Vintamie API", version="2.2.19")
 
 UPLOAD_DIR = "uploads"
 os.makedirs(UPLOAD_DIR, exist_ok=True)
