@@ -1335,10 +1335,11 @@ select.form-control {
 }
 
 .onboarding-arrow-svg {
-  width: 24px;
+  width: 60px;
   height: 80px;
   animation: arrowBounce 2s ease-in-out infinite;
   filter: drop-shadow(0 0 8px rgba(9, 176, 183, 0.5));
+  margin-left: 3px;
 }
 
 .onboarding-arrow-path {

@@ -20,17 +20,17 @@ export default function DraftList({ drafts, onSelectDraft, onDeleteDraft }) {
         {/* Landscape Arrow (points left, visible only in landscape) */}
         <div className="onboarding-arrow-landscape">
           <svg className="onboarding-arrow-svg-left" viewBox="0 0 40 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-            {/* Solid background shaft line */}
+            {/* Solid background shaft curve */}
             <path
-              d="M40,12 L2,12"
+              d="M38,6 C25,3 15,5 2,12"
               stroke="var(--primary)"
               strokeWidth="3"
               opacity="0.3"
               strokeLinecap="round"
             />
-            {/* Animated dashed overlay shaft line */}
+            {/* Animated dashed overlay shaft curve */}
             <path
-              d="M40,12 L2,12"
+              d="M38,6 C25,3 15,5 2,12"
               stroke="var(--primary)"
               strokeWidth="3"
               strokeLinecap="round"
@@ -38,7 +38,7 @@ export default function DraftList({ drafts, onSelectDraft, onDeleteDraft }) {
             />
             {/* Arrowhead */}
             <path
-              d="M9,5 L2,12 L9,19"
+              d="M9,6 L2,12 L10,18"
               stroke="var(--primary)"
               strokeWidth="3"
               strokeLinecap="round"
@@ -76,18 +76,18 @@ export default function DraftList({ drafts, onSelectDraft, onDeleteDraft }) {
           </p>
           
           <div className="onboarding-arrow-container">
-            <svg className="onboarding-arrow-svg" viewBox="0 0 24 80" fill="none" xmlns="http://www.w3.org/2000/svg">
-              {/* Solid background shaft line */}
+            <svg className="onboarding-arrow-svg" viewBox="0 0 60 80" fill="none" xmlns="http://www.w3.org/2000/svg">
+              {/* Solid background shaft curve */}
               <path
-                d="M12,2 L12,78"
+                d="M30,5 C48,12 52,58 30,75"
                 stroke="var(--primary)"
                 strokeWidth="3"
                 opacity="0.3"
                 strokeLinecap="round"
               />
-              {/* Animated dashed overlay shaft line */}
+              {/* Animated dashed overlay shaft curve */}
               <path
-                d="M12,2 L12,78"
+                d="M30,5 C48,12 52,58 30,75"
                 stroke="var(--primary)"
                 strokeWidth="3"
                 strokeLinecap="round"
@@ -95,7 +95,7 @@ export default function DraftList({ drafts, onSelectDraft, onDeleteDraft }) {
               />
               {/* Arrowhead */}
               <path
-                d="M5,71 L12,78 L19,71"
+                d="M22,69 L30,75 L36,71"
                 stroke="var(--primary)"
                 strokeWidth="3"
                 strokeLinecap="round"
