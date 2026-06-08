@@ -40,8 +40,13 @@ export default function App() {
         window.location.hash = '#/app';
       }
     } else {
+      const isAndroidApp = typeof window.VintamieBridge !== 'undefined';
       if (window.location.hash === '#/app') {
-        window.location.hash = '#/';
+        window.location.hash = isAndroidApp ? '#/login' : '#/';
+      } else if (!window.location.hash || window.location.hash === '#/') {
+        if (isAndroidApp) {
+          window.location.hash = '#/login';
+        }
       }
     }
   }, []);
@@ -54,8 +59,15 @@ export default function App() {
         window.location.hash = '#/app';
       }
     } else {
-      if (route !== '#/' && route !== '#/login') {
-        window.location.hash = '#/';
+      const isAndroidApp = typeof window.VintamieBridge !== 'undefined';
+      if (isAndroidApp) {
+        if (route !== '#/login') {
+          window.location.hash = '#/login';
+        }
+      } else {
+        if (route !== '#/' && route !== '#/login') {
+          window.location.hash = '#/';
+        }
       }
     }
   }, [route, token]);
@@ -168,63 +180,66 @@ export default function App() {
 
   // If not authenticated, render Landing Page or Login page
   if (!token) {
+    const isAndroid = typeof window.VintamieBridge !== 'undefined';
     return (
       <div style={{ minHeight: '100dvh', background: 'var(--bg-gradient)', position: 'relative', overflowX: 'hidden' }}>
         {/* Landing Page Header */}
-        <header className="app-header" style={{
-          position: 'sticky',
-          top: 0,
-          zIndex: 110,
-          boxShadow: '0 4px 30px rgba(0, 0, 0, 0.2)'
-        }}>
-          <div className="header-brand" style={{ cursor: 'pointer' }} onClick={() => window.location.hash = '#/'}>
-            <img src="/favicon.svg" alt="Vintamie Logo" className="header-logo" />
-            <h1 className="header-title">vintamie</h1>
-          </div>
-          <div className="header-actions">
-            {route === '#/login' ? (
-              <button 
-                className="btn" 
-                style={{
-                  background: 'transparent',
-                  border: 'none',
-                  color: 'var(--text-secondary)',
-                  fontWeight: '600',
-                  fontSize: '0.85rem',
-                  cursor: 'pointer',
-                  minHeight: '32px',
-                  height: '32px',
-                  padding: '0 1rem'
-                }}
-                onClick={() => window.location.hash = '#/'}
-              >
-                Startseite
-              </button>
-            ) : (
-              <button 
-                className="btn btn-primary" 
-                style={{
-                  minHeight: '32px',
-                  height: '32px',
-                  padding: '0 1.2rem',
-                  fontSize: '0.8rem',
-                  fontWeight: '700',
-                  boxShadow: '0 4px 15px rgba(9, 176, 183, 0.25)'
-                }}
-                onClick={() => window.location.hash = '#/login'}
-              >
-                Login
-              </button>
-            )}
-          </div>
-        </header>
+        {!isAndroid && (
+          <header className="app-header" style={{
+            position: 'sticky',
+            top: 0,
+            zIndex: 110,
+            boxShadow: '0 4px 30px rgba(0, 0, 0, 0.2)'
+          }}>
+            <div className="header-brand" style={{ cursor: 'pointer' }} onClick={() => window.location.hash = '#/'}>
+              <img src="/favicon.svg" alt="Vintamie Logo" className="header-logo" />
+              <h1 className="header-title">vintamie</h1>
+            </div>
+            <div className="header-actions">
+              {route === '#/login' ? (
+                <button 
+                  className="btn" 
+                  style={{
+                    background: 'transparent',
+                    border: 'none',
+                    color: 'var(--text-secondary)',
+                    fontWeight: '600',
+                    fontSize: '0.85rem',
+                    cursor: 'pointer',
+                    minHeight: '32px',
+                    height: '32px',
+                    padding: '0 1rem'
+                  }}
+                  onClick={() => window.location.hash = '#/'}
+                >
+                  Startseite
+                </button>
+              ) : (
+                <button 
+                  className="btn btn-primary" 
+                  style={{
+                    minHeight: '32px',
+                    height: '32px',
+                    padding: '0 1.2rem',
+                    fontSize: '0.8rem',
+                    fontWeight: '700',
+                    boxShadow: '0 4px 15px rgba(9, 176, 183, 0.25)'
+                  }}
+                  onClick={() => window.location.hash = '#/login'}
+                >
+                  Login
+                </button>
+              )}
+            </div>
+          </header>
+        )}
 
         {/* Content container */}
-        <div className="container" style={{ padding: '2rem 1.25rem' }}>
+        <div className="container" style={{ padding: isAndroid ? '0' : '2rem 1.25rem' }}>
           {route === '#/login' ? (
             <Login onLoginSuccess={handleLoginSuccess} />
           ) : (
-            <LandingPage />
+            isAndroid ? <Login onLoginSuccess={handleLoginSuccess} /> : <LandingPage />
           )}
         </div>
       </div>
