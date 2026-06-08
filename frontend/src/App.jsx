@@ -16,6 +16,7 @@ export default function App() {
   const [selectedDraft, setSelectedDraft] = useState(null);
   const [loading, setLoading] = useState(false);
   const [analysisError, setAnalysisError] = useState(null);
+  const [isInputFocused, setIsInputFocused] = useState(false);
 
   // Check auth state on mount
   useEffect(() => {
@@ -25,6 +26,33 @@ export default function App() {
       fetchCurrentUser();
       fetchDrafts();
     }
+  }, []);
+
+  // Detect input/textarea focus globally to hide navigation on mobile when keyboard is open
+  useEffect(() => {
+    const handleFocusIn = (e) => {
+      if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') {
+        setIsInputFocused(true);
+      }
+    };
+    const handleFocusOut = (e) => {
+      if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') {
+        setTimeout(() => {
+          if (
+            document.activeElement.tagName !== 'INPUT' &&
+            document.activeElement.tagName !== 'TEXTAREA'
+          ) {
+            setIsInputFocused(false);
+          }
+        }, 100);
+      }
+    };
+    document.addEventListener('focusin', handleFocusIn);
+    document.addEventListener('focusout', handleFocusOut);
+    return () => {
+      document.removeEventListener('focusin', handleFocusIn);
+      document.removeEventListener('focusout', handleFocusOut);
+    };
   }, []);
 
   const fetchCurrentUser = async () => {
@@ -171,24 +199,25 @@ export default function App() {
       </main>
 
       {/* Responsive Sticky Footer Navigation (App-like feel) */}
-      <nav className="glass-panel" style={{
-        position: 'fixed',
-        bottom: '1rem',
-        left: '50%',
-        transform: 'translateX(-50%)',
-        width: 'calc(100% - 2rem)',
-        maxWidth: '500px',
-        height: '70px',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        borderRadius: '99px',
-        padding: '0 1.5rem',
-        border: '1px solid var(--glass-border)',
-        zIndex: 100,
-        boxShadow: '0 10px 30px rgba(0,0,0,0.5)',
-        background: 'rgba(11, 15, 23, 0.85)'
-      }}>
+      {!isInputFocused && (
+        <nav className="glass-panel" style={{
+          position: 'fixed',
+          bottom: '1rem',
+          left: '50%',
+          transform: 'translateX(-50%)',
+          width: 'calc(100% - 2rem)',
+          maxWidth: '500px',
+          height: '70px',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          borderRadius: '99px',
+          padding: '0 1.5rem',
+          border: '1px solid var(--glass-border)',
+          zIndex: 100,
+          boxShadow: '0 10px 30px rgba(0,0,0,0.5)',
+          background: 'rgba(11, 15, 23, 0.85)'
+        }}>
         {/* Left: Entwürfe */}
         <button
           onClick={() => {
@@ -280,6 +309,7 @@ export default function App() {
           <span>Einstellungen</span>
         </button>
       </nav>
+      )}
     </div>
   );
 }

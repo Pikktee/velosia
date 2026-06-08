@@ -13,6 +13,28 @@ export default function DraftDetail({ draft, onBack, onUpdateSuccess }) {
   const [copiedField, setCopiedField] = useState(null);
   const [message, setMessage] = useState(null);
 
+  // Parse multiple images
+  const allImages = React.useMemo(() => {
+    if (draft.image_paths) {
+      try {
+        const parsed = JSON.parse(draft.image_paths);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          return parsed;
+        }
+      } catch (e) {
+        console.error("Failed to parse image_paths:", e);
+      }
+    }
+    return draft.image_path ? [draft.image_path] : [];
+  }, [draft.image_paths, draft.image_path]);
+
+  const [activeImage, setActiveImage] = useState('');
+
+  // Reset active image if draft or parsed list changes
+  useEffect(() => {
+    setActiveImage(allImages[0] || '');
+  }, [allImages]);
+
   // Detect Android Webview container
   const isAndroidApp = typeof window.VintamieBridge !== 'undefined';
 
@@ -120,12 +142,35 @@ export default function DraftDetail({ draft, onBack, onUpdateSuccess }) {
         <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
           
           {/* Image Box */}
-          <div className="glass-panel" style={{ padding: '1rem', textAlign: 'center' }}>
+          <div className="glass-panel" style={{ padding: '1rem', display: 'flex', flexDirection: 'column', gap: '1rem', alignItems: 'center' }}>
             <img 
-              src={getImageUrl(draft.image_path)} 
+              src={getImageUrl(activeImage)} 
               alt={title}
               style={{ width: '100%', maxHeight: '300px', objectFit: 'contain', borderRadius: 'var(--radius-sm)' }}
             />
+            {allImages.length > 1 && (
+              <div style={{ display: 'flex', gap: '0.5rem', overflowX: 'auto', width: '100%', padding: '0.25rem 0' }}>
+                {allImages.map((imgUrl, idx) => (
+                  <div 
+                    key={idx}
+                    onClick={() => setActiveImage(imgUrl)}
+                    style={{ 
+                      width: '60px', 
+                      height: '60px', 
+                      borderRadius: 'var(--radius-sm)', 
+                      overflow: 'hidden', 
+                      cursor: 'pointer', 
+                      flexShrink: 0,
+                      border: activeImage === imgUrl ? '2px solid var(--primary)' : '1px solid var(--glass-border)',
+                      opacity: activeImage === imgUrl ? 1 : 0.6,
+                      transition: 'all 0.2s ease'
+                    }}
+                  >
+                    <img src={getImageUrl(imgUrl)} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
 
           {/* Publishing Assist Panel */}
@@ -171,9 +216,9 @@ export default function DraftDetail({ draft, onBack, onUpdateSuccess }) {
 
                 {/* Quick Copy fields */}
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', justifyBetween: 'space-between', gap: '0.5rem', background: 'rgba(0,0,0,0.2)', padding: '0.5rem 0.75rem', borderRadius: '4px', border: '1px solid var(--glass-border)' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.5rem', background: 'rgba(0,0,0,0.2)', padding: '0.5rem 0.75rem', borderRadius: '4px', border: '1px solid var(--glass-border)' }}>
                     <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', width: '60px' }}>Titel</div>
-                    <div style={{ fontSize: '0.9rem', flexGrow: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{title}</div>
+                    <div style={{ fontSize: '0.9rem', flexGrow: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', minWidth: 0 }}>{title}</div>
                     <button 
                       className="btn" 
                       onClick={() => copyToClipboard(title, 'title')}
@@ -183,9 +228,9 @@ export default function DraftDetail({ draft, onBack, onUpdateSuccess }) {
                     </button>
                   </div>
 
-                  <div style={{ display: 'flex', alignItems: 'center', justifyBetween: 'space-between', gap: '0.5rem', background: 'rgba(0,0,0,0.2)', padding: '0.5rem 0.75rem', borderRadius: '4px', border: '1px solid var(--glass-border)' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.5rem', background: 'rgba(0,0,0,0.2)', padding: '0.5rem 0.75rem', borderRadius: '4px', border: '1px solid var(--glass-border)' }}>
                     <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', width: '60px' }}>Preis</div>
-                    <div style={{ fontSize: '0.9rem', flexGrow: 1, fontWeight: '700' }}>{price} €</div>
+                    <div style={{ fontSize: '0.9rem', flexGrow: 1, fontWeight: '700', minWidth: 0 }}>{price} €</div>
                     <button 
                       className="btn" 
                       onClick={() => copyToClipboard(price.toString(), 'price')}
@@ -206,18 +251,18 @@ export default function DraftDetail({ draft, onBack, onUpdateSuccess }) {
                         {copiedField === 'desc' ? <Check size={14} /> : <Copy size={14} />}
                       </button>
                     </div>
-                    <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', maxHeight: '60px', overflowY: 'auto', whiteSpace: 'pre-wrap', fontSize: '0.8rem', marginTop: '0.25rem' }}>
+                    <div style={{ color: 'var(--text-secondary)', maxHeight: '60px', overflowY: 'auto', whiteSpace: 'pre-wrap', fontSize: '0.8rem', marginTop: '0.25rem' }}>
                       {description}
                     </div>
                   </div>
                 </div>
 
                 {/* External links */}
-                <div style={{ display: 'flex', gap: '0.5rem' }}>
+                <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
                   <button 
                     className="btn btn-primary" 
                     onClick={() => openPlatformPage('vinted')}
-                    style={{ flexGrow: 1, padding: '0.5rem 1rem', fontSize: '0.85rem' }}
+                    style={{ flexGrow: 1, flexBasis: '130px', padding: '0.5rem 1rem', fontSize: '0.85rem' }}
                   >
                     Vinted öffnen
                     <ExternalLink size={12} />
@@ -226,7 +271,7 @@ export default function DraftDetail({ draft, onBack, onUpdateSuccess }) {
                   <button 
                     className="btn btn-secondary" 
                     onClick={() => openPlatformPage('kleinanzeigen')}
-                    style={{ flexGrow: 1, padding: '0.5rem 1rem', fontSize: '0.85rem' }}
+                    style={{ flexGrow: 1, flexBasis: '130px', padding: '0.5rem 1rem', fontSize: '0.85rem' }}
                   >
                     Kleinanzeigen
                     <ExternalLink size={12} />
@@ -273,7 +318,8 @@ export default function DraftDetail({ draft, onBack, onUpdateSuccess }) {
                           textOverflow: 'ellipsis', 
                           flexGrow: 1, 
                           paddingRight: '0.5rem',
-                          textAlign: 'left'
+                          textAlign: 'left',
+                          minWidth: 0
                         }}>
                           {src.title}
                         </span>

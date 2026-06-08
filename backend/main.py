@@ -30,12 +30,20 @@ def run_migrations():
     except Exception as e:
         db.rollback()
         print(f"Migration note: google_id column might already exist. ({e})", flush=True)
+        
+    try:
+        db.execute(text("ALTER TABLE drafts ADD COLUMN image_paths VARCHAR(1000)"))
+        db.commit()
+        print("Successfully ran migrations: added image_paths column to drafts.", flush=True)
+    except Exception as e:
+        db.rollback()
+        print(f"Migration note: image_paths column might already exist. ({e})", flush=True)
     finally:
         db.close()
 
 run_migrations()
 
-app = FastAPI(title="Vintamie API", version="2.2.0")
+app = FastAPI(title="Vintamie API", version="2.2.1")
 
 UPLOAD_DIR = "uploads"
 os.makedirs(UPLOAD_DIR, exist_ok=True)
@@ -179,34 +187,67 @@ def login_google(login_in: schemas.GoogleLogin, db: Session = Depends(get_db)):
 
 # --- DRAFT ENDPOINTS (SECURED) ---
 
+from typing import Optional, List
+import json
+
 @app.post("/api/upload", response_model=schemas.DraftResponse, status_code=status.HTTP_201_CREATED)
 def upload_and_analyze(
-    file: UploadFile = File(...), 
+    file: Optional[UploadFile] = File(None), 
+    files: Optional[List[UploadFile]] = File(None),
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user)
 ):
-    if not file.content_type.startswith("image/"):
-        raise HTTPException(status_code=400, detail="Die Datei muss ein Bild sein.")
+    uploaded_files = []
+    if files:
+        uploaded_files = files
+    elif file:
+        uploaded_files = [file]
 
-    file_extension = os.path.splitext(file.filename)[1]
-    unique_filename = f"{uuid.uuid4()}{file_extension}"
-    file_path = os.path.join(UPLOAD_DIR, unique_filename)
+    if not uploaded_files:
+        raise HTTPException(status_code=400, detail="Es wurden keine Bilder hochgeladen.")
 
-    try:
-        with open(file_path, "wb") as buffer:
-            shutil.copyfileobj(file.file, buffer)
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Bild konnte nicht gespeichert werden: {e}")
+    saved_paths = []
+    local_paths = []
+    for f in uploaded_files:
+        if not f.content_type.startswith("image/"):
+            # Cleanup already saved files
+            for p in local_paths:
+                if os.path.exists(p):
+                    try:
+                        os.remove(p)
+                    except Exception:
+                        pass
+            raise HTTPException(status_code=400, detail="Alle Dateien müssen Bilder sein.")
+
+        file_extension = os.path.splitext(f.filename)[1]
+        unique_filename = f"{uuid.uuid4()}{file_extension}"
+        file_path = os.path.join(UPLOAD_DIR, unique_filename)
+
+        try:
+            with open(file_path, "wb") as buffer:
+                shutil.copyfileobj(f.file, buffer)
+            saved_paths.append(f"/uploads/{unique_filename}")
+            local_paths.append(file_path)
+        except Exception as e:
+            # Cleanup already saved files
+            for p in local_paths:
+                if os.path.exists(p):
+                    try:
+                        os.remove(p)
+                    except Exception:
+                        pass
+            raise HTTPException(status_code=500, detail=f"Bild konnte nicht gespeichert werden: {e}")
 
     # Step-by-step AI + Live Scraper analysis
     try:
-        analysis = analyze_item_image(file_path)
+        analysis = analyze_item_image(local_paths)
     except Exception as e:
-        if os.path.exists(file_path):
-            try:
-                os.remove(file_path)
-            except Exception:
-                pass
+        for p in local_paths:
+            if os.path.exists(p):
+                try:
+                    os.remove(p)
+                except Exception:
+                    pass
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail=f"KI-Analyse fehlgeschlagen: {str(e)}"
@@ -221,7 +262,8 @@ def upload_and_analyze(
         condition=analysis["condition"],
         price=analysis["price"],
         sources=analysis.get("sources"), # Store JSON string of comparison listings
-        image_path=f"/uploads/{unique_filename}"
+        image_path=saved_paths[0], # Primary image for backward compatibility
+        image_paths=json.dumps(saved_paths) # Store all images as a JSON list
     )
     
     try:
@@ -229,8 +271,12 @@ def upload_and_analyze(
         db.commit()
         db.refresh(db_draft)
     except Exception as e:
-        if os.path.exists(file_path):
-            os.remove(file_path)
+        for p in local_paths:
+            if os.path.exists(p):
+                try:
+                    os.remove(p)
+                except Exception:
+                    pass
         raise HTTPException(status_code=500, detail=f"Datenbankfehler: {e}")
 
     return db_draft
@@ -292,7 +338,17 @@ def delete_draft(
     if not db_draft:
         raise HTTPException(status_code=404, detail="Entwurf wurde nicht gefunden.")
     
-    if db_draft.image_path:
+    # Delete all associated images
+    if db_draft.image_paths:
+        try:
+            paths = json.loads(db_draft.image_paths)
+            for path in paths:
+                relative_path = path.lstrip("/")
+                if os.path.exists(relative_path):
+                    os.remove(relative_path)
+        except Exception as e:
+            print(f"Error removing image files: {e}")
+    elif db_draft.image_path:
         relative_path = db_draft.image_path.lstrip("/")
         if os.path.exists(relative_path):
             try:

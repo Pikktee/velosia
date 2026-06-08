@@ -118,9 +118,15 @@ export const getMe = async () => {
 
 // --- DRAFTS API (AUTHENTICATED) ---
 
-export const uploadAndAnalyze = async (file) => {
+export const uploadAndAnalyze = async (files) => {
   const formData = new FormData();
-  formData.append('file', file);
+  if (Array.isArray(files)) {
+    files.forEach(file => {
+      formData.append('files', file);
+    });
+  } else {
+    formData.append('files', files);
+  }
 
   // For multipart/form-data, fetch determines the boundary automatically.
   // We pass null for Content-Type but still attach the Authorization header!

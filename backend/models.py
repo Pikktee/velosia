@@ -26,6 +26,7 @@ class Draft(Base):
     condition = Column(String, nullable=True)
     price = Column(Float, nullable=True)
     image_path = Column(String, nullable=True)
+    image_paths = Column(String, nullable=True)
     # JSON string to store price comparison source links: [{"title": "...", "price": 12.0, "url": "..."}]
     sources = Column(String, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
