@@ -245,11 +245,24 @@ select.form-control {
   max-width: 600px;
   margin: 0 auto;
   padding: 1.5rem;
+  transition: max-width 0.3s ease;
 }
 
 @media (max-width: 640px) {
   .container {
     padding: 1rem;
+  }
+}
+
+@media (min-width: 768px) or (orientation: landscape) {
+  .container {
+    max-width: 1000px;
+  }
+}
+
+@media (min-width: 1024px) {
+  .container {
+    max-width: 1200px;
   }
 }
 
@@ -519,4 +532,159 @@ select.form-control {
 .anim-core {
   transform-origin: 256px 275px;
   animation: corePulse 1.5s ease-in-out infinite alternate;
+}
+
+/* Camera Mode Shell overrides */
+.app-shell.camera-mode .app-header,
+.app-shell.camera-mode .app-nav {
+  display: none;
+}
+
+/* Fullscreen Camera Capture */
+.camera-container {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: #000;
+  z-index: 120;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Top controls overlay (Close, Flip) */
+.camera-overlay-top {
+  position: absolute;
+  top: calc(20px + env(safe-area-inset-top, 0px));
+  right: 1.25rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  z-index: 130;
+}
+
+/* Bottom controls overlay (Gallery, Shutter, Analyze) */
+.camera-overlay-bottom {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  width: 100%;
+  background: linear-gradient(to top, rgba(14, 18, 26, 0.95) 0%, rgba(14, 18, 26, 0.5) 60%, rgba(14, 18, 26, 0) 100%);
+  padding: 1.5rem 1rem calc(20px + env(safe-area-inset-bottom, 0px)) 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  align-items: center;
+  z-index: 130;
+}
+
+.camera-actions-row {
+  display: flex;
+  width: 100%;
+  justify-content: space-between;
+  align-items: center;
+  max-width: 340px;
+}
+
+.camera-thumbnails-container {
+  display: flex;
+  gap: 0.6rem;
+  overflow-x: auto;
+  width: 100%;
+  justify-content: center;
+  padding: 0.25rem 0;
+  max-height: 65px;
+}
+
+/* Shutter Button styling inside camera */
+.camera-shutter-btn {
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  background: #fff;
+  border: 5px solid var(--primary);
+  cursor: pointer;
+  box-shadow: 0 0 20px rgba(9, 176, 183, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform 0.1s ease;
+  padding: 0;
+}
+
+.camera-shutter-btn:active {
+  transform: scale(0.88);
+}
+
+.camera-shutter-btn-inner {
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  background: #fff;
+  border: 2px solid rgba(0, 0, 0, 0.05);
+}
+
+/* Landscape Camera Layout changes */
+@media (orientation: landscape) {
+  .camera-container {
+    flex-direction: row;
+  }
+
+  .camera-overlay-top {
+    top: calc(15px + env(safe-area-inset-top, 0px));
+    right: auto;
+    left: 1.25rem;
+    flex-direction: row;
+  }
+
+  .camera-overlay-bottom {
+    top: 0;
+    bottom: 0;
+    right: 0;
+    left: auto;
+    width: 100px;
+    height: 100%;
+    background: linear-gradient(to left, rgba(14, 18, 26, 0.95) 0%, rgba(14, 18, 26, 0.5) 60%, rgba(14, 18, 26, 0) 100%);
+    padding: calc(15px + env(safe-area-inset-top, 0px)) 1rem calc(15px + env(safe-area-inset-bottom, 0px)) 1rem;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    gap: 1.5rem;
+  }
+
+  .camera-actions-row {
+    flex-direction: column;
+    height: 100%;
+    justify-content: space-between;
+    align-items: center;
+    max-width: none;
+    padding: 1.5rem 0;
+  }
+
+  .camera-thumbnails-container {
+    position: absolute;
+    bottom: 1.25rem;
+    left: 1.25rem;
+    right: 120px;
+    justify-content: flex-start;
+    width: auto;
+    max-width: calc(100% - 140px);
+    z-index: 130;
+    pointer-events: auto;
+  }
+}
+
+/* Two-column layout for Draft details on landscape/desktop */
+.draft-detail-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 1.5rem;
+}
+
+@media (min-width: 768px) or (orientation: landscape) {
+  .draft-detail-grid {
+    grid-template-columns: 1fr 1.2fr;
+  }
 }

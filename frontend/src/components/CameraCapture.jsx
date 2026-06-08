@@ -1,23 +1,8 @@
-import React, { useState, useRef, useEffect, forwardRef, useImperativeHandle } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { Camera, Upload, Image as ImageIcon, Sparkles, AlertCircle, X, RotateCw, Trash2 } from 'lucide-react';
 import { uploadAndAnalyze } from '../utils/api';
 
-const CameraCapture = forwardRef(({ onAnalysisStart, onAnalysisSuccess, onAnalysisError, initialError, onClose }, ref) => {
-  const [selectedImages, setSelectedImages] = useState([]); // Array of { id, file, previewUrl }
-  const [facingMode, setFacingMode] = useState('environment'); // 'environment' or 'user'
-  const [uploading, setUploading] = useState(false);
-  const [error, setError] = useState(initialError);
-  const [flash, setFlash] = useState(false);
-
-  const videoRef = useRef(null);
-  const streamRef = useRef(null);
-  const fileInputRef = useRef(null);
-
-  useImperativeHandle(ref, () => ({
-    capture: () => {
-      capturePhoto();
-    }
-  }));
+const CameraCapture = ({ onAnalysisStart, onAnalysisSuccess, onAnalysisError, initialError, onClose }) => {
 
   useEffect(() => {
     setError(initialError);
@@ -184,19 +169,10 @@ const CameraCapture = forwardRef(({ onAnalysisStart, onAnalysisSuccess, onAnalys
     } finally {
       setUploading(false);
     }
-  };  return (
-    <div style={{
-      position: 'absolute',
-      top: 0,
-      left: 0,
-      right: 0,
-      bottom: 0,
-      background: '#000',
-      zIndex: 50,
-      overflow: 'hidden',
-      display: 'flex',
-      flexDirection: 'column'
-    }}>
+  };
+
+  return (
+    <div className="camera-container">
       {/* Hidden inputs */}
       <input
         ref={fileInputRef}
@@ -269,16 +245,8 @@ const CameraCapture = forwardRef(({ onAnalysisStart, onAnalysisSuccess, onAnalys
         }} />
       )}
 
-      {/* Floating Camera Actions Overlay (Positioned below top header height of ~56px) */}
-      <div style={{
-        position: 'absolute',
-        top: 'calc(70px + env(safe-area-inset-top, 0px))',
-        right: '1.25rem',
-        display: 'flex',
-        flexDirection: 'column',
-        gap: '0.75rem',
-        zIndex: 15
-      }}>
+      {/* Floating Camera Actions Overlay (Flip, Close) */}
+      <div className="camera-overlay-top">
         {!error && (
           <button
             className="btn btn-secondary"
@@ -326,32 +294,12 @@ const CameraCapture = forwardRef(({ onAnalysisStart, onAnalysisSuccess, onAnalys
         </button>
       </div>
 
-      {/* Camera Controls Footer (Padded above bottom navigation bar height of ~65px) */}
-      <div style={{
-        position: 'absolute',
-        bottom: 0,
-        left: 0,
-        width: '100%',
-        background: 'linear-gradient(to top, rgba(14, 18, 26, 0.95) 0%, rgba(14, 18, 26, 0.5) 60%, rgba(14, 18, 26, 0) 100%)',
-        padding: '1.5rem 1rem calc(80px + env(safe-area-inset-bottom, 0px)) 1rem',
-        display: 'flex',
-        flexDirection: 'column',
-        gap: '1rem',
-        alignItems: 'center',
-        zIndex: 15
-      }}>
+      {/* Camera Controls Overlay (Gallery, Shutter, Analyze) */}
+      <div className="camera-overlay-bottom">
         
         {/* Captured Thumbnails in Camera view */}
         {selectedImages.length > 0 && (
-          <div style={{
-            display: 'flex',
-            gap: '0.6rem',
-            overflowX: 'auto',
-            width: '100%',
-            justifyContent: 'center',
-            padding: '0.25rem 0',
-            maxHeight: '65px'
-          }}>
+          <div className="camera-thumbnails-container">
             {selectedImages.map((img) => (
               <div key={img.id} style={{ 
                 position: 'relative', 
@@ -389,9 +337,9 @@ const CameraCapture = forwardRef(({ onAnalysisStart, onAnalysisSuccess, onAnalys
         )}
 
         {/* Action Buttons Row */}
-        <div style={{ display: 'flex', width: '100%', justifyContent: 'space-between', alignItems: 'center', maxWidth: '340px' }}>
+        <div className="camera-actions-row">
           {/* Left: Gallery Button Wrapper */}
-          <div style={{ width: '110px', display: 'flex', justifyContent: 'flex-start' }}>
+          <div style={{ width: '110px', display: 'flex', justifyContent: 'flex-start', alignItems: 'center' }}>
             <button
               className="btn btn-secondary"
               onClick={triggerFileInput}
@@ -415,11 +363,21 @@ const CameraCapture = forwardRef(({ onAnalysisStart, onAnalysisSuccess, onAnalys
             </button>
           </div>
 
-          {/* Center: Shutter Placeholder (to align with the nav bar shutter below it) */}
-          <div style={{ width: '72px', height: '72px' }} />
+          {/* Center: Shutter Button */}
+          <div style={{ width: '72px', height: '72px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            {!error && (
+              <button
+                className="camera-shutter-btn"
+                onClick={capturePhoto}
+                title="Foto aufnehmen"
+              >
+                <div className="camera-shutter-btn-inner" />
+              </button>
+            )}
+          </div>
 
           {/* Right: Done/Analyze Button Wrapper */}
-          <div style={{ width: '110px', display: 'flex', justifyContent: 'flex-end' }}>
+          <div style={{ width: '110px', display: 'flex', justifyContent: 'flex-end', alignItems: 'center' }}>
             {selectedImages.length > 0 && (
               <button
                 className="btn btn-primary"
@@ -450,6 +408,6 @@ const CameraCapture = forwardRef(({ onAnalysisStart, onAnalysisSuccess, onAnalys
       </div>
     </div>
   );
-});
+};
 
 export default CameraCapture;
