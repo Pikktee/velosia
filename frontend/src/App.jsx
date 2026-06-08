@@ -190,9 +190,11 @@ export default function App() {
                   border: 'none',
                   color: 'var(--text-secondary)',
                   fontWeight: '600',
-                  fontSize: '0.9rem',
+                  fontSize: '0.85rem',
                   cursor: 'pointer',
-                  padding: '0.4rem 1rem'
+                  minHeight: '32px',
+                  height: '32px',
+                  padding: '0 1rem'
                 }}
                 onClick={() => window.location.hash = '#/'}
               >
@@ -202,8 +204,10 @@ export default function App() {
               <button 
                 className="btn btn-primary" 
                 style={{
-                  padding: '0.4rem 1.2rem',
-                  fontSize: '0.85rem',
+                  minHeight: '32px',
+                  height: '32px',
+                  padding: '0 1.2rem',
+                  fontSize: '0.8rem',
                   fontWeight: '700',
                   boxShadow: '0 4px 15px rgba(9, 176, 183, 0.25)'
                 }}
