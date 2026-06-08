@@ -10,6 +10,7 @@ export default function BugReportModal({ onClose, currentView }) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState(null);
   const [success, setSuccess] = useState(false);
+  const [sendScreenshot, setSendScreenshot] = useState(true);
 
   // Auto-capture screenshot on mount in the background
   useEffect(() => {
@@ -72,7 +73,7 @@ export default function BugReportModal({ onClose, currentView }) {
         title: generatedTitle,
         description,
         device_info: JSON.stringify(deviceInfo),
-        screenshot_base64: screenshotBase64
+        screenshot_base64: sendScreenshot ? screenshotBase64 : null
       });
       setSuccess(true);
       setTimeout(() => {
@@ -122,6 +123,28 @@ export default function BugReportModal({ onClose, currentView }) {
                 disabled={isSubmitting}
                 style={{ minHeight: '150px' }}
               />
+            </div>
+
+            <div className="form-group" style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', margin: '1rem 0' }}>
+              <input
+                type="checkbox"
+                id="bug-send-screenshot"
+                checked={sendScreenshot}
+                onChange={(e) => setSendScreenshot(e.target.checked)}
+                disabled={isSubmitting}
+                style={{
+                  width: '18px',
+                  height: '18px',
+                  accentColor: 'var(--primary)',
+                  cursor: 'pointer',
+                  borderRadius: '4px',
+                  border: '1px solid var(--glass-border)',
+                  background: 'rgba(0, 0, 0, 0.2)'
+                }}
+              />
+              <label htmlFor="bug-send-screenshot" style={{ margin: 0, cursor: 'pointer', userSelect: 'none', fontSize: '0.9rem', color: 'var(--text-secondary)' }}>
+                Screenshot dieses Bildschirms mitsenden {isCapturing && <span style={{ color: 'var(--text-muted)', fontSize: '0.8rem' }}>(wird geladen...)</span>}
+              </label>
             </div>
 
             <div className="bug-modal-footer">

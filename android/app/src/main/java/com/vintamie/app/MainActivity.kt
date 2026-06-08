@@ -32,6 +32,8 @@ class MainActivity : AppCompatActivity() {
     private lateinit var fabFill: ExtendedFloatingActionButton
     
     private val RC_SIGN_IN = 9001
+    private val RC_FILE_CHOOSER = 9002
+    private var fileUploadCallback: ValueCallback<Array<Uri>>? = null
     
     // Server addresses (default to production for physical devices)
     private var frontendUrl = "https://vintamie.henrikheil.net"
@@ -123,8 +125,20 @@ class MainActivity : AppCompatActivity() {
                     return true
                 }
                 
-                // If no active photo, return false to let default file picker run
-                return false
+                // Open standard system file picker to select images
+                fileUploadCallback?.onReceiveValue(null)
+                fileUploadCallback = filePathCallback
+                
+                try {
+                    val intent = fileChooserParams.createIntent()
+                    startActivityForResult(intent, RC_FILE_CHOOSER)
+                } catch (e: Exception) {
+                    fileUploadCallback?.onReceiveValue(null)
+                    fileUploadCallback = null
+                    Toast.makeText(this@MainActivity, "Galerie konnte nicht geöffnet werden.", Toast.LENGTH_SHORT).show()
+                    return false
+                }
+                return true
             }
 
             override fun onPermissionRequest(request: PermissionRequest) {
@@ -397,6 +411,25 @@ class MainActivity : AppCompatActivity() {
                     webView.evaluateJavascript("window.onGoogleSignInFailure ? window.onGoogleSignInFailure('$statusText') : null", null)
                 }
             }
+        } else if (requestCode == RC_FILE_CHOOSER) {
+            if (fileUploadCallback == null) return
+            
+            var results: Array<Uri>? = null
+            if (resultCode == RESULT_OK && data != null) {
+                val clipData = data.clipData
+                if (clipData != null) {
+                    results = Array(clipData.itemCount) { i ->
+                        clipData.getItemAt(i).uri
+                    }
+                } else {
+                    val uri = data.data
+                    if (uri != null) {
+                        results = arrayOf(uri)
+                    }
+                }
+            }
+            fileUploadCallback?.onReceiveValue(results)
+            fileUploadCallback = null
         }
     }
 
