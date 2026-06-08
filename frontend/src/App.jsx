@@ -17,15 +17,7 @@ export default function App() {
   const [loading, setLoading] = useState(false);
   const [analysisError, setAnalysisError] = useState(null);
   const [isInputFocused, setIsInputFocused] = useState(false);
-  const [isCameraActive, setIsCameraActive] = useState(true);
   const cameraCaptureRef = useRef(null);
-
-  // Automatically start camera when navigating to capture view
-  useEffect(() => {
-    if (view === 'capture') {
-      setIsCameraActive(true);
-    }
-  }, [view]);
 
   // Check auth state on mount
   useEffect(() => {
@@ -201,8 +193,7 @@ export default function App() {
               onAnalysisSuccess={handleAnalysisSuccess}
               onAnalysisError={handleAnalysisError}
               initialError={analysisError}
-              isCameraActive={isCameraActive}
-              setIsCameraActive={setIsCameraActive}
+              onClose={() => setView('list')}
             />
           )}
 
@@ -271,7 +262,7 @@ export default function App() {
             zIndex: 101,
             flexShrink: 0
           }}>
-            {view === 'capture' && isCameraActive ? (
+            {view === 'capture' ? (
               /* Shutter Button Mode */
               <button
                 onClick={() => {
@@ -306,7 +297,6 @@ export default function App() {
               <button
                 onClick={() => {
                   setView('capture');
-                  setIsCameraActive(true);
                 }}
                 style={{
                   width: '60px',
