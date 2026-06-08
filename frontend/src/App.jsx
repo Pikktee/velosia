@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Camera, FolderHeart, Sparkles, LogOut, User, Settings as SettingsIcon, Cloud } from 'lucide-react';
 import CameraCapture from './components/CameraCapture';
 import DraftList from './components/DraftList';
@@ -17,6 +17,15 @@ export default function App() {
   const [loading, setLoading] = useState(false);
   const [analysisError, setAnalysisError] = useState(null);
   const [isInputFocused, setIsInputFocused] = useState(false);
+  const [isCameraActive, setIsCameraActive] = useState(true);
+  const cameraCaptureRef = useRef(null);
+
+  // Automatically start camera when navigating to capture view
+  useEffect(() => {
+    if (view === 'capture') {
+      setIsCameraActive(true);
+    }
+  }, [view]);
 
   // Check auth state on mount
   useEffect(() => {
@@ -187,10 +196,13 @@ export default function App() {
         }}>
           {view === 'capture' && (
             <CameraCapture
+              ref={cameraCaptureRef}
               onAnalysisStart={handleAnalysisStart}
               onAnalysisSuccess={handleAnalysisSuccess}
               onAnalysisError={handleAnalysisError}
               initialError={analysisError}
+              isCameraActive={isCameraActive}
+              setIsCameraActive={setIsCameraActive}
             />
           )}
 
@@ -247,7 +259,7 @@ export default function App() {
             <span>Entwürfe</span>
           </button>
 
-          {/* Center: Floating round Camera button (FAB) */}
+          {/* Center: Floating round Camera button (FAB) / Shutter Button */}
           <div style={{
             position: 'relative',
             top: '-15px',
@@ -259,35 +271,71 @@ export default function App() {
             zIndex: 101,
             flexShrink: 0
           }}>
-            <button
-              onClick={() => setView('capture')}
-              style={{
-                width: '60px',
-                height: '60px',
-                borderRadius: '50%',
-                background: 'linear-gradient(135deg, var(--primary) 0%, #068085 100%)',
-                border: '4px solid #0e121a',
-                color: '#000',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                boxShadow: '0 8px 20px rgba(9, 176, 183, 0.4)',
-                cursor: 'pointer',
-                transition: 'transform 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275), box-shadow 0.2s ease',
-                transform: view === 'capture' || view === 'analyzing' ? 'scale(1.15)' : 'scale(1)'
-              }}
-              title="Neue Aufnahme"
-              onMouseEnter={(e) => {
-                e.currentTarget.style.transform = 'scale(1.2)';
-                e.currentTarget.style.boxShadow = '0 10px 25px rgba(9, 176, 183, 0.6)';
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.transform = view === 'capture' || view === 'analyzing' ? 'scale(1.15)' : 'scale(1)';
-                e.currentTarget.style.boxShadow = '0 8px 20px rgba(9, 176, 183, 0.4)';
-              }}
-            >
-              <Camera size={24} />
-            </button>
+            {view === 'capture' && isCameraActive ? (
+              /* Shutter Button Mode */
+              <button
+                onClick={() => {
+                  if (cameraCaptureRef.current) {
+                    cameraCaptureRef.current.capture();
+                  }
+                }}
+                style={{
+                  width: '64px',
+                  height: '64px',
+                  borderRadius: '50%',
+                  background: '#fff',
+                  border: '5px solid var(--primary)',
+                  cursor: 'pointer',
+                  boxShadow: '0 0 20px rgba(9, 176, 183, 0.5)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  transition: 'transform 0.1s ease',
+                  padding: 0
+                }}
+                onMouseDown={(e) => e.currentTarget.style.transform = 'scale(0.88)'}
+                onMouseUp={(e) => e.currentTarget.style.transform = 'scale(1)'}
+                onTouchStart={(e) => e.currentTarget.style.transform = 'scale(0.88)'}
+                onTouchEnd={(e) => e.currentTarget.style.transform = 'scale(1)'}
+                title="Foto aufnehmen"
+              >
+                <div style={{ width: '42px', height: '42px', borderRadius: '50%', background: '#fff', border: '2px solid rgba(0,0,0,0.05)' }} />
+              </button>
+            ) : (
+              /* Navigation FAB Mode */
+              <button
+                onClick={() => {
+                  setView('capture');
+                  setIsCameraActive(true);
+                }}
+                style={{
+                  width: '60px',
+                  height: '60px',
+                  borderRadius: '50%',
+                  background: 'linear-gradient(135deg, var(--primary) 0%, #068085 100%)',
+                  border: '4px solid #0e121a',
+                  color: '#000',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  boxShadow: '0 8px 20px rgba(9, 176, 183, 0.4)',
+                  cursor: 'pointer',
+                  transition: 'transform 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275), box-shadow 0.2s ease',
+                  transform: view === 'capture' || view === 'analyzing' ? 'scale(1.15)' : 'scale(1)'
+                }}
+                title="Neue Aufnahme"
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.transform = 'scale(1.2)';
+                  e.currentTarget.style.boxShadow = '0 10px 25px rgba(9, 176, 183, 0.6)';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.transform = view === 'capture' || view === 'analyzing' ? 'scale(1.15)' : 'scale(1)';
+                  e.currentTarget.style.boxShadow = '0 8px 20px rgba(9, 176, 183, 0.4)';
+                }}
+              >
+                <Camera size={24} />
+              </button>
+            )}
           </div>
 
           {/* Right: Einstellungen */}

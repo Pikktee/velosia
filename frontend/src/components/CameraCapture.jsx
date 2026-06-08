@@ -1,10 +1,9 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, forwardRef, useImperativeHandle } from 'react';
 import { Camera, Upload, Image as ImageIcon, Sparkles, AlertCircle, X, RotateCw, Trash2 } from 'lucide-react';
 import { uploadAndAnalyze } from '../utils/api';
 
-export default function CameraCapture({ onAnalysisStart, onAnalysisSuccess, onAnalysisError, initialError }) {
+const CameraCapture = forwardRef(({ onAnalysisStart, onAnalysisSuccess, onAnalysisError, initialError, isCameraActive, setIsCameraActive }, ref) => {
   const [selectedImages, setSelectedImages] = useState([]); // Array of { id, file, previewUrl }
-  const [isCameraActive, setIsCameraActive] = useState(true);
   const [facingMode, setFacingMode] = useState('environment'); // 'environment' or 'user'
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState(initialError);
@@ -13,6 +12,12 @@ export default function CameraCapture({ onAnalysisStart, onAnalysisSuccess, onAn
   const videoRef = useRef(null);
   const streamRef = useRef(null);
   const fileInputRef = useRef(null);
+
+  useImperativeHandle(ref, () => ({
+    capture: () => {
+      capturePhoto();
+    }
+  }));
 
   useEffect(() => {
     setError(initialError);
@@ -384,49 +389,31 @@ export default function CameraCapture({ onAnalysisStart, onAnalysisSuccess, onAn
               <ImageIcon size={20} style={{ color: '#fff' }} />
             </button>
 
-            {/* Shutter Button */}
-            <button
-              onClick={capturePhoto}
-              style={{
-                width: '72px',
-                height: '72px',
-                borderRadius: '50%',
-                background: '#fff',
-                border: '6px solid var(--primary)',
-                cursor: 'pointer',
-                boxShadow: '0 0 20px rgba(9, 176, 183, 0.5)',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                transition: 'transform 0.1s ease',
-                padding: 0
-              }}
-              onMouseDown={(e) => e.currentTarget.style.transform = 'scale(0.88)'}
-              onMouseUp={(e) => e.currentTarget.style.transform = 'scale(1)'}
-              onTouchStart={(e) => e.currentTarget.style.transform = 'scale(0.88)'}
-              onTouchEnd={(e) => e.currentTarget.style.transform = 'scale(1)'}
-              title="Foto aufnehmen"
-            >
-              <div style={{ width: '48px', height: '48px', borderRadius: '50%', background: '#fff', border: '2px solid rgba(0,0,0,0.1)' }} />
-            </button>
+            {/* Invisible Shutter Placeholder (to align with the nav bar shutter below it) */}
+            <div style={{ width: '72px', height: '72px' }} />
 
-            {/* Done/Close Button */}
+            {/* Done/Analyze Button */}
             <button
               className="btn btn-primary"
-              onClick={() => setIsCameraActive(false)}
+              onClick={selectedImages.length > 0 ? handleUploadAndAnalyze : () => setIsCameraActive(false)}
+              disabled={uploading}
               style={{
                 minHeight: 'auto',
                 padding: '0.65rem 1.25rem',
                 borderRadius: '99px',
                 fontSize: '0.85rem',
-                background: 'var(--primary)',
-                color: '#000',
+                background: selectedImages.length > 0 ? 'linear-gradient(135deg, var(--secondary) 0%, #d53f8c 100%)' : 'var(--primary)',
+                color: selectedImages.length > 0 ? '#fff' : '#000',
                 border: 'none',
                 fontWeight: 'bold',
-                boxShadow: '0 4px 12px var(--primary-glow)'
+                boxShadow: selectedImages.length > 0 ? '0 4px 12px var(--secondary-glow)' : '0 4px 12px var(--primary-glow)',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.35rem'
               }}
             >
-              Fertig
+              {selectedImages.length > 0 && <Sparkles size={14} />}
+              {selectedImages.length > 0 ? 'Analysieren' : 'Fertig'}
             </button>
           </div>
         </div>
@@ -649,4 +636,6 @@ export default function CameraCapture({ onAnalysisStart, onAnalysisSuccess, onAn
       </div>
     </div>
   );
-}
+});
+
+export default CameraCapture;
