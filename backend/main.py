@@ -63,7 +63,7 @@ def run_migrations():
 
 run_migrations()
 
-app = FastAPI(title="Vintamie API", version="2.2.25")
+app = FastAPI(title="Vintamie API", version="2.2.26")
 
 UPLOAD_DIR = "uploads"
 os.makedirs(UPLOAD_DIR, exist_ok=True)
@@ -575,4 +575,42 @@ def regenerate_draft_field_endpoint(
     db.commit()
     db.refresh(db_draft)
     return db_draft
+
+# --- APP OTA UPDATE ENDPOINTS ---
+from fastapi.responses import FileResponse
+from typing import Optional
+from fastapi import Header
+
+@app.get("/api/app/version")
+def get_app_version():
+    return {"version": app.version}
+
+@app.get("/api/app/latest-apk")
+def download_latest_apk():
+    apk_path = os.path.join(UPLOAD_DIR, "vintamie-latest.apk")
+    if not os.path.exists(apk_path):
+        raise HTTPException(status_code=404, detail="APK-Datei wurde noch nicht generiert. Bitte starte ein Build.")
+    return FileResponse(
+        apk_path, 
+        media_type="application/vnd.android.package-archive", 
+        filename="vintamie-latest.apk"
+    )
+
+@app.post("/api/app/upload-apk")
+async def upload_apk(
+    file: UploadFile = File(...),
+    x_upload_secret: Optional[str] = Header(None)
+):
+    secret = os.getenv("APP_UPLOAD_SECRET")
+    if not secret:
+        raise HTTPException(status_code=500, detail="Upload-Secret ist auf dem Server nicht konfiguriert.")
+    if x_upload_secret != secret:
+        raise HTTPException(status_code=401, detail="Ungültiger Upload-Secret-Schlüssel.")
+        
+    apk_path = os.path.join(UPLOAD_DIR, "vintamie-latest.apk")
+    with open(apk_path, "wb") as buffer:
+        shutil.copyfileobj(file.file, buffer)
+        
+    return {"status": "success", "message": "APK-Datei erfolgreich aktualisiert."}
+
 

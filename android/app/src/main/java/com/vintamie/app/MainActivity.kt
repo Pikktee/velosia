@@ -131,6 +131,9 @@ class MainActivity : AppCompatActivity() {
 
         // Load the frontend dashboard
         webView.loadUrl(frontendUrl)
+
+        // Check for OTA updates
+        checkForUpdates()
     }
 
     // Javascript Interface definition
@@ -424,6 +427,66 @@ class MainActivity : AppCompatActivity() {
         """.trimIndent()
         webView.evaluateJavascript(js, null)
         Toast.makeText(this, "Erfolgreich mit Google angemeldet!", Toast.LENGTH_SHORT).show()
+    }
+
+    private fun checkForUpdates() {
+        val request = Request.Builder()
+            .url("$backendUrl/api/app/version")
+            .build()
+
+        okHttpClient.newCall(request).enqueue(object : Callback {
+            override fun onFailure(call: Call, e: IOException) {
+                // Ignore silent failure so app works offline
+            }
+
+            override fun onResponse(call: Call, response: Response) {
+                response.use {
+                    if (!response.isSuccessful) return
+                    val bodyString = response.body?.string() ?: return
+                    try {
+                        val json = JSONObject(bodyString)
+                        val serverVersion = json.getString("version")
+                        
+                        val packageInfo = packageManager.getPackageInfo(packageName, 0)
+                        val localVersion = packageInfo.versionName
+
+                        if (isNewerVersion(localVersion, serverVersion)) {
+                            runOnUiThread {
+                                showUpdateDialog(serverVersion)
+                            }
+                        }
+                    } catch (e: Exception) {
+                        e.printStackTrace()
+                    }
+                }
+            }
+        })
+    }
+
+    private fun isNewerVersion(local: String?, server: String): Boolean {
+        if (local == null) return true
+        val localParts = local.split(".")
+        val serverParts = server.split(".")
+        val length = maxOf(localParts.size, serverParts.size)
+        for (i in 0 until length) {
+            val localPart = if (i < localParts.size) localParts[i].toIntOrNull() ?: 0 else 0
+            val serverPart = if (i < serverParts.size) serverParts[i].toIntOrNull() ?: 0 else 0
+            if (serverPart > localPart) return true
+            if (localPart > serverPart) return false
+        }
+        return false
+    }
+
+    private fun showUpdateDialog(latestVersion: String) {
+        androidx.appcompat.app.AlertDialog.Builder(this)
+            .setTitle("Update verfügbar")
+            .setMessage("Eine neue App-Version ($latestVersion) ist verfügbar. Möchtest du sie jetzt herunterladen?")
+            .setPositiveButton("Herunterladen") { _, _ ->
+                val browserIntent = Intent(Intent.ACTION_VIEW, Uri.parse("$backendUrl/api/app/latest-apk"))
+                startActivity(browserIntent)
+            }
+            .setNegativeButton("Später", null)
+            .show()
     }
 
     @Deprecated("Deprecated in Java")

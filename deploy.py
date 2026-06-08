@@ -102,6 +102,25 @@ def main():
             f.write('\n')
         print("✔ Updated extension/manifest.json version.")
 
+    # 5b. Update android/app/build.gradle version
+    android_gradle_path = "android/app/build.gradle"
+    if os.path.exists(android_gradle_path):
+        with open(android_gradle_path, "r") as f:
+            content = f.read()
+        
+        # Replace versionName
+        content = re.sub(r'versionName "[^"]+"', f'versionName "{new_version}"', content)
+        
+        # Increment versionCode
+        version_code_match = re.search(r'versionCode (\d+)', content)
+        if version_code_match:
+            new_code = int(version_code_match.group(1)) + 1
+            content = re.sub(r'versionCode \d+', f'versionCode {new_code}', content)
+            
+        with open(android_gradle_path, "w") as f:
+            f.write(content)
+        print("✔ Updated android/app/build.gradle version.")
+
     # 6. Git commit & push
     run_cmd("git add .")
     run_cmd(f'git commit -m "{commit_msg}"')
