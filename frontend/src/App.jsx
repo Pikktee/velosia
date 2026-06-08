@@ -159,7 +159,7 @@ export default function App() {
           {view === 'capture' && (
             <div className="status-badge">
               <Camera size={12} style={{ color: 'var(--primary)' }} />
-              <span>Kamera-Modus</span>
+              <span>Fotos hinzufügen</span>
             </div>
           )}
           {view === 'detail' && (
