@@ -12,6 +12,15 @@
       <span class="status-badge disconnected" id="status">Nicht angemeldet</span>
     </div>
     
+    <!-- Server Environment Toggle -->
+    <div class="env-toggle" style="display:flex; justify-content:space-between; align-items:center; background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.05); padding:8px 12px; border-radius:6px; margin-bottom:12px;">
+      <span style="font-size:11px; font-weight:600; color:#94a3b8;">Server-Umgebung:</span>
+      <select id="env-select" style="background:#0e121a; border:1px solid rgba(255,255,255,0.1); border-radius:4px; color:#f8fafc; font-size:11px; padding:2px 6px; outline:none; cursor:pointer;">
+        <option value="production">Produktion (Railway)</option>
+        <option value="local">Lokal (localhost)</option>
+      </select>
+    </div>
+    
     <!-- Login Form -->
     <div id="login-view" class="view">
       <form id="login-form">
@@ -36,7 +45,7 @@
         <button id="logout-btn" style="background:transparent; border:none; color:#09b0b7; cursor:pointer; text-decoration:underline; font-weight:bold; font-size:12px; padding:0;">Abmelden</button>
       </div>
       <div class="actions">
-        <a href="http://localhost:5173" target="_blank" class="btn btn-primary">Dashboard öffnen</a>
+        <a href="https://vintamie.henrikheil.net" id="btn-open-dashboard" target="_blank" class="btn btn-primary">Dashboard öffnen</a>
         <a href="https://www.vinted.de/items/new" target="_blank" class="btn btn-secondary">Vinted aufrufen</a>
       </div>
     </div>

@@ -1,0 +1,334 @@
+:root {
+  --color-bg: #0b0f17;
+  --color-primary: #09b0b7;
+  --color-primary-glow: rgba(9, 176, 183, 0.3);
+  --color-accent: #ec4899;
+  --color-text: #f8fafc;
+  --color-text-muted: #94a3b8;
+  --font-family: 'Outfit', 'Inter', -apple-system, sans-serif;
+}
+
+html, body {
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background-color: transparent;
+  font-family: var(--font-family);
+  color: var(--color-text);
+  user-select: none;
+}
+
+.camera-container {
+  position: relative;
+  width: 100vw;
+  height: 100vh;
+  background: rgba(11, 15, 23, 0.88);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+}
+
+/* Close Button */
+.btn-circle {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: var(--color-text);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  box-sizing: border-box;
+  outline: none;
+}
+
+.btn-circle:hover {
+  background: rgba(255, 255, 255, 0.15);
+  border-color: rgba(255, 255, 255, 0.25);
+  transform: scale(1.05);
+}
+
+.btn-circle:active {
+  transform: scale(0.95);
+}
+
+.btn-close {
+  position: absolute;
+  top: 24px;
+  right: 24px;
+  z-index: 100;
+  font-size: 18px;
+}
+
+/* Video Wrapper & Stream */
+.video-wrapper {
+  position: relative;
+  width: 90%;
+  max-width: 500px;
+  height: 65%;
+  max-height: 600px;
+  border-radius: 20px;
+  overflow: hidden;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.6);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: #000;
+}
+
+video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transform: scaleX(1); /* mirrored if front camera, but standard for back camera */
+}
+
+/* Guideline overlay on camera */
+.camera-guideline {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
+
+.guideline-box {
+  width: 70%;
+  height: 60%;
+  border: 2px dashed rgba(255, 255, 255, 0.3);
+  border-radius: 12px;
+  box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.35);
+  transition: border-color 0.3s ease;
+}
+
+.guideline-text {
+  margin-top: 16px;
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.8);
+  text-shadow: 0 2px 4px rgba(0,0,0,0.5);
+  font-weight: 500;
+  letter-spacing: 0.5px;
+}
+
+/* Camera Controls Overlay */
+.controls-overlay {
+  position: absolute;
+  bottom: 40px;
+  left: 0;
+  width: 100%;
+  display: flex;
+  justify-content: center;
+  z-index: 90;
+}
+
+.controls-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 80%;
+  max-width: 320px;
+}
+
+/* Shutter Button (Auslöser) */
+.btn-shutter {
+  width: 80px;
+  height: 80px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.15);
+  border: 4px solid #ffffff;
+  padding: 4px;
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  outline: none;
+  box-sizing: border-box;
+}
+
+.btn-shutter:hover {
+  transform: scale(1.05);
+  background: rgba(255, 255, 255, 0.25);
+}
+
+.btn-shutter:active {
+  transform: scale(0.92);
+}
+
+.shutter-inner {
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  background: #ffffff;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  transition: background-color 0.2s ease;
+}
+
+.btn-shutter:active .shutter-inner {
+  background: var(--color-primary);
+}
+
+.btn-gallery {
+  color: var(--color-text);
+  font-size: 20px;
+}
+
+.control-spacer {
+  width: 48px; /* to balance the gallery button on the left */
+  height: 48px;
+}
+
+/* Glassmorphic Loader Overlay */
+.loader-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(7, 10, 17, 0.85);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  z-index: 200;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.loader-content {
+  width: 85%;
+  max-width: 380px;
+  padding: 40px 30px;
+  border-radius: 24px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.4);
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  box-sizing: border-box;
+}
+
+.loader-content h3 {
+  margin: 24px 0 8px 0;
+  font-size: 20px;
+  font-weight: 800;
+  background: linear-gradient(135deg, var(--color-primary) 0%, var(--color-accent) 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.loader-content p {
+  margin: 0;
+  font-size: 13px;
+  color: var(--color-text-muted);
+  line-height: 1.5;
+}
+
+.loader-status {
+  margin-top: 16px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--color-primary);
+  text-transform: uppercase;
+  letter-spacing: 1.5px;
+}
+
+/* Spinner Animation */
+.spinner {
+  position: relative;
+  width: 72px;
+  height: 72px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.spinner-ring {
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  border: 3px solid rgba(9, 176, 183, 0.1);
+  border-top-color: var(--color-primary);
+  border-bottom-color: var(--color-accent);
+  animation: spin 1.2s cubic-bezier(0.5, 0, 0.5, 1) infinite;
+}
+
+.sparkle {
+  position: absolute;
+  font-size: 26px;
+  animation: pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+@keyframes pulse {
+  0%, 100% { transform: scale(1); opacity: 0.8; }
+  50% { transform: scale(1.25); opacity: 1; filter: drop-shadow(0 0 8px var(--color-primary)); }
+}
+
+/* Error Banner */
+.error-banner {
+  position: absolute;
+  top: 24px;
+  left: 5%;
+  width: 90%;
+  max-width: 400px;
+  background: rgba(239, 68, 68, 0.9);
+  backdrop-filter: blur(8px);
+  border: 1px solid rgba(239, 68, 68, 0.2);
+  border-radius: 12px;
+  padding: 12px 16px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  z-index: 300;
+  box-shadow: 0 10px 30px rgba(239, 68, 68, 0.3);
+  box-sizing: border-box;
+  animation: slideDown 0.3s ease-out;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.btn-error-close {
+  background: rgba(255, 255, 255, 0.2);
+  border: none;
+  color: #fff;
+  padding: 4px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 700;
+  transition: background 0.2s ease;
+}
+
+.btn-error-close:hover {
+  background: rgba(255, 255, 255, 0.35);
+}
+
+@keyframes slideDown {
+  from { transform: translateY(-20px); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+
+/* Mobile optimizations */
+@media (max-height: 500px) {
+  .video-wrapper {
+    height: 50%;
+  }
+  .controls-overlay {
+    bottom: 16px;
+  }
+}

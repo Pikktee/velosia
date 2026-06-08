@@ -1,4 +1,4 @@
-const BACKEND_URL = "http://localhost:8000";
+let backendUrl = "https://api.vintamie.henrikheil.net"; // Default to production
 
 document.addEventListener("DOMContentLoaded", async () => {
   const statusBadge = document.getElementById("status");
@@ -8,32 +8,82 @@ document.addEventListener("DOMContentLoaded", async () => {
   const logoutBtn = document.getElementById("logout-btn");
   const userEmailSpan = document.getElementById("user-email");
   const errorMsgDiv = document.getElementById("error-message");
+  const envSelect = document.getElementById("env-select");
+  const dashboardBtn = document.getElementById("btn-open-dashboard");
 
-  // Check storage for existing token
-  chrome.storage.local.get(["vintamie_token", "vintamie_user_email"], async (result) => {
+  // Load backend URL and check storage for existing token
+  chrome.storage.local.get(["vintamie_token", "vintamie_user_email", "vintamie_backend_url"], async (result) => {
+    // Determine initially selected backend URL
+    if (result.vintamie_backend_url) {
+      backendUrl = result.vintamie_backend_url;
+      envSelect.value = backendUrl.includes("localhost") ? "local" : "production";
+    } else {
+      backendUrl = "https://api.vintamie.henrikheil.net";
+      envSelect.value = "production";
+      chrome.storage.local.set({ "vintamie_backend_url": backendUrl });
+    }
+
+    updateDashboardLink();
+
     const token = result.vintamie_token;
     if (token) {
-      // Validate token with backend
-      try {
-        const response = await fetch(`${BACKEND_URL}/api/auth/me`, {
-          headers: { "Authorization": `Bearer ${token}` }
-        });
-        if (response.ok) {
-          const user = await response.json();
-          showConnected(user.email);
-        } else {
-          showLogin();
-        }
-      } catch (err) {
-        // Server offline, but keep token
-        showConnected(result.vintamie_user_email || "Lokal angemeldet");
-        statusBadge.textContent = "Offline (Backend)";
-        statusBadge.className = "status-badge disconnected";
-      }
+      validateToken(token, result.vintamie_user_email);
     } else {
       showLogin();
     }
   });
+
+  // Handle environment change
+  envSelect.addEventListener("change", () => {
+    const selected = envSelect.value;
+    backendUrl = selected === "local" ? "http://localhost:8000" : "https://api.vintamie.henrikheil.net";
+    
+    updateDashboardLink();
+
+    chrome.storage.local.set({ "vintamie_backend_url": backendUrl }, () => {
+      // Re-validate token under new environment
+      chrome.storage.local.get(["vintamie_token", "vintamie_user_email"], (result) => {
+        const token = result.vintamie_token;
+        if (token) {
+          validateToken(token, result.vintamie_user_email);
+        } else {
+          showLogin();
+        }
+      });
+    });
+  });
+
+  // Update dashboard link dynamically
+  function updateDashboardLink() {
+    if (dashboardBtn) {
+      dashboardBtn.href = backendUrl.includes("localhost") ? "http://localhost:5173" : "https://vintamie.henrikheil.net";
+    }
+  }
+
+  // Validate token with selected backend
+  async function validateToken(token, savedEmail) {
+    try {
+      statusBadge.textContent = "Verbinde...";
+      statusBadge.className = "status-badge disconnected";
+
+      const response = await fetch(`${backendUrl}/api/auth/me`, {
+        headers: { "Authorization": `Bearer ${token}` }
+      });
+      
+      if (response.ok) {
+        const user = await response.json();
+        showConnected(user.email);
+      } else {
+        // Token expired or invalid on this backend
+        showLogin();
+      }
+    } catch (err) {
+      // Server offline/unreachable
+      showConnected(savedEmail || "Lokal angemeldet");
+      statusBadge.textContent = "Offline (Backend)";
+      statusBadge.className = "status-badge disconnected";
+    }
+  }
 
   // Handle Login Submit
   loginForm.addEventListener("submit", async (e) => {
@@ -44,7 +94,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     errorMsgDiv.style.display = "none";
 
     try {
-      const response = await fetch(`${BACKEND_URL}/api/auth/login`, {
+      const response = await fetch(`${backendUrl}/api/auth/login`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email, password })

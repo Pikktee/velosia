@@ -31,14 +31,18 @@ window.addEventListener('message', (event) => {
   const { token, email } = event.data;
 
   // Read current saved session first to avoid redundant writing
-  chrome.storage.local.get(['vintamie_token', 'vintamie_user_email'], (result) => {
+  const isProd = window.location.hostname.includes("vintamie.henrikheil.net");
+  const detectedBackendUrl = isProd ? "https://api.vintamie.henrikheil.net" : "http://localhost:8000";
+
+  chrome.storage.local.get(['vintamie_token', 'vintamie_user_email', 'vintamie_backend_url'], (result) => {
     if (token) {
-      if (result.vintamie_token !== token || result.vintamie_user_email !== email) {
+      if (result.vintamie_token !== token || result.vintamie_user_email !== email || result.vintamie_backend_url !== detectedBackendUrl) {
         chrome.storage.local.set({ 
           vintamie_token: token, 
-          vintamie_user_email: email || 'Google-Nutzer'
+          vintamie_user_email: email || 'Google-Nutzer',
+          vintamie_backend_url: detectedBackendUrl
         }, () => {
-          console.log("Vintamie: Sitzung erfolgreich mit Erweiterung synchronisiert!");
+          console.log(`Vintamie: Sitzung und Backend-URL (${detectedBackendUrl}) erfolgreich mit Erweiterung synchronisiert!`);
         });
       }
     } else {

@@ -4,6 +4,54 @@ console.log("Vintamie Content Script geladen!");
 // State
 let drafts = [];
 let isOverlayOpen = false;
+let backendUrl = "https://api.vintamie.henrikheil.net"; // Default to production
+
+function openCameraOverlay() {
+  if (document.getElementById("vintamie-camera-iframe")) return;
+
+  const iframe = document.createElement("iframe");
+  iframe.id = "vintamie-camera-iframe";
+  iframe.src = chrome.runtime.getURL("camera.html");
+  iframe.setAttribute("allow", "camera");
+  
+  Object.assign(iframe.style, {
+    position: "fixed",
+    top: "0",
+    left: "0",
+    width: "100vw",
+    height: "100vh",
+    border: "none",
+    zIndex: "9999999",
+    backgroundColor: "transparent"
+  });
+
+  document.body.appendChild(iframe);
+}
+
+function closeCameraOverlay() {
+  const iframe = document.getElementById("vintamie-camera-iframe");
+  if (iframe) iframe.remove();
+}
+
+// Window message receiver
+window.addEventListener("message", (event) => {
+  if (!event.data) return;
+
+  if (event.data.type === "VINTAMIE_DRAFT_CREATED") {
+    closeCameraOverlay();
+    closeOverlay();
+    chrome.storage.local.get("vintamie_backend_url", (data) => {
+      if (data.vintamie_backend_url) {
+        backendUrl = data.vintamie_backend_url;
+      }
+      if (event.data.draft) {
+        autofillForm(event.data.draft);
+      }
+    });
+  } else if (event.data.type === "VINTAMIE_CLOSE_CAMERA") {
+    closeCameraOverlay();
+  }
+});
 
 // Initialize
 function init() {
@@ -101,6 +149,9 @@ async function openOverlay() {
       <span style="font-size:18px; font-weight:bold; background:linear-gradient(135deg, #09b0b7 0%, #ec4899 100%); -webkit-background-clip:text; -webkit-text-fill-color:transparent;">✨ Vintamie Entwürfe</span>
       <button id="vintamie-close" style="background:transparent; border:none; color:#94a3b8; cursor:pointer; font-size:18px;">&times;</button>
     </div>
+    <button id="vintamie-btn-camera" style="width:100%; padding:12px; background:linear-gradient(135deg, #09b0b7 0%, #ec4899 100%); border:none; border-radius:8px; color:#000000; font-weight:bold; font-size:13px; font-family:'Outfit', 'Inter', sans-serif; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:8px; margin-bottom:16px; box-shadow:0 4px 12px rgba(9, 176, 183, 0.2); transition:all 0.2s ease;">
+      📸 Neues Foto aufnehmen
+    </button>
     <div id="vintamie-list-container" style="flex-grow:1; overflow-y:auto; display:flex; flexDirection:column; gap:12px; padding-bottom:20px;">
       <p style="color:#94a3b8; font-size:13px;">Lade Entwürfe...</p>
     </div>
@@ -112,9 +163,23 @@ async function openOverlay() {
   // Close event listener
   document.getElementById("vintamie-close").addEventListener("click", closeOverlay);
 
+  // Camera event listener
+  const camBtn = document.getElementById("vintamie-btn-camera");
+  camBtn.addEventListener("click", openCameraOverlay);
+  camBtn.addEventListener("mouseenter", () => {
+    camBtn.style.transform = "scale(1.02)";
+  });
+  camBtn.addEventListener("mouseleave", () => {
+    camBtn.style.transform = "scale(1)";
+  });
+
   // Fetch drafts from backend using token from extension storage
-  chrome.storage.local.get("vintamie_token", async (data) => {
+  chrome.storage.local.get(["vintamie_token", "vintamie_backend_url"], async (data) => {
     const token = data.vintamie_token;
+    if (data.vintamie_backend_url) {
+      backendUrl = data.vintamie_backend_url;
+    }
+    
     if (!token) {
       document.getElementById("vintamie-list-container").innerHTML = `
         <div style="color:#f59e0b; font-size:13px; background:rgba(245,158,11,0.1); padding:10px; border-radius:6px; border:1px solid rgba(245,158,11,0.2); line-height: 1.4;">
@@ -128,7 +193,7 @@ async function openOverlay() {
       // Fetch user profile settings
       let userSettings = null;
       try {
-        const userRes = await fetch("http://localhost:8000/api/auth/me", {
+        const userRes = await fetch(`${backendUrl}/api/auth/me`, {
           headers: {
             "Authorization": `Bearer ${token}`
           }
@@ -141,7 +206,7 @@ async function openOverlay() {
       }
       window.vintamieUserSettings = userSettings;
 
-      const response = await fetch("http://localhost:8000/api/drafts", {
+      const response = await fetch(`${backendUrl}/api/drafts`, {
         headers: {
           "Authorization": `Bearer ${token}`
         }
@@ -193,7 +258,7 @@ function renderDraftsList() {
       card.style.borderColor = "rgba(255,255,255,0.08)";
     });
 
-    const imageUrl = draft.image_path.startsWith("http") ? draft.image_path : `http://localhost:8000${draft.image_path}`;
+    const imageUrl = draft.image_path.startsWith("http") ? draft.image_path : `${backendUrl}${draft.image_path}`;
 
     card.innerHTML = `
       <img src="${imageUrl}" style="width:50px; height:50px; object-fit:cover; border-radius:4px; background:#000;" />
@@ -310,7 +375,7 @@ async function fillVinted(draft) {
 // Universal programmatical Image Upload function
 async function uploadImage(imagePath) {
   try {
-    const imageUrl = imagePath.startsWith("http") ? imagePath : `http://localhost:8000${imagePath}`;
+    const imageUrl = imagePath.startsWith("http") ? imagePath : `${backendUrl}${imagePath}`;
     
     // Fetch image as blob
     const response = await fetch(imageUrl);

@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Vintamie Assistant",
-  "version": "2.2.16",
+  "version": "2.2.17",
   "description": "F\u00fclle deine Vinted und Kleinanzeigen Inserate automatisch aus dem Vintamie-Dashboard aus.",
   "permissions": [
     "activeTab",
@@ -42,6 +42,20 @@
         "content_sync.js"
       ],
       "run_at": "document_end"
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": [
+        "camera.html",
+        "camera.js",
+        "camera.css"
+      ],
+      "matches": [
+        "https://*.vinted.de/*",
+        "https://*.vinted.fr/*",
+        "https://*.kleinanzeigen.de/*"
+      ]
     }
   ]
 }
