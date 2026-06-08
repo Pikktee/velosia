@@ -24,7 +24,7 @@ def analyze_item_image(image_path: str) -> dict:
     try:
         # Load image
         img = Image.open(image_path)
-        model = genai.GenerativeModel("gemini-1.5-flash")
+        model = genai.GenerativeModel("gemini-2.5-flash")
 
         # --- STEP 1: Identify search keywords ---
         identify_prompt = (
