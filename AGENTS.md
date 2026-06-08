@@ -92,4 +92,7 @@ To release a new version, update version numbers in all configuration files, pus
 ## Agent Integration & Auto-Deployment
 
 > [!IMPORTANT]
+> **Aktueller Fokus:** Bis auf Weiteres soll ausschließlich die **Android-App** (`/android`) weiterentwickelt werden.
+
+> [!IMPORTANT]
 > Nach jedem erfolgreichen Ergebnis im Chat (z. B. dem Abschluss einer Feature-Implementierung oder Fehlerbehebung) muss der KI-Agent automatisch ein Git-Push und Deployment durch Ausführen des Skripts `./deploy.py` initiieren.
