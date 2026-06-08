@@ -11,7 +11,7 @@ import { getDrafts, deleteDraft, isAuthenticated, setAuthToken, getMe } from './
 export default function App() {
   const [token, setToken] = useState(null);
   const [user, setUser] = useState(null);
-  const [view, setView] = useState('capture'); // 'capture', 'list', 'detail', 'analyzing'
+  const [view, setView] = useState('list'); // 'capture', 'list', 'detail', 'analyzing'
   const [drafts, setDrafts] = useState([]);
   const [selectedDraft, setSelectedDraft] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -84,7 +84,7 @@ export default function App() {
     setToken(newToken);
     fetchCurrentUser();
     fetchDrafts();
-    setView('capture');
+    setView('list');
   };
 
   const handleLogout = () => {
@@ -94,7 +94,7 @@ export default function App() {
     setDrafts([]);
     setSelectedDraft(null);
     localStorage.removeItem('vintamie_user_email');
-    setView('capture');
+    setView('list');
   };
 
   const handleDeleteDraft = async (id) => {

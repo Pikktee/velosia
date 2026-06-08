@@ -1,5 +1,5 @@
 import React from 'react';
-import { Tag, Sparkles, Trash2, Calendar, ShoppingBag } from 'lucide-react';
+import { Tag, Sparkles, Trash2, Calendar, ShoppingBag, Camera, FolderHeart } from 'lucide-react';
 import { getImageUrl } from '../utils/api';
 
 export default function DraftList({ drafts, onSelectDraft, onDeleteDraft }) {
@@ -16,14 +16,71 @@ export default function DraftList({ drafts, onSelectDraft, onDeleteDraft }) {
 
   if (drafts.length === 0) {
     return (
-      <div className="fade-in glass-panel" style={{ padding: '4rem 2rem', textAlign: 'center' }}>
-        <div style={{ background: 'rgba(255, 255, 255, 0.02)', width: '64px', height: '64px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 1.5rem', border: '1px solid var(--glass-border)' }}>
-          <ShoppingBag size={28} style={{ color: 'var(--text-muted)' }} />
+      <div className="fade-in glass-panel onboarding-container">
+        <div className="onboarding-welcome-badge">
+          <Sparkles size={14} />
+          <span>Willkommen bei Vintamie</span>
         </div>
-        <h3 style={{ fontSize: '1.25rem', marginBottom: '0.5rem' }}>Keine Entwürfe vorhanden</h3>
-        <p style={{ color: 'var(--text-secondary)', fontSize: '0.95rem', maxWidth: '320px', margin: '0 auto' }}>
-          Fotografiere ein Kleidungsstück oder einen Gegenstand, um deinen ersten Entwurf zu erstellen.
+        
+        <h2 className="onboarding-title">Verwandle Kleidung in bares Geld</h2>
+        <p className="onboarding-subtitle">
+          Vintamie automatisiert das Erstellen deiner Anzeigen mit künstlicher Intelligenz. In nur drei einfachen Schritten zum fertigen Inserat:
         </p>
+
+        <div className="onboarding-grid">
+          <div className="onboarding-card">
+            <div className="onboarding-icon-wrapper">
+              <Camera size={24} />
+            </div>
+            <h3 className="onboarding-card-title">1. Foto knipsen</h3>
+            <p className="onboarding-card-desc">
+              Fotografiere deinen Artikel direkt mit der App oder lade ein Bild aus deiner Galerie.
+            </p>
+          </div>
+
+          <div className="onboarding-card">
+            <div className="onboarding-icon-wrapper">
+              <Sparkles size={24} />
+            </div>
+            <h3 className="onboarding-card-title">2. Vision AI Analyse</h3>
+            <p className="onboarding-card-desc">
+              Unsere KI erkennt Marke, Zustand, Farbe und schlägt den besten Verkaufspreis vor.
+            </p>
+          </div>
+
+          <div className="onboarding-card">
+            <div className="onboarding-icon-wrapper">
+              <FolderHeart size={24} />
+            </div>
+            <h3 className="onboarding-card-title">3. Blitzschnell online</h3>
+            <p className="onboarding-card-desc">
+              Exportiere deinen fertigen Entwurf direkt zu Vinted oder Kleinanzeigen.
+            </p>
+          </div>
+        </div>
+
+        <div className="onboarding-footer">
+          <p className="onboarding-cta-text">
+            Tippe unten auf das Kamerasymbol, um deinen ersten Entwurf zu erstellen!
+          </p>
+          
+          <div className="onboarding-arrow-container">
+            <svg className="onboarding-arrow-svg" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path
+                d="M 50,5 C 80,10 80,55 50,85"
+                stroke="var(--primary)"
+                strokeWidth="3.5"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                className="onboarding-arrow-path"
+              />
+              <polygon
+                points="50,85 43,74 57,74"
+                fill="var(--primary)"
+              />
+            </svg>
+          </div>
+        </div>
       </div>
     );
   }
