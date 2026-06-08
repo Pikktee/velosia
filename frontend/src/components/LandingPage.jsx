@@ -1,8 +1,9 @@
-import React from 'react';
-import { Download, Sparkles, Camera, FolderHeart, ArrowRight, Globe } from 'lucide-react';
+import React, { useState } from 'react';
+import { Download, Sparkles, Camera, FolderHeart, ArrowRight, Globe, X } from 'lucide-react';
 import { API_BASE_URL } from '../utils/api';
 
 export default function LandingPage() {
+  const [activeDoc, setActiveDoc] = useState(null); // 'impressum', 'datenschutz', or null
   const apkDownloadUrl = `${API_BASE_URL}/api/app/latest-apk`;
 
   const handleOpenWebApp = () => {
@@ -19,7 +20,8 @@ export default function LandingPage() {
       padding: '1rem 0.5rem',
       maxWidth: '600px',
       margin: '0 auto',
-      textAlign: 'center'
+      textAlign: 'center',
+      position: 'relative'
     }}>
       {/* Glow background positioned absolutely behind everything */}
       <div style={{
@@ -246,6 +248,210 @@ export default function LandingPage() {
           </div>
         </div>
       </div>
+
+      {/* Footer Legal Links */}
+      <footer style={{
+        marginTop: '5rem',
+        paddingTop: '1.5rem',
+        borderTop: '1px solid var(--glass-border)',
+        width: '100%',
+        display: 'flex',
+        justifyContent: 'center',
+        alignItems: 'center',
+        gap: '1.25rem',
+        fontSize: '0.8rem',
+        color: 'var(--text-muted)'
+      }}>
+        <button 
+          onClick={() => setActiveDoc('impressum')}
+          style={{ background: 'transparent', border: 'none', color: 'inherit', cursor: 'pointer', textDecoration: 'underline', outline: 'none', padding: '0.25rem' }}
+        >
+          Impressum
+        </button>
+        <span style={{ opacity: 0.3 }}>&bull;</span>
+        <button 
+          onClick={() => setActiveDoc('datenschutz')}
+          style={{ background: 'transparent', border: 'none', color: 'inherit', cursor: 'pointer', textDecoration: 'underline', outline: 'none', padding: '0.25rem' }}
+        >
+          Datenschutz
+        </button>
+        <span style={{ opacity: 0.3 }}>&bull;</span>
+        <span>&copy; {new Date().getFullYear()} Vintamie</span>
+      </footer>
+
+      {/* Legal Overlay Modal */}
+      {activeDoc && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          width: '100vw',
+          height: '100vh',
+          background: 'rgba(7, 9, 13, 0.85)',
+          backdropFilter: 'blur(20px)',
+          WebkitBackdropFilter: 'blur(20px)',
+          zIndex: 1000,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          padding: '1rem',
+          boxSizing: 'border-box'
+        }}>
+          <div className="glass-panel" style={{
+            width: '100%',
+            maxWidth: '550px',
+            maxHeight: '85vh',
+            display: 'flex',
+            flexDirection: 'column',
+            borderRadius: 'var(--radius-lg)',
+            overflow: 'hidden',
+            boxShadow: '0 20px 50px rgba(0, 0, 0, 0.6), 0 0 30px rgba(9, 176, 183, 0.1)'
+          }}>
+            {/* Modal Header */}
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              padding: '1.25rem 1.5rem',
+              borderBottom: '1px solid var(--glass-border)'
+            }}>
+              <h2 style={{
+                fontSize: '1.2rem',
+                fontFamily: 'var(--font-title)',
+                fontWeight: '800',
+                margin: 0,
+                color: 'var(--text-primary)'
+              }}>
+                {activeDoc === 'impressum' ? 'Impressum' : 'Datenschutzerklärung'}
+              </h2>
+              <button 
+                onClick={() => setActiveDoc(null)}
+                style={{
+                  background: 'transparent',
+                  border: 'none',
+                  color: 'var(--text-secondary)',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  padding: '0.25rem',
+                  borderRadius: '50%',
+                  transition: 'background 0.2s ease, color 0.2s'
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.background = 'rgba(255, 255, 255, 0.05)';
+                  e.currentTarget.style.color = '#fff';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.background = 'transparent';
+                  e.currentTarget.style.color = 'var(--text-secondary)';
+                }}
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            {/* Modal Content */}
+            <div style={{
+              padding: '1.5rem',
+              overflowY: 'auto',
+              textAlign: 'left',
+              fontSize: '0.875rem',
+              lineHeight: '1.6',
+              color: 'var(--text-secondary)'
+            }}>
+              {activeDoc === 'impressum' ? (
+                <div>
+                  <h3 style={{ fontSize: '1rem', color: '#fff', marginBottom: '0.5rem', fontFamily: 'var(--font-title)' }}>
+                    Angaben gemäß § 5 TMG
+                  </h3>
+                  <p style={{ marginBottom: '1.5rem' }}>
+                    Henrik Heil<br />
+                    Darmstadt, Deutschland<br />
+                    E-Mail: mail@henrikheil.net
+                  </p>
+
+                  <h3 style={{ fontSize: '1rem', color: '#fff', marginBottom: '0.5rem', fontFamily: 'var(--font-title)' }}>
+                    Haftung für Inhalte
+                  </h3>
+                  <p style={{ marginBottom: '1.5rem' }}>
+                    Als Diensteanbieter sind wir gemäß § 7 Abs.1 TMG für eigene Inhalte auf diesen Seiten nach den allgemeinen Gesetzen verantwortlich. Nach §§ 8 bis 10 TMG sind wir als Diensteanbieter jedoch nicht verpflichtet, übermittelte oder gespeicherte fremde Informationen zu überwachen oder nach Umständen zu forschen, die auf eine rechtswidrige Tätigkeit hinweisen.
+                  </p>
+
+                  <h3 style={{ fontSize: '1rem', color: '#fff', marginBottom: '0.5rem', fontFamily: 'var(--font-title)' }}>
+                    Haftung für Links
+                  </h3>
+                  <p style={{ marginBottom: '1.5rem' }}>
+                    Unser Angebot enthält Links zu externen Websites Dritter, auf deren Inhalte wir keinen Einfluss haben. Deshalb können wir für diese fremden Inhalte auch keine Gewähr übernehmen. Für die Inhalte der verlinkten Seiten ist stets der jeweilige Anbieter oder Betreiber der Seiten verantwortlich.
+                  </p>
+
+                  <h3 style={{ fontSize: '1rem', color: '#fff', marginBottom: '0.5rem', fontFamily: 'var(--font-title)' }}>
+                    Urheberrecht
+                  </h3>
+                  <p>
+                    Die durch die Seitenbetreiber erstellten Inhalte und Werke auf diesen Seiten unterliegen dem deutschen Urheberrecht. Die Vervielfältigung, Bearbeitung, Verbreitung und jede Art der Verwertung außerhalb der Grenzen des Urheberrechtes bedürfen der schriftlichen Zustimmung des jeweiligen Autors bzw. Erstellers.
+                  </p>
+                </div>
+              ) : (
+                <div>
+                  <h3 style={{ fontSize: '1rem', color: '#fff', marginBottom: '0.5rem', fontFamily: 'var(--font-title)' }}>
+                    1. Datenschutz auf einen Blick
+                  </h3>
+                  <p style={{ marginBottom: '1.5rem' }}>
+                    Der Schutz deiner persönlichen Daten hat für uns höchste Priorität. Diese Datenschutzerklärung informiert dich darüber, welche Daten wir erfassen und wie wir sie verwenden.
+                  </p>
+
+                  <h3 style={{ fontSize: '1rem', color: '#fff', marginBottom: '0.5rem', fontFamily: 'var(--font-title)' }}>
+                    2. Datenerfassung auf dieser Website
+                  </h3>
+                  <p style={{ marginBottom: '1.25rem' }}>
+                    <strong>Registrierungsdaten:</strong> Für die Nutzung unserer Entwurfs-Automatisierung erheben wir deine E-Mail-Adresse und ein verschlüsseltes Passwort. Diese Daten dienen ausschließlich zur Authentifizierung und Zuordnung deiner Entwürfe.
+                  </p>
+                  <p style={{ marginBottom: '1.5rem' }}>
+                    <strong>Bilder und Entwürfe:</strong> Wenn du Fotos deiner Kleidung hochlädst, werden diese temporär zur Analyse an den Google Gemini API Dienst übertragen. Es werden keine Metadaten oder Standortdaten deiner Bilder dauerhaft gespeichert oder für Werbezwecke verwendet.
+                  </p>
+
+                  <h3 style={{ fontSize: '1rem', color: '#fff', marginBottom: '0.5rem', fontFamily: 'var(--font-title)' }}>
+                    3. Weitergabe an Dritte
+                  </h3>
+                  <p style={{ marginBottom: '1.5rem' }}>
+                    Deine Daten werden nicht an unbefugte Dritte weitergegeben. Zur Bildanalyse nutzen wir die Google Gemini API. Es werden hierbei ausschließlich die Bildinhalte übermittelt.
+                  </p>
+
+                  <h3 style={{ fontSize: '1rem', color: '#fff', marginBottom: '0.5rem', fontFamily: 'var(--font-title)' }}>
+                    4. Deine Rechte
+                  </h3>
+                  <p>
+                    Du hast jederzeit das Recht auf unentgeltliche Auskunft über Herkunft, Empfänger und Zweck deiner gespeicherten personenbezogenen Daten. Du hast außerdem ein Recht auf Berichtigung, Sperrung oder Löschung dieser Daten. Du kannst dein Konto und alle damit verbundenen Entwürfe und Bilder jederzeit direkt in deinen Profileinstellungen löschen.
+                  </p>
+                </div>
+              )}
+            </div>
+
+            {/* Modal Footer */}
+            <div style={{
+              display: 'flex',
+              justifyContent: 'flex-end',
+              padding: '1rem 1.5rem',
+              borderTop: '1px solid var(--glass-border)',
+              background: 'rgba(255, 255, 255, 0.01)'
+            }}>
+              <button 
+                onClick={() => setActiveDoc(null)}
+                className="btn btn-secondary"
+                style={{
+                  minHeight: '36px',
+                  height: '36px',
+                  padding: '0 1.25rem',
+                  fontSize: '0.85rem'
+                }}
+              >
+                Schließen
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
