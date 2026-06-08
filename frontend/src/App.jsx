@@ -270,7 +270,7 @@ export default function App() {
           className={`container ${view === 'list' && drafts.length === 0 ? 'empty-state-container' : ''}`}
           style={{ 
             paddingTop: '1rem', 
-            paddingBottom: view === 'list' && drafts.length === 0 ? 'calc(85px + env(safe-area-inset-bottom, 0px))' : 'calc(80px + env(safe-area-inset-bottom, 0px))' 
+            paddingBottom: view === 'list' && drafts.length === 0 ? 'calc(75px + env(safe-area-inset-bottom, 0px))' : 'calc(80px + env(safe-area-inset-bottom, 0px))' 
           }}
         >
           {view === 'capture' && (

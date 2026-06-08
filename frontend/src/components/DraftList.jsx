@@ -76,10 +76,10 @@ export default function DraftList({ drafts, onSelectDraft, onDeleteDraft }) {
           </p>
           
           <div className="onboarding-arrow-container">
-            <svg className="onboarding-arrow-svg" viewBox="0 0 24 80" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <svg className="onboarding-arrow-svg" viewBox="0 0 24 40" fill="none" xmlns="http://www.w3.org/2000/svg">
               {/* Solid background shaft line */}
               <path
-                d="M12,2 L12,78"
+                d="M12,2 L12,38"
                 stroke="var(--primary)"
                 strokeWidth="3"
                 opacity="0.3"
@@ -87,7 +87,7 @@ export default function DraftList({ drafts, onSelectDraft, onDeleteDraft }) {
               />
               {/* Animated dashed overlay shaft line */}
               <path
-                d="M12,2 L12,78"
+                d="M12,2 L12,38"
                 stroke="var(--primary)"
                 strokeWidth="3"
                 strokeLinecap="round"
@@ -95,7 +95,7 @@ export default function DraftList({ drafts, onSelectDraft, onDeleteDraft }) {
               />
               {/* Arrowhead */}
               <path
-                d="M5,71 L12,78 L19,71"
+                d="M5,31 L12,38 L19,31"
                 stroke="var(--primary)"
                 strokeWidth="3"
                 strokeLinecap="round"

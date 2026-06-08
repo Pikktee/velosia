@@ -1325,7 +1325,7 @@ select.form-control {
 }
 
 .onboarding-arrow-container {
-  height: 90px;
+  height: 45px;
   position: relative;
   display: flex;
   justify-content: center;
@@ -1336,7 +1336,7 @@ select.form-control {
 
 .onboarding-arrow-svg {
   width: 24px;
-  height: 80px;
+  height: 40px;
   animation: arrowBounce 2s ease-in-out infinite;
   filter: drop-shadow(0 0 8px rgba(9, 176, 183, 0.5));
   margin-left: 3px;
