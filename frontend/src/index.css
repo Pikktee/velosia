@@ -867,7 +867,7 @@ select.form-control {
     gap: 0.75rem;
   }
 
-  .draft-card {
+  .draft-card, .draft-item-card {
     flex-direction: row;
     min-height: 80px;
     height: 80px;
@@ -1468,4 +1468,127 @@ select.form-control {
     display: none;
   }
 }
+
+/* --- Vintamie Unboxed Premium UI --- */
+
+/* Auth Container */
+.auth-container {
+  width: 100%;
+  max-width: 400px;
+  padding: 1rem 0.5rem;
+  box-sizing: border-box;
+}
+
+/* Profile / Settings Container */
+.profile-container {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 0.5rem 0.25rem;
+}
+
+/* Profile Account Info Header */
+.profile-header-info {
+  display: flex;
+  gap: 1.25rem;
+  align-items: center;
+  margin-bottom: 2rem;
+  background: linear-gradient(135deg, rgba(9, 176, 183, 0.06) 0%, rgba(236, 72, 153, 0.02) 100%);
+  padding: 1.25rem 1.5rem;
+  border-radius: var(--radius-md);
+  border: 1px solid rgba(255, 255, 255, 0.03);
+}
+
+.profile-avatar-wrapper {
+  background: rgba(9, 176, 183, 0.12);
+  border: 1px solid rgba(9, 176, 183, 0.2);
+  color: var(--primary);
+  padding: 0.8rem;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  box-shadow: 0 0 15px rgba(9, 176, 183, 0.15);
+}
+
+/* Danger Alert Box */
+.danger-alert-box {
+  background: rgba(239, 68, 68, 0.05);
+  border: 1px solid rgba(239, 68, 68, 0.15);
+  border-radius: var(--radius-md);
+  padding: 1rem;
+  margin-top: 0.5rem;
+}
+
+/* E-Commerce Listing Card (Borderless) */
+.draft-item-card {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  cursor: pointer;
+  height: 100%;
+  min-height: 380px;
+  background: transparent;
+  border: none;
+  transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.draft-item-card:hover {
+  transform: translateY(-4px);
+}
+
+.draft-item-card .draft-card-thumbnail {
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+  transition: border-color 0.3s ease, box-shadow 0.3s ease;
+}
+
+.draft-item-card:hover .draft-card-thumbnail {
+  border-color: rgba(9, 176, 183, 0.35);
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.45), 0 0 15px var(--primary-glow);
+}
+
+.draft-item-card .draft-card-content {
+  padding: 0.75rem 0.25rem 0.25rem 0.25rem;
+}
+
+/* Edit Draft Detail - Unboxed Sections */
+.detail-section-wrapper {
+  padding: 1.5rem;
+  background: rgba(25, 30, 42, 0.25);
+  border: 1px solid rgba(255, 255, 255, 0.03);
+  border-radius: var(--radius-md);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  margin-bottom: 0;
+  box-sizing: border-box;
+}
+
+.image-section-wrapper {
+  background: rgba(0, 0, 0, 0.15);
+  border: 1px solid rgba(255, 255, 255, 0.02);
+}
+
+.price-comparison-link {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.65rem 0.85rem;
+  text-decoration: none;
+  color: var(--text-primary);
+  font-size: 0.825rem;
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid rgba(255, 255, 255, 0.04);
+  border-radius: var(--radius-sm);
+  transition: all 0.2s ease;
+}
+
+.price-comparison-link:hover {
+  border-color: rgba(9, 176, 183, 0.25);
+  background: rgba(9, 176, 183, 0.03);
+  transform: translateX(2px);
+}
+
 

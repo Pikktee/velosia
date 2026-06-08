@@ -110,7 +110,7 @@ export default function DraftList({ drafts, onSelectDraft, onDeleteDraft }) {
         {drafts.map((draft) => (
           <div 
             key={draft.id} 
-            className="glass-panel glass-card draft-card"
+            className="draft-item-card"
             onClick={() => onSelectDraft(draft)}
           >
             {/* Image Thumbnail */}

@@ -132,34 +132,23 @@ export default function Settings({ user, onLogout, onUpdateUser }) {
           padding-bottom: 0.5rem;
         }
       `}</style>
-
-      <div className="glass-panel" style={{ padding: '2rem', marginBottom: '2rem' }}>
-        <h2 style={{ fontSize: '1.75rem', marginBottom: '1.5rem', fontFamily: 'var(--font-title)', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+      <div className="profile-container">
+        <h2 style={{ fontSize: '1.8rem', marginBottom: '1.5rem', fontFamily: 'var(--font-title)', fontWeight: '800', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
           Profil
         </h2>
-
-        {/* User Account Info Card */}
-        <div className="glass-card" style={{ padding: '1.25rem', marginBottom: '1.5rem', display: 'flex', gap: '1rem', alignItems: 'center' }}>
-          <div style={{
-            background: 'rgba(9, 176, 183, 0.15)',
-            border: '1px solid var(--primary-glow)',
-            color: 'var(--primary)',
-            padding: '0.75rem',
-            borderRadius: '50%',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            flexShrink: 0
-          }}>
-            <User size={24} />
+ 
+        {/* User Account Info Header */}
+        <div className="profile-header-info">
+          <div className="profile-avatar-wrapper">
+            <User size={26} />
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.2rem', minWidth: 0 }}>
-            <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Eingeloggt als</span>
-            <span style={{ fontSize: '1.05rem', fontWeight: '600', color: 'var(--text-primary)', wordBreak: 'break-all' }}>{user.email}</span>
-            <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Methode: {loginMethod}</span>
+            <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.08em', fontWeight: 'bold' }}>Eingeloggt als</span>
+            <span style={{ fontSize: '1.15rem', fontWeight: '700', color: 'var(--text-primary)', wordBreak: 'break-all', fontFamily: 'var(--font-title)' }}>{user.email}</span>
+            <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Anmeldemethode: {loginMethod}</span>
           </div>
         </div>
-
+ 
         {/* Settings Form */}
         <form onSubmit={handleSave}>
           
@@ -357,7 +346,7 @@ export default function Settings({ user, onLogout, onUpdateUser }) {
           </button>
 
           {showConfirm ? (
-            <div className="glass-card fade-in" style={{ padding: '1rem', border: '1px solid rgba(239, 68, 68, 0.3)', background: 'rgba(239, 68, 68, 0.05)', display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+            <div className="danger-alert-box fade-in" style={{ padding: '1rem', display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
               <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', color: '#fca5a5', fontSize: '0.9rem', fontWeight: '600' }}>
                 <AlertTriangle size={18} />
                 <span>Account wirklich löschen?</span>

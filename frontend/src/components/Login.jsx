@@ -102,28 +102,23 @@ export default function Login({ onLoginSuccess }) {
   };
 
   return (
-    <div className="fade-in" style={{ display: 'flex', flexDirection: 'column', minHeight: '80vh', justifyContent: 'center', alignItems: 'center' }}>
-      <div className="glass-panel" style={{ width: '100%', maxWidth: '400px', padding: '2.5rem 2rem' }}>
+    <div className="fade-in" style={{ display: 'flex', flexDirection: 'column', minHeight: '80vh', justifyContent: 'center', alignItems: 'center', padding: '0 1rem' }}>
+      <div className="auth-container">
         
         {/* Brand Header */}
-        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.75rem', marginBottom: '2rem', textAlign: 'center' }}>
-          <img 
-            src="/favicon.svg" 
-            alt="Vintamie Logo" 
-            style={{ 
-              width: '96px', 
-              height: '96px', 
-              borderRadius: '20px',
-              border: '1px solid var(--glass-border)',
-              boxShadow: '0 8px 32px rgba(0, 0, 0, 0.4), 0 0 20px rgba(9, 176, 183, 0.15)',
-              marginBottom: '0.5rem'
-            }} 
-          />
-          <div>
-            <h2 style={{ fontSize: '1.5rem', fontFamily: 'var(--font-title)', fontWeight: '800' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.75rem', marginBottom: '2.5rem', textAlign: 'center' }}>
+          <div className="onboarding-logo-glow" style={{ margin: '0 auto' }}>
+            <img 
+              src="/favicon.svg" 
+              alt="Vintamie Logo" 
+              className="onboarding-logo-img"
+            />
+          </div>
+          <div style={{ marginTop: '0.5rem' }}>
+            <h2 style={{ fontSize: '1.8rem', fontFamily: 'var(--font-title)', fontWeight: '800', background: 'linear-gradient(135deg, var(--text-primary) 30%, var(--primary) 100%)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', letterSpacing: '-0.02em', marginBottom: '0.25rem' }}>
               Vintamie
             </h2>
-            <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
+            <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
               {isRegister ? 'Erstelle dein Verkäufer-Konto' : 'Melde dich an, um zu starten'}
             </span>
           </div>

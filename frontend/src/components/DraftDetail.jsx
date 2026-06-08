@@ -198,7 +198,7 @@ export default function DraftDetail({ draft, onBack, onUpdateSuccess }) {
 
   const renderImageBox = () => {
     return (
-      <div className="glass-panel" style={{ padding: '1rem', display: 'flex', flexDirection: 'column', gap: '1rem', alignItems: 'center', position: 'relative' }}>
+      <div className="detail-section-wrapper image-section-wrapper" style={{ display: 'flex', flexDirection: 'column', gap: '1rem', alignItems: 'center', position: 'relative' }}>
         {/* Uploading overlay */}
         {uploadingImage && (
           <div style={{
@@ -360,7 +360,7 @@ export default function DraftDetail({ draft, onBack, onUpdateSuccess }) {
 
   const renderPublishingAssist = () => {
     return (
-      <div className="glass-panel detail-panel">
+      <div className="detail-section-wrapper">
         <h3 style={{ fontSize: '1.15rem', marginBottom: '1rem', fontFamily: 'var(--font-title)', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
           Veröffentlichen Assistent
         </h3>
@@ -476,7 +476,7 @@ export default function DraftDetail({ draft, onBack, onUpdateSuccess }) {
     } catch (e) {
       console.error(e);
       return (
-        <div className="glass-panel detail-panel">
+        <div className="detail-section-wrapper">
           <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>Vergleichsdaten beschädigt.</p>
         </div>
       );
@@ -484,7 +484,7 @@ export default function DraftDetail({ draft, onBack, onUpdateSuccess }) {
 
     if (!parsedSources || parsedSources.length === 0) {
       return (
-        <div className="glass-panel detail-panel">
+        <div className="detail-section-wrapper">
           <h3 style={{ fontSize: '1.15rem', marginBottom: '0.5rem', fontFamily: 'var(--font-title)' }}>
             Marktpreis-Vergleich
           </h3>
@@ -509,7 +509,7 @@ export default function DraftDetail({ draft, onBack, onUpdateSuccess }) {
     }
 
     return (
-      <div className="glass-panel detail-panel">
+      <div className="detail-section-wrapper">
         <h3 style={{ fontSize: '1.15rem', marginBottom: '1rem', fontFamily: 'var(--font-title)', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
           Marktpreis-Vergleich
         </h3>
@@ -538,7 +538,7 @@ export default function DraftDetail({ draft, onBack, onUpdateSuccess }) {
               href={src.url}
               target="_blank"
               rel="noopener noreferrer"
-              className="glass-card"
+              className="price-comparison-link"
               style={{
                 display: 'flex',
                 justifyContent: 'space-between',
@@ -574,7 +574,7 @@ export default function DraftDetail({ draft, onBack, onUpdateSuccess }) {
 
   const renderFormFields = () => {
     return (
-      <div className="glass-panel detail-panel" style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+      <div className="detail-section-wrapper" style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
         
         {/* Title */}
         <div className="form-group" style={{ marginBottom: 0 }}>
