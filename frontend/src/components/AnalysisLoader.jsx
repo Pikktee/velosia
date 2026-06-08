@@ -5,19 +5,15 @@ export default function AnalysisLoader({ onCancel }) {
   const [activeStep, setActiveStep] = useState(0);
 
   const steps = [
-    "Foto wird analysiert... (und Staubkörner digital weggepustet)",
-    "Klamotten-Detektiv sucht nach Marke und Details...",
-    "Farben und Muster werden einer Stil-Prüfung unterzogen...",
-    "Beschreibung wird verfasst (mit extra viel Verkaufs-Charme)...",
-    "Preise werden auf Kleinanzeigen gescrapt... Bitte kurz Geduld!",
-    "Medianpreis wird berechnet (und 'Was letzte Preis'-Anfragen ignoriert)...",
-    "Das perfekte Angebot wird finalisiert... Gleich geschafft!"
+    "Fotos werden per Vision-AI analysiert...",
+    "Vergleichspreise werden live gescrapt...",
+    "Angebot wird finalisiert..."
   ];
 
   useEffect(() => {
     const interval = setInterval(() => {
       setActiveStep((prev) => (prev < steps.length - 1 ? prev + 1 : prev));
-    }, 2400); // Slightly faster to feel snappier
+    }, 3000); // Slower pacing for fewer steps
 
     return () => clearInterval(interval);
   }, [steps.length]);
