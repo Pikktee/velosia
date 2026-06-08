@@ -126,17 +126,56 @@ const CameraCapture = ({
       
       ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
       
+      // Generate a fast, lightweight preview synchronously
+      let previewUrl = '';
+      try {
+        const thumbCanvas = document.createElement('canvas');
+        const maxThumbDim = 120;
+        let thumbW = canvas.width;
+        let thumbH = canvas.height;
+        if (thumbW > thumbH) {
+          if (thumbW > maxThumbDim) {
+            thumbH = Math.round((thumbH * maxThumbDim) / thumbW);
+            thumbW = maxThumbDim;
+          }
+        } else {
+          if (thumbH > maxThumbDim) {
+            thumbW = Math.round((thumbW * maxThumbDim) / thumbH);
+            thumbH = maxThumbDim;
+          }
+        }
+        thumbCanvas.width = thumbW;
+        thumbCanvas.height = thumbH;
+        const thumbCtx = thumbCanvas.getContext('2d');
+        thumbCtx.drawImage(canvas, 0, 0, thumbW, thumbH);
+        previewUrl = thumbCanvas.toDataURL('image/jpeg', 0.65);
+      } catch (thumbErr) {
+        console.error("Failed to generate fast preview:", thumbErr);
+      }
+
+      const tempId = `${Date.now()}-${Math.random()}`;
+
+      // Insert thumbnail placeholder instantly
+      setSelectedImages(prev => [
+        ...prev,
+        {
+          id: tempId,
+          file: null,
+          previewUrl: previewUrl,
+          isCompressing: true
+        }
+      ]);
+
       canvas.toBlob((blob) => {
         if (blob) {
           const file = new File([blob], `capture-${Date.now()}.jpg`, { type: 'image/jpeg' });
-          setSelectedImages(prev => [
-            ...prev,
-            {
-              id: `${Date.now()}-${Math.random()}`,
-              file,
-              previewUrl: URL.createObjectURL(file)
-            }
-          ]);
+          setSelectedImages(prev => 
+            prev.map(img => img.id === tempId ? { ...img, file, isCompressing: false } : img)
+          );
+        } else {
+          // Remove the image if compression failed
+          setSelectedImages(prev => prev.filter(img => img.id !== tempId));
+          setError("Foto konnte nicht komprimiert werden.");
         }
       }, 'image/jpeg', 0.85);
     } catch (err) {
@@ -148,7 +187,7 @@ const CameraCapture = ({
   const removeImage = (idToRemove) => {
     setSelectedImages(prev => {
       const target = prev.find(img => img.id === idToRemove);
-      if (target) {
+      if (target && target.previewUrl && target.previewUrl.startsWith('blob:')) {
         URL.revokeObjectURL(target.previewUrl);
       }
       return prev.filter(img => img.id !== idToRemove);
@@ -343,9 +382,22 @@ const CameraCapture = ({
                 overflow: 'hidden', 
                 flexShrink: 0, 
                 border: '2px solid var(--primary)',
-                boxShadow: '0 4px 10px rgba(0,0,0,0.3)'
+                boxShadow: '0 4px 10px rgba(0,0,0,0.3)',
+                opacity: img.isCompressing ? 0.7 : 1
               }}>
                 <img src={img.previewUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                {img.isCompressing && (
+                  <div style={{
+                    position: 'absolute',
+                    inset: 0,
+                    background: 'rgba(0,0,0,0.3)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center'
+                  }}>
+                    <div className="status-dot online" style={{ width: '8px', height: '8px' }} />
+                  </div>
+                )}
                 <button
                   onClick={() => removeImage(img.id)}
                   style={{
@@ -416,6 +468,7 @@ const CameraCapture = ({
               <button
                 className="btn btn-primary"
                 onClick={onAnalysisStart}
+                disabled={selectedImages.some(img => img.isCompressing)}
                 style={{
                   minHeight: 'auto',
                   padding: '0.65rem 1rem',
@@ -429,11 +482,13 @@ const CameraCapture = ({
                   display: 'flex',
                   alignItems: 'center',
                   gap: '0.3rem',
-                  whiteSpace: 'nowrap'
+                  whiteSpace: 'nowrap',
+                  opacity: selectedImages.some(img => img.isCompressing) ? 0.6 : 1,
+                  cursor: selectedImages.some(img => img.isCompressing) ? 'not-allowed' : 'pointer'
                 }}
               >
                 <Sparkles size={14} />
-                <span>Analysieren</span>
+                <span>Los!</span>
               </button>
             )}
           </div>
