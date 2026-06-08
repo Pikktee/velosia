@@ -1,6 +1,6 @@
-import React, { useState, useEffect } from 'react';
-import { ArrowLeft, Copy, Check, ExternalLink, Smartphone, Monitor, RefreshCw, AlertCircle } from 'lucide-react';
-import { updateDraft, getImageUrl, getAuthToken } from '../utils/api';
+import React, { useState, useEffect, useRef } from 'react';
+import { ArrowLeft, Copy, Check, ExternalLink, Smartphone, Monitor, RefreshCw, AlertCircle, Trash2, Plus, Sparkles, Upload } from 'lucide-react';
+import { updateDraft, getImageUrl, getAuthToken, uploadDraftImages, deleteDraftImage, regenerateDraftField } from '../utils/api';
 
 export default function DraftDetail({ draft, onBack, onUpdateSuccess }) {
   const [title, setTitle] = useState(draft.title || '');
@@ -12,6 +12,10 @@ export default function DraftDetail({ draft, onBack, onUpdateSuccess }) {
   const [saveStatus, setSaveStatus] = useState('saved'); // 'saved', 'saving', 'error'
   const [hasChanges, setHasChanges] = useState(false);
   const [copiedField, setCopiedField] = useState(null);
+  
+  const [regeneratingField, setRegeneratingField] = useState(null);
+  const [uploadingImage, setUploadingImage] = useState(false);
+  const fileInputRef = useRef(null);
 
   // Parse multiple images
   const allImages = React.useMemo(() => {
@@ -113,6 +117,71 @@ export default function DraftDetail({ draft, onBack, onUpdateSuccess }) {
     window.open(urls[platform], '_blank');
   };
 
+  const handleAddImages = async (e) => {
+    const files = Array.from(e.target.files);
+    if (files.length === 0) return;
+    
+    setUploadingImage(true);
+    try {
+      const updated = await uploadDraftImages(draft.id, files);
+      onUpdateSuccess(updated);
+      
+      const parsed = JSON.parse(updated.image_paths || '[]');
+      if (parsed.length > 0) {
+        if (!activeImage || !allImages.includes(activeImage)) {
+          setActiveImage(parsed[parsed.length - 1]);
+        }
+      }
+    } catch (err) {
+      console.error(err);
+      alert(`Fehler beim Hochladen der Bilder: ${err.message}`);
+    } finally {
+      setUploadingImage(false);
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
+    }
+  };
+
+  const handleDeleteImage = async (imgUrl) => {
+    if (!imgUrl) return;
+    if (!confirm('Möchtest du dieses Bild wirklich aus dem Entwurf löschen?')) return;
+    
+    try {
+      const updated = await deleteDraftImage(draft.id, imgUrl);
+      onUpdateSuccess(updated);
+      
+      const parsed = JSON.parse(updated.image_paths || '[]');
+      if (activeImage === imgUrl) {
+        setActiveImage(parsed[0] || '');
+      }
+    } catch (err) {
+      console.error(err);
+      alert(`Fehler beim Löschen des Bildes: ${err.message}`);
+    }
+  };
+
+  const handleRegenerateField = async (field) => {
+    if (regeneratingField) return;
+    setRegeneratingField(field);
+    try {
+      const updated = await regenerateDraftField(draft.id, field);
+      if (field === 'title') {
+        setTitle(updated.title || '');
+      } else if (field === 'description') {
+        setDescription(updated.description || '');
+      } else if (field === 'category') {
+        setCategory(updated.category || 'Sonstiges');
+      }
+      onUpdateSuccess(updated);
+    } catch (err) {
+      console.error(err);
+      alert(`KI-Regenerierung fehlgeschlagen: ${err.message}`);
+    } finally {
+      setRegeneratingField(null);
+    }
+  };
+
   return (
     <div className="fade-in">
       {/* Top Navigation Row */}
@@ -182,35 +251,163 @@ export default function DraftDetail({ draft, onBack, onUpdateSuccess }) {
         <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
           
           {/* Image Box */}
-          <div className="glass-panel" style={{ padding: '1rem', display: 'flex', flexDirection: 'column', gap: '1rem', alignItems: 'center' }}>
-            <img 
-              src={getImageUrl(activeImage)} 
-              alt={title}
-              style={{ width: '100%', maxHeight: '300px', objectFit: 'contain', borderRadius: 'var(--radius-sm)' }}
-            />
-            {allImages.length > 1 && (
-              <div style={{ display: 'flex', gap: '0.5rem', overflowX: 'auto', width: '100%', padding: '0.25rem 0' }}>
-                {allImages.map((imgUrl, idx) => (
-                  <div 
-                    key={idx}
-                    onClick={() => setActiveImage(imgUrl)}
-                    style={{ 
-                      width: '60px', 
-                      height: '60px', 
-                      borderRadius: 'var(--radius-sm)', 
-                      overflow: 'hidden', 
-                      cursor: 'pointer', 
-                      flexShrink: 0,
-                      border: activeImage === imgUrl ? '2px solid var(--primary)' : '1px solid var(--glass-border)',
-                      opacity: activeImage === imgUrl ? 1 : 0.6,
-                      transition: 'all 0.2s ease'
-                    }}
-                  >
-                    <img src={getImageUrl(imgUrl)} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                  </div>
-                ))}
+          <div className="glass-panel" style={{ padding: '1rem', display: 'flex', flexDirection: 'column', gap: '1rem', alignItems: 'center', position: 'relative' }}>
+            {/* Uploading overlay */}
+            {uploadingImage && (
+              <div style={{
+                position: 'absolute',
+                inset: 0,
+                background: 'rgba(7, 9, 13, 0.75)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                borderRadius: 'var(--radius-md)',
+                zIndex: 10,
+                backdropFilter: 'blur(4px)',
+                WebkitBackdropFilter: 'blur(4px)'
+              }}>
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.75rem' }}>
+                  <RefreshCw size={24} style={{ animation: 'spin 1.5s linear infinite', color: 'var(--primary)' }} />
+                  <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>Bilder werden hochgeladen...</span>
+                </div>
               </div>
             )}
+
+            <input 
+              type="file" 
+              ref={fileInputRef} 
+              style={{ display: 'none' }} 
+              multiple 
+              accept="image/*" 
+              onChange={handleAddImages} 
+            />
+
+            {allImages.length > 0 ? (
+              <div style={{ position: 'relative', width: '100%' }}>
+                <img 
+                  src={getImageUrl(activeImage)} 
+                  alt={title}
+                  style={{ width: '100%', maxHeight: '300px', objectFit: 'contain', borderRadius: 'var(--radius-sm)' }}
+                />
+                <button
+                  type="button"
+                  onClick={() => handleDeleteImage(activeImage)}
+                  style={{
+                    position: 'absolute',
+                    top: '10px',
+                    right: '10px',
+                    background: 'rgba(239, 68, 68, 0.85)',
+                    border: 'none',
+                    color: '#fff',
+                    borderRadius: '50%',
+                    width: '36px',
+                    height: '36px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    cursor: 'pointer',
+                    boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
+                    transition: 'all 0.2s ease',
+                    zIndex: 2
+                  }}
+                  onMouseEnter={(e) => e.currentTarget.style.transform = 'scale(1.08)'}
+                  onMouseLeave={(e) => e.currentTarget.style.transform = 'scale(1)'}
+                  title="Dieses Bild löschen"
+                >
+                  <Trash2 size={16} />
+                </button>
+              </div>
+            ) : (
+              <div 
+                onClick={() => fileInputRef.current?.click()}
+                style={{ 
+                  width: '100%', 
+                  height: '200px', 
+                  border: '2px dashed var(--glass-border)', 
+                  borderRadius: 'var(--radius-sm)',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '0.75rem',
+                  cursor: 'pointer',
+                  color: 'var(--text-secondary)',
+                  transition: 'all 0.2s ease'
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.borderColor = 'var(--primary)';
+                  e.currentTarget.style.color = 'var(--primary)';
+                  e.currentTarget.style.background = 'rgba(9, 176, 183, 0.02)';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.borderColor = 'var(--glass-border)';
+                  e.currentTarget.style.color = 'var(--text-secondary)';
+                  e.currentTarget.style.background = 'transparent';
+                }}
+              >
+                <Upload size={32} />
+                <span style={{ fontSize: '0.9rem', fontWeight: '500' }}>Keine Bilder. Klicken zum Hinzufügen.</span>
+              </div>
+            )}
+
+            {/* Thumbnails + Add Button */}
+            <div style={{ display: 'flex', gap: '0.5rem', overflowX: 'auto', width: '100%', padding: '0.25rem 0', alignItems: 'center' }}>
+              {allImages.map((imgUrl, idx) => (
+                <div 
+                  key={idx}
+                  onClick={() => setActiveImage(imgUrl)}
+                  style={{ 
+                    width: '60px', 
+                    height: '60px', 
+                    borderRadius: 'var(--radius-sm)', 
+                    overflow: 'hidden', 
+                    cursor: 'pointer', 
+                    flexShrink: 0,
+                    border: activeImage === imgUrl ? '2px solid var(--primary)' : '1px solid var(--glass-border)',
+                    opacity: activeImage === imgUrl ? 1 : 0.6,
+                    transition: 'all 0.2s ease'
+                  }}
+                  onMouseEnter={(e) => e.currentTarget.style.opacity = '1'}
+                  onMouseLeave={(e) => {
+                    if (activeImage !== imgUrl) e.currentTarget.style.opacity = '0.6';
+                  }}
+                >
+                  <img src={getImageUrl(imgUrl)} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                </div>
+              ))}
+              
+              {/* Styled Plus Thumbnail for adding new images */}
+              <div 
+                onClick={() => fileInputRef.current?.click()}
+                style={{
+                  width: '60px',
+                  height: '60px',
+                  borderRadius: 'var(--radius-sm)',
+                  border: '2px dashed var(--glass-border)',
+                  background: 'rgba(255,255,255,0.02)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  cursor: 'pointer',
+                  flexShrink: 0,
+                  color: 'var(--text-secondary)',
+                  transition: 'all 0.2s ease',
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.borderColor = 'var(--primary)';
+                  e.currentTarget.style.color = 'var(--primary)';
+                  e.currentTarget.style.background = 'rgba(9, 176, 183, 0.05)';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.borderColor = 'var(--glass-border)';
+                  e.currentTarget.style.color = 'var(--text-secondary)';
+                  e.currentTarget.style.background = 'rgba(255,255,255,0.02)';
+                }}
+                title="Bilder hinzufügen"
+              >
+                <Plus size={20} />
+              </div>
+            </div>
           </div>
 
           {/* Publishing Assist Panel */}
@@ -381,14 +578,43 @@ export default function DraftDetail({ draft, onBack, onUpdateSuccess }) {
         {/* Right Section: Form Inputs */}
         <div className="glass-panel detail-panel">
           <div className="form-group">
-            <label htmlFor="edit-title">Titel (max. 80 Zeichen)</label>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+              <label htmlFor="edit-title" style={{ marginBottom: 0 }}>Titel (max. 80 Zeichen)</label>
+              <button 
+                type="button"
+                onClick={() => handleRegenerateField('title')}
+                disabled={regeneratingField !== null || allImages.length === 0}
+                style={{
+                  background: 'transparent',
+                  border: 'none',
+                  color: regeneratingField === 'title' ? 'var(--primary)' : 'var(--text-secondary)',
+                  cursor: allImages.length === 0 ? 'not-allowed' : 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '0.35rem',
+                  fontSize: '0.75rem',
+                  fontWeight: '600',
+                  opacity: allImages.length === 0 ? 0.35 : 1,
+                  padding: '0.25rem',
+                  borderRadius: '4px',
+                  transition: 'all 0.2s ease',
+                  outline: 'none'
+                }}
+                title={allImages.length === 0 ? "Bilder hinzufügen, um Titel per KI zu generieren" : "Titel per KI neu generieren"}
+              >
+                <RefreshCw size={13} style={{ animation: regeneratingField === 'title' ? 'spin 1.5s linear infinite' : 'none' }} />
+                <span>KI-Regen</span>
+              </button>
+            </div>
             <input 
               type="text" 
               id="edit-title" 
               className="form-control" 
               value={title} 
               onChange={(e) => setTitle(e.target.value.substring(0, 80))}
-              placeholder="Titel für die Anzeige..."
+              placeholder={regeneratingField === 'title' ? "Titel wird per KI generiert..." : "Titel für die Anzeige..."}
+              disabled={regeneratingField === 'title'}
+              style={{ opacity: regeneratingField === 'title' ? 0.6 : 1 }}
             />
             <div style={{ textAlign: 'right', fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.25rem' }}>
               {title.length}/80
@@ -411,12 +637,41 @@ export default function DraftDetail({ draft, onBack, onUpdateSuccess }) {
 
           <div className="form-grid-2col form-group">
             <div>
-              <label htmlFor="edit-category">Kategorie</label>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+                <label htmlFor="edit-category" style={{ marginBottom: 0 }}>Kategorie</label>
+                <button 
+                  type="button"
+                  onClick={() => handleRegenerateField('category')}
+                  disabled={regeneratingField !== null || allImages.length === 0}
+                  style={{
+                    background: 'transparent',
+                    border: 'none',
+                    color: regeneratingField === 'category' ? 'var(--primary)' : 'var(--text-secondary)',
+                    cursor: allImages.length === 0 ? 'not-allowed' : 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '0.35rem',
+                    fontSize: '0.75rem',
+                    fontWeight: '600',
+                    opacity: allImages.length === 0 ? 0.35 : 1,
+                    padding: '0.25rem',
+                    borderRadius: '4px',
+                    transition: 'all 0.2s ease',
+                    outline: 'none'
+                  }}
+                  title={allImages.length === 0 ? "Bilder hinzufügen, um Kategorie per KI zu bestimmen" : "Kategorie per KI neu bestimmen"}
+                >
+                  <RefreshCw size={11} style={{ animation: regeneratingField === 'category' ? 'spin 1.5s linear infinite' : 'none' }} />
+                  <span>KI-Regen</span>
+                </button>
+              </div>
               <select 
                 id="edit-category" 
                 className="form-control" 
                 value={category} 
                 onChange={(e) => setCategory(e.target.value)}
+                disabled={regeneratingField === 'category'}
+                style={{ opacity: regeneratingField === 'category' ? 0.6 : 1 }}
               >
                 {categories.map((cat) => (
                   <option key={cat} value={cat}>{cat}</option>
@@ -440,13 +695,42 @@ export default function DraftDetail({ draft, onBack, onUpdateSuccess }) {
           </div>
 
           <div className="form-group" style={{ marginBottom: 0 }}>
-            <label htmlFor="edit-desc">Verkaufsbeschreibung</label>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+              <label htmlFor="edit-desc" style={{ marginBottom: 0 }}>Verkaufsbeschreibung</label>
+              <button 
+                type="button"
+                onClick={() => handleRegenerateField('description')}
+                disabled={regeneratingField !== null || allImages.length === 0}
+                style={{
+                  background: 'transparent',
+                  border: 'none',
+                  color: regeneratingField === 'description' ? 'var(--primary)' : 'var(--text-secondary)',
+                  cursor: allImages.length === 0 ? 'not-allowed' : 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '0.35rem',
+                  fontSize: '0.75rem',
+                  fontWeight: '600',
+                  opacity: allImages.length === 0 ? 0.35 : 1,
+                  padding: '0.25rem',
+                  borderRadius: '4px',
+                  transition: 'all 0.2s ease',
+                  outline: 'none'
+                }}
+                title={allImages.length === 0 ? "Bilder hinzufügen, um Beschreibung per KI zu generieren" : "Beschreibung per KI neu generieren"}
+              >
+                <RefreshCw size={13} style={{ animation: regeneratingField === 'description' ? 'spin 1.5s linear infinite' : 'none' }} />
+                <span>KI-Regen</span>
+              </button>
+            </div>
             <textarea 
               id="edit-desc" 
               className="form-control" 
               value={description} 
               onChange={(e) => setDescription(e.target.value)}
-              placeholder="Verkaufsbeschreibung schreiben..."
+              placeholder={regeneratingField === 'description' ? "Beschreibung wird per KI generiert..." : "Verkaufsbeschreibung schreiben..."}
+              disabled={regeneratingField === 'description'}
+              style={{ opacity: regeneratingField === 'description' ? 0.6 : 1 }}
             />
           </div>
         </div>

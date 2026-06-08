@@ -207,3 +207,57 @@ export const deleteUserAccount = async () => {
 
   return true;
 };
+
+export const uploadDraftImages = async (id, files) => {
+  const formData = new FormData();
+  if (Array.isArray(files)) {
+    files.forEach(file => {
+      formData.append('files', file);
+    });
+  } else {
+    formData.append('files', files);
+  }
+
+  const headers = getHeaders(null);
+  const response = await fetch(`${API_BASE_URL}/api/drafts/${id}/images`, {
+    method: 'POST',
+    headers: headers,
+    body: formData,
+  });
+
+  if (!response.ok) {
+    const errorData = await response.json();
+    throw new Error(errorData.detail || 'Fehler beim Hinzufügen der Bilder.');
+  }
+
+  return response.json();
+};
+
+export const deleteDraftImage = async (id, imagePath) => {
+  const response = await fetch(`${API_BASE_URL}/api/drafts/${id}/images?image_path=${encodeURIComponent(imagePath)}`, {
+    method: 'DELETE',
+    headers: getHeaders(),
+  });
+
+  if (!response.ok) {
+    const errorData = await response.json();
+    throw new Error(errorData.detail || 'Fehler beim Löschen des Bildes.');
+  }
+
+  return response.json();
+};
+
+export const regenerateDraftField = async (id, field) => {
+  const response = await fetch(`${API_BASE_URL}/api/drafts/${id}/regenerate`, {
+    method: 'POST',
+    headers: getHeaders(),
+    body: JSON.stringify({ field }),
+  });
+
+  if (!response.ok) {
+    const errorData = await response.json();
+    throw new Error(errorData.detail || 'Fehler bei der KI-Regeneration.');
+  }
+
+  return response.json();
+};

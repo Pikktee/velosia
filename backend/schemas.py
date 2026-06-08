@@ -58,3 +58,7 @@ class AnalysisResponse(BaseModel):
     category: str
     condition: str
     price: float
+
+class DraftRegenerateRequest(BaseModel):
+    field: str
+

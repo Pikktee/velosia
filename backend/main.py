@@ -44,7 +44,7 @@ def run_migrations():
 
 run_migrations()
 
-app = FastAPI(title="Vintamie API", version="2.2.8")
+app = FastAPI(title="Vintamie API", version="2.2.9")
 
 UPLOAD_DIR = "uploads"
 os.makedirs(UPLOAD_DIR, exist_ok=True)
@@ -390,3 +390,157 @@ def delete_draft(
     db.delete(db_draft)
     db.commit()
     return {"detail": "Entwurf gelöscht"}
+
+@app.post("/api/drafts/{draft_id}/images", response_model=schemas.DraftResponse)
+def add_draft_images(
+    draft_id: int,
+    files: List[UploadFile] = File(...),
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user)
+):
+    db_draft = db.query(models.Draft).filter(
+        models.Draft.id == draft_id,
+        models.Draft.user_id == current_user.id
+    ).first()
+    if not db_draft:
+        raise HTTPException(status_code=404, detail="Entwurf wurde nicht gefunden.")
+
+    existing_paths = []
+    if db_draft.image_paths:
+        try:
+            existing_paths = json.loads(db_draft.image_paths)
+        except Exception:
+            if db_draft.image_path:
+                existing_paths = [db_draft.image_path]
+
+    saved_paths = []
+    local_paths = []
+    for f in files:
+        if not f.content_type.startswith("image/"):
+            # Cleanup
+            for p in local_paths:
+                if os.path.exists(p):
+                    try:
+                        os.remove(p)
+                    except Exception:
+                        pass
+            raise HTTPException(status_code=400, detail="Alle Dateien müssen Bilder sein.")
+
+        file_extension = os.path.splitext(f.filename)[1]
+        unique_filename = f"{uuid.uuid4()}{file_extension}"
+        file_path = os.path.join(UPLOAD_DIR, unique_filename)
+
+        try:
+            with open(file_path, "wb") as buffer:
+                shutil.copyfileobj(f.file, buffer)
+            saved_paths.append(f"/uploads/{unique_filename}")
+            local_paths.append(file_path)
+        except Exception as e:
+            # Cleanup
+            for p in local_paths:
+                if os.path.exists(p):
+                    try:
+                        os.remove(p)
+                    except Exception:
+                        pass
+            raise HTTPException(status_code=500, detail=f"Bild konnte nicht gespeichert werden: {e}")
+
+    new_paths = existing_paths + saved_paths
+    db_draft.image_paths = json.dumps(new_paths)
+    if not db_draft.image_path and new_paths:
+        db_draft.image_path = new_paths[0]
+
+    db.commit()
+    db.refresh(db_draft)
+    return db_draft
+
+@app.delete("/api/drafts/{draft_id}/images", response_model=schemas.DraftResponse)
+def delete_draft_image(
+    draft_id: int,
+    image_path: str,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user)
+):
+    db_draft = db.query(models.Draft).filter(
+        models.Draft.id == draft_id,
+        models.Draft.user_id == current_user.id
+    ).first()
+    if not db_draft:
+        raise HTTPException(status_code=404, detail="Entwurf wurde nicht gefunden.")
+
+    existing_paths = []
+    if db_draft.image_paths:
+        try:
+            existing_paths = json.loads(db_draft.image_paths)
+        except Exception:
+            if db_draft.image_path:
+                existing_paths = [db_draft.image_path]
+
+    if image_path not in existing_paths:
+        raise HTTPException(status_code=400, detail="Bild gehört nicht zu diesem Entwurf.")
+
+    existing_paths.remove(image_path)
+    
+    local_path = image_path.lstrip("/")
+    if os.path.exists(local_path):
+        try:
+            os.remove(local_path)
+        except Exception as e:
+            print(f"Error removing image file {local_path}: {e}", flush=True)
+
+    db_draft.image_paths = json.dumps(existing_paths)
+    if db_draft.image_path == image_path:
+        db_draft.image_path = existing_paths[0] if existing_paths else None
+
+    db.commit()
+    db.refresh(db_draft)
+    return db_draft
+
+@app.post("/api/drafts/{draft_id}/regenerate", response_model=schemas.DraftResponse)
+def regenerate_draft_field_endpoint(
+    draft_id: int,
+    req: schemas.DraftRegenerateRequest,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user)
+):
+    if req.field not in ["title", "description", "category"]:
+        raise HTTPException(status_code=400, detail="Ungültiges Feld zur Regeneration.")
+
+    db_draft = db.query(models.Draft).filter(
+        models.Draft.id == draft_id,
+        models.Draft.user_id == current_user.id
+    ).first()
+    if not db_draft:
+        raise HTTPException(status_code=404, detail="Entwurf wurde nicht gefunden.")
+
+    image_paths = []
+    if db_draft.image_paths:
+        try:
+            paths = json.loads(db_draft.image_paths)
+            image_paths = [p.lstrip("/") for p in paths]
+        except Exception:
+            if db_draft.image_path:
+                image_paths = [db_draft.image_path.lstrip("/")]
+    elif db_draft.image_path:
+        image_paths = [db_draft.image_path.lstrip("/")]
+
+    if not image_paths:
+        raise HTTPException(status_code=400, detail="Keine Bilder im Entwurf vorhanden, um KI-Generierung auszuführen.")
+
+    from services.gemini_service import regenerate_draft_field
+    try:
+        new_val = regenerate_draft_field(image_paths, req.field)
+    except Exception as e:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=f"KI-Regeneration fehlgeschlagen: {str(e)}")
+
+    if req.field == "title":
+        db_draft.title = new_val
+    elif req.field == "description":
+        db_draft.description = new_val
+    elif req.field == "category":
+        db_draft.category = new_val
+
+    db.commit()
+    db.refresh(db_draft)
+    return db_draft
+

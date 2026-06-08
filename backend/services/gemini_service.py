@@ -122,6 +122,86 @@ def analyze_item_image(image_paths: List[str]) -> dict:
         print(f"CRITICAL: Error calling Gemini API: {e}")
         raise e
 
+def regenerate_draft_field(image_paths: List[str], field: str) -> str:
+    """
+    Regenerate a single draft field (title, description, or category) based on the draft's images.
+    """
+    if not GEMINI_API_KEY:
+        print("WARNING: GEMINI_API_KEY is not set. Returning mock field.")
+        mock = get_mock_analysis()
+        return mock.get(field, "")
+
+    try:
+        # Load, resize, and compress all images immediately to save memory and optimize performance
+        imgs = []
+        for path in image_paths:
+            if not os.path.exists(path):
+                continue
+            img = Image.open(path)
+            if img.width > 1024 or img.height > 1024:
+                img.thumbnail((1024, 1024))
+                if img.mode in ("RGBA", "P"):
+                    img = img.convert("RGB")
+                img.save(path, format="JPEG", quality=85)
+                # Reopen the resized image
+                img = Image.open(path)
+            imgs.append(img)
+
+        if not imgs:
+            raise ValueError("Keine gültigen Bilder für die Regeneration gefunden.")
+
+        if field == "title":
+            prompt = (
+                "Analysiere diese Fotos eines Artikels. Erzeuge einen neuen, kreativen, verkaufsfördernden und keyword-reichen Titel "
+                "(max. 80 Zeichen) für eine Verkaufsanzeige auf Vinted/Kleinanzeigen auf Deutsch. "
+                "Gib AUSSCHLIESSLICH den Titel zurück, ohne Anführungszeichen, ohne Einleitung, ohne Markdown."
+            )
+        elif field == "description":
+            prompt = (
+                "Analysiere diese Fotos eines Artikels. Erzeuge eine neue, ansprechende, ehrliche und detaillierte Verkaufsbeschreibung "
+                "auf Deutsch. Erwähne wichtige Details wie Zustand, Farbe, Besonderheiten und füge am Ende 3-4 relevante Hashtags hinzu. "
+                "Gib AUSSCHLIESSLICH die Beschreibung zurück, ohne Einleitung, ohne zusätzliche Kommentare, ohne Markdown."
+            )
+        elif field == "category":
+            prompt = (
+                "Analysiere diese Fotos eines Artikels. Wähle die passendste Hauptkategorie auf Deutsch aus. "
+                "Wähle exakt einen dieser Werte: 'Damenbekleidung', 'Herrenbekleidung', 'Kinder', 'Haus & Garten', 'Elektronik', "
+                "'Bücher & Medien', 'Sonstiges'. "
+                "Gib AUSSCHLIESSLICH den genauen Kategorienamen als Text zurück, ohne Anführungszeichen, ohne Einleitung."
+            )
+        else:
+            raise ValueError(f"Ungültiges Feld zur Regeneration: {field}")
+
+        working_model_name = GEMINI_MODEL
+        model = genai.GenerativeModel(working_model_name)
+        
+        try:
+            response = model.generate_content([*imgs, prompt])
+        except Exception as e:
+            print(f"Model '{working_model_name}' failed: {e}. Trying fallback 'gemini-2.5-flash'...")
+            working_model_name = "gemini-2.5-flash"
+            try:
+                model = genai.GenerativeModel(working_model_name)
+                response = model.generate_content([*imgs, prompt])
+            except Exception as e2:
+                print(f"Fallback model '{working_model_name}' failed: {e2}. Trying fallback 'gemini-1.5-flash'...")
+                working_model_name = "gemini-1.5-flash"
+                model = genai.GenerativeModel(working_model_name)
+                response = model.generate_content([*imgs, prompt])
+
+        result = response.text.strip()
+        # Clean any surrounding quotes
+        if result.startswith('"') and result.endswith('"'):
+            result = result[1:-1]
+        elif result.startswith("'") and result.endswith("'"):
+            result = result[1:-1]
+        
+        return result
+
+    except Exception as e:
+        print(f"Error in regenerate_draft_field: {e}")
+        raise e
+
 def get_mock_analysis() -> dict:
     """
     Fallback mock data with sources if the API key is missing or calls fail.
