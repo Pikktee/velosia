@@ -194,3 +194,16 @@ export const deleteDraft = async (id) => {
   
   return true;
 };
+
+export const deleteUserAccount = async () => {
+  const response = await fetch(`${API_BASE_URL}/api/auth/me`, {
+    method: 'DELETE',
+    headers: getHeaders(),
+  });
+
+  if (!response.ok) {
+    throw new Error('Fehler beim Löschen des Accounts.');
+  }
+
+  return true;
+};

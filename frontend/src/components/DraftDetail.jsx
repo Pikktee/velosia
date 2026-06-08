@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { ArrowLeft, Save, Copy, Check, ExternalLink, Smartphone, Monitor } from 'lucide-react';
+import { ArrowLeft, Copy, Check, ExternalLink, Smartphone, Monitor, RefreshCw, AlertCircle } from 'lucide-react';
 import { updateDraft, getImageUrl, getAuthToken } from '../utils/api';
 
 export default function DraftDetail({ draft, onBack, onUpdateSuccess }) {
@@ -9,9 +9,9 @@ export default function DraftDetail({ draft, onBack, onUpdateSuccess }) {
   const [condition, setCondition] = useState(draft.condition || 'Gut');
   const [price, setPrice] = useState(draft.price || 0);
   
-  const [saving, setSaving] = useState(false);
+  const [saveStatus, setSaveStatus] = useState('saved'); // 'saved', 'saving', 'error'
+  const [hasChanges, setHasChanges] = useState(false);
   const [copiedField, setCopiedField] = useState(null);
-  const [message, setMessage] = useState(null);
 
   // Parse multiple images
   const allImages = React.useMemo(() => {
@@ -55,26 +55,42 @@ export default function DraftDetail({ draft, onBack, onUpdateSuccess }) {
     'Zufriedenstellend'
   ];
 
-  const handleSave = async () => {
-    setSaving(true);
-    setMessage(null);
-    try {
-      const updated = await updateDraft(draft.id, {
-        title,
-        description,
-        category,
-        condition,
-        price: parseFloat(price)
-      });
-      setMessage({ type: 'success', text: 'Entwurf erfolgreich gespeichert!' });
-      onUpdateSuccess(updated);
-    } catch (err) {
-      console.error(err);
-      setMessage({ type: 'error', text: 'Fehler beim Speichern des Entwurfs.' });
-    } finally {
-      setSaving(false);
-    }
-  };
+  // Track if values differ from the last saved draft
+  useEffect(() => {
+    const hasDiff = 
+      title !== (draft.title || '') ||
+      description !== (draft.description || '') ||
+      category !== (draft.category || 'Sonstiges') ||
+      condition !== (draft.condition || 'Gut') ||
+      (parseFloat(price) || 0) !== (parseFloat(draft.price) || 0);
+    
+    setHasChanges(hasDiff);
+  }, [title, description, category, condition, price, draft]);
+
+  // Debounced auto-save effect
+  useEffect(() => {
+    if (!hasChanges) return;
+
+    setSaveStatus('saving');
+    const delayDebounceFn = setTimeout(async () => {
+      try {
+        const updated = await updateDraft(draft.id, {
+          title,
+          description,
+          category,
+          condition,
+          price: parseFloat(price) || 0
+        });
+        setSaveStatus('saved');
+        onUpdateSuccess(updated);
+      } catch (err) {
+        console.error(err);
+        setSaveStatus('error');
+      }
+    }, 1200); // 1.2s delay for a snappy but typing-friendly feel
+
+    return () => clearTimeout(delayDebounceFn);
+  }, [title, description, category, condition, price, hasChanges]);
 
   const copyToClipboard = (text, fieldName) => {
     navigator.clipboard.writeText(text);
@@ -100,7 +116,7 @@ export default function DraftDetail({ draft, onBack, onUpdateSuccess }) {
   return (
     <div className="fade-in">
       {/* Top Navigation Row */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1.5rem' }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1.5rem', flexWrap: 'wrap', gap: '0.75rem' }}>
         <button 
           className="btn btn-secondary" 
           onClick={onBack}
@@ -109,31 +125,55 @@ export default function DraftDetail({ draft, onBack, onUpdateSuccess }) {
           <ArrowLeft size={16} />
           Zurück
         </button>
+
+        {/* Auto-Save Status Indicator */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.85rem', fontWeight: '500' }}>
+          {saveStatus === 'saved' && (
+            <span style={{ color: 'var(--success)', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+              <Check size={16} />
+              <span>Entwurf gesichert</span>
+            </span>
+          )}
+          {saveStatus === 'saving' && (
+            <span style={{ color: 'var(--warning)', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+              <RefreshCw size={14} style={{ animation: 'spin 1.5s linear infinite' }} />
+              <span>Sichert...</span>
+            </span>
+          )}
+          {saveStatus === 'error' && (
+            <span style={{ color: 'var(--danger)', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+              <AlertCircle size={16} />
+              <span>Fehler beim Speichern</span>
+            </span>
+          )}
+        </div>
         
         <button 
           className="btn btn-primary" 
-          onClick={handleSave}
-          disabled={saving}
-          style={{ padding: '0.5rem 1.25rem', minHeight: 'auto', gap: '0.25rem' }}
+          onClick={onBack}
+          style={{ padding: '0.5rem 1.25rem', minHeight: 'auto' }}
         >
-          <Save size={16} />
-          {saving ? 'Speichert...' : 'Speichern'}
+          Fertig
         </button>
       </div>
 
-      {message && (
-        <div style={{ 
-          padding: '1rem', 
-          borderRadius: 'var(--radius-sm)', 
-          marginBottom: '1.5rem',
-          fontSize: '0.95rem',
-          background: message.type === 'success' ? 'rgba(16, 185, 129, 0.1)' : 'rgba(239, 68, 68, 0.1)',
-          color: message.type === 'success' ? '#a7f3d0' : '#fca5a5',
-          border: `1px solid ${message.type === 'success' ? 'rgba(16, 185, 129, 0.2)' : 'rgba(239, 68, 68, 0.2)'}`
-        }}>
-          {message.text}
-        </div>
-      )}
+      {/* Persistence Banner */}
+      <div style={{ 
+        padding: '0.75rem 1rem', 
+        borderRadius: 'var(--radius-sm)', 
+        marginBottom: '1.5rem',
+        fontSize: '0.825rem',
+        background: 'rgba(9, 176, 183, 0.1)',
+        color: '#a5f3fc',
+        border: '1px solid rgba(9, 176, 183, 0.2)',
+        display: 'flex',
+        alignItems: 'center',
+        gap: '0.5rem',
+        lineHeight: '1.4'
+      }}>
+        <span style={{ fontSize: '1rem' }}>✨</span>
+        <span>Dieser Entwurf wurde bereits automatisch gespeichert. Deine Änderungen werden in Echtzeit synchronisiert.</span>
+      </div>
 
       {/* Main Grid */}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '1.5rem' }}>
@@ -174,7 +214,7 @@ export default function DraftDetail({ draft, onBack, onUpdateSuccess }) {
           </div>
 
           {/* Publishing Assist Panel */}
-          <div className="glass-panel" style={{ padding: '1.5rem' }}>
+          <div className="glass-panel detail-panel">
             <h3 style={{ fontSize: '1.2rem', marginBottom: '1rem', fontFamily: 'var(--font-title)', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
               Veröffentlichen Assistent
             </h3>
@@ -283,7 +323,7 @@ export default function DraftDetail({ draft, onBack, onUpdateSuccess }) {
 
           {/* Price Comparison Sources Panel */}
           {draft.sources && (
-            <div className="glass-panel" style={{ padding: '1.5rem' }}>
+            <div className="glass-panel detail-panel">
               <h3 style={{ fontSize: '1.2rem', marginBottom: '1rem', fontFamily: 'var(--font-title)', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                 Vergleichsangebote (Quellen)
               </h3>
@@ -339,7 +379,7 @@ export default function DraftDetail({ draft, onBack, onUpdateSuccess }) {
         </div>
 
         {/* Right Section: Form Inputs */}
-        <div className="glass-panel" style={{ padding: '1.5rem' }}>
+        <div className="glass-panel detail-panel">
           <div className="form-group">
             <label htmlFor="edit-title">Titel (max. 80 Zeichen)</label>
             <input 
@@ -369,7 +409,7 @@ export default function DraftDetail({ draft, onBack, onUpdateSuccess }) {
             />
           </div>
 
-          <div className="form-group" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+          <div className="form-grid-2col form-group">
             <div>
               <label htmlFor="edit-category">Kategorie</label>
               <select 

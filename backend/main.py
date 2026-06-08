@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 import os
 import shutil
 import uuid
+import json
 from typing import List
 
 import models
@@ -43,7 +44,7 @@ def run_migrations():
 
 run_migrations()
 
-app = FastAPI(title="Vintamie API", version="2.2.7")
+app = FastAPI(title="Vintamie API", version="2.2.8")
 
 UPLOAD_DIR = "uploads"
 os.makedirs(UPLOAD_DIR, exist_ok=True)
@@ -126,6 +127,36 @@ def login(user_in: schemas.UserCreate, db: Session = Depends(get_db)):
 @app.get("/api/auth/me", response_model=schemas.UserResponse)
 def get_me(current_user: models.User = Depends(get_current_user)):
     return current_user
+
+@app.delete("/api/auth/me", status_code=status.HTTP_204_NO_CONTENT)
+def delete_my_account(
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user)
+):
+    # 1. Delete all images on disk associated with user's drafts
+    user_drafts = db.query(models.Draft).filter(models.Draft.user_id == current_user.id).all()
+    for draft in user_drafts:
+        if draft.image_paths:
+            try:
+                paths = json.loads(draft.image_paths)
+                for path in paths:
+                    relative_path = path.lstrip("/")
+                    if os.path.exists(relative_path):
+                        os.remove(relative_path)
+            except Exception as e:
+                print(f"Error removing image files for draft {draft.id}: {e}", flush=True)
+        elif draft.image_path:
+            relative_path = draft.image_path.lstrip("/")
+            if os.path.exists(relative_path):
+                try:
+                    os.remove(relative_path)
+                except Exception as e:
+                    print(f"Error removing image file {relative_path} for draft {draft.id}: {e}", flush=True)
+    
+    # 2. Delete the user (cascade delete handles database drafts)
+    db.delete(current_user)
+    db.commit()
+    return {"detail": "Account erfolgreich gelöscht"}
 
 @app.get("/api/auth/config")
 def get_auth_config():

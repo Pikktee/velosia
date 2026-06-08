@@ -1,11 +1,30 @@
-import React from 'react';
-import { User, LogOut, Key, Cpu, HelpCircle, ShieldCheck, Globe } from 'lucide-react';
+import React, { useState } from 'react';
+import { User, LogOut, Trash2, Cpu, ShieldCheck, Globe, AlertTriangle } from 'lucide-react';
+import { deleteUserAccount } from '../utils/api';
 
 export default function Settings({ user, onLogout }) {
+  const [showConfirm, setShowConfirm] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [error, setError] = useState('');
+
   // If user metadata hasn't loaded yet
   if (!user) return null;
 
   const loginMethod = user.google_id ? 'Google-Konto' : 'E-Mail & Passwort';
+
+  const handleDeleteAccount = async () => {
+    setDeleting(true);
+    setError('');
+    try {
+      await deleteUserAccount();
+      onLogout(); // Logs out and redirects to login/register view
+    } catch (err) {
+      console.error(err);
+      setError('Fehler beim Löschen des Accounts.');
+    } finally {
+      setDeleting(false);
+    }
+  };
 
   return (
     <div className="fade-in" style={{ paddingBottom: '2rem' }}>
@@ -30,28 +49,28 @@ export default function Settings({ user, onLogout }) {
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.2rem' }}>
             <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Eingeloggt als</span>
-            <span style={{ fontSize: '1.05rem', fontWeight: '600', color: 'var(--text-primary)' }}>{user.email}</span>
+            <span style={{ fontSize: '1.05rem', fontWeight: '600', color: 'var(--text-primary)', wordBreak: 'break-all' }}>{user.email}</span>
             <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Methode: {loginMethod}</span>
           </div>
         </div>
 
         {/* AI & System Section */}
-        <div style={{ marginBottom: '2rem' }}>
-          <h3 style={{ fontSize: '1.1rem', marginBottom: '1rem', color: 'var(--text-primary)', fontFamily: 'var(--font-title)', fontWeight: '600', borderBottom: '1px solid var(--glass-border)', paddingBottom: '0.5rem' }}>
+        <div style={{ marginBottom: '1.75rem' }}>
+          <h3 style={{ fontSize: '1.1rem', marginBottom: '0.75rem', color: 'var(--text-primary)', fontFamily: 'var(--font-title)', fontWeight: '600', borderBottom: '1px solid var(--glass-border)', paddingBottom: '0.5rem' }}>
             Künstliche Intelligenz
           </h3>
 
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
             {/* Model Card */}
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.9rem', padding: '0.5rem 0' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.9rem', padding: '0.25rem 0' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: 'var(--text-secondary)' }}>
                 <Cpu size={16} />
-                <span>Gemini Vision Modell</span>
+                <span>Modell</span>
               </div>
               <span style={{
                 background: 'rgba(9, 176, 183, 0.15)',
                 color: 'var(--primary)',
-                padding: '0.25rem 0.6rem',
+                padding: '0.2rem 0.5rem',
                 borderRadius: '6px',
                 fontSize: '0.8rem',
                 fontWeight: '600',
@@ -62,10 +81,10 @@ export default function Settings({ user, onLogout }) {
             </div>
 
             {/* API Status Card */}
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.9rem', padding: '0.5rem 0' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.9rem', padding: '0.25rem 0' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: 'var(--text-secondary)' }}>
                 <ShieldCheck size={16} />
-                <span>API-Verbindungsstatus</span>
+                <span>API Status</span>
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', color: 'var(--success)' }}>
                 <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: 'var(--success)', boxShadow: '0 0 8px var(--success)' }} />
@@ -75,32 +94,71 @@ export default function Settings({ user, onLogout }) {
           </div>
         </div>
 
-        {/* WebExtension Sync Instructions */}
+        {/* WebExtension Sync */}
         <div style={{ marginBottom: '2rem' }}>
-          <h3 style={{ fontSize: '1.1rem', marginBottom: '1rem', color: 'var(--text-primary)', fontFamily: 'var(--font-title)', fontWeight: '600', borderBottom: '1px solid var(--glass-border)', paddingBottom: '0.5rem' }}>
-            WebExtension Synchronisation
+          <h3 style={{ fontSize: '1.1rem', marginBottom: '0.75rem', color: 'var(--text-primary)', fontFamily: 'var(--font-title)', fontWeight: '600', borderBottom: '1px solid var(--glass-border)', paddingBottom: '0.5rem' }}>
+            Erweiterung Sync
           </h3>
-          <div style={{ display: 'flex', gap: '0.75rem', fontSize: '0.875rem', color: 'var(--text-secondary)', lineHeight: '1.5', padding: '0.5rem 0' }}>
-            <Globe size={20} style={{ color: 'var(--primary)', flexShrink: 0, marginTop: '2px' }} />
-            <div>
-              <p style={{ marginBottom: '0.5rem', color: 'var(--text-primary)', fontWeight: '500' }}>Automatischer Login in der Erweiterung</p>
-              <p>
-                Deine Sitzung wird automatisch mit der Vintamie Chrome/Firefox-Extension synchronisiert, solange du im selben Browser auf dieser Seite eingeloggt bist. Du musst dich in der Extension nicht separat anmelden!
-              </p>
-            </div>
+          <div style={{ display: 'flex', gap: '0.5rem', fontSize: '0.85rem', color: 'var(--text-secondary)', lineHeight: '1.4' }}>
+            <Globe size={18} style={{ color: 'var(--primary)', flexShrink: 0, marginTop: '2px' }} />
+            <p>
+              Deine Sitzung wird automatisch mit der Vintamie Browser-Extension synchronisiert. Kein separater Login in der Erweiterung nötig.
+            </p>
           </div>
         </div>
 
         {/* Danger Zone */}
-        <div style={{ borderTop: '1px solid var(--glass-border)', paddingTop: '1.5rem', marginTop: '2rem' }}>
+        <div style={{ borderTop: '1px solid var(--glass-border)', paddingTop: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
           <button
             onClick={onLogout}
-            className="btn btn-danger"
-            style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem' }}
+            className="btn btn-secondary"
+            style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem', borderColor: 'var(--glass-border)' }}
           >
             <LogOut size={18} />
             Abmelden (Logout)
           </button>
+
+          {showConfirm ? (
+            <div className="glass-card fade-in" style={{ padding: '1rem', border: '1px solid rgba(239, 68, 68, 0.3)', background: 'rgba(239, 68, 68, 0.05)', display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+              <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', color: '#fca5a5', fontSize: '0.9rem', fontWeight: '600' }}>
+                <AlertTriangle size={18} />
+                <span>Account wirklich löschen?</span>
+              </div>
+              <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', margin: 0, lineHeight: '1.4' }}>
+                Diese Aktion löscht unwiderruflich deinen Account, alle gespeicherten Entwürfe auf dem Server und deine Google-Verknüpfung.
+              </p>
+              <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.25rem' }}>
+                <button
+                  onClick={handleDeleteAccount}
+                  disabled={deleting}
+                  className="btn btn-danger"
+                  style={{ flex: 1, padding: '0.4rem 0.8rem', minHeight: '38px', fontSize: '0.85rem' }}
+                >
+                  {deleting ? 'Löscht...' : 'Ja, löschen'}
+                </button>
+                <button
+                  onClick={() => setShowConfirm(false)}
+                  disabled={deleting}
+                  className="btn btn-secondary"
+                  style={{ flex: 1, padding: '0.4rem 0.8rem', minHeight: '38px', fontSize: '0.85rem' }}
+                >
+                  Abbrechen
+                </button>
+              </div>
+              {error && (
+                <span style={{ fontSize: '0.75rem', color: '#fca5a5', textAlign: 'center' }}>{error}</span>
+              )}
+            </div>
+          ) : (
+            <button
+              onClick={() => setShowConfirm(true)}
+              className="btn btn-danger"
+              style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem' }}
+            >
+              <Trash2 size={18} />
+              Account löschen
+            </button>
+          )}
         </div>
 
       </div>

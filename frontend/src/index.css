@@ -434,3 +434,89 @@ select.form-control {
   color: #fca5a5;
   border-color: rgba(239, 68, 68, 0.15);
 }
+
+/* Responsive Form Grid & Panel Padding */
+.form-grid-2col {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+}
+
+.detail-panel {
+  padding: 1.5rem;
+}
+
+@media (max-width: 480px) {
+  .form-grid-2col {
+    grid-template-columns: 1fr;
+  }
+  .detail-panel {
+    padding: 1rem;
+  }
+}
+
+/* AI Analysis Loader Custom Animated Logo Styles */
+@keyframes orbitRotate {
+  0% {
+    transform: rotate(0deg);
+  }
+  100% {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes hangerFloat {
+  0%, 100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-8px);
+  }
+}
+
+@keyframes sparkleShimmer {
+  0%, 100% {
+    opacity: 0.3;
+    transform: scale(0.8) translate(0, 0);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.2) translate(-5%, -5%);
+  }
+}
+
+@keyframes corePulse {
+  0% {
+    transform: scale(0.95);
+    filter: drop-shadow(0 0 4px var(--primary-glow));
+  }
+  100% {
+    transform: scale(1.05);
+    filter: drop-shadow(0 0 15px rgba(9, 176, 183, 0.8));
+  }
+}
+
+.anim-orbit {
+  transform-origin: 256px 256px;
+  animation: orbitRotate 12s linear infinite;
+}
+
+.anim-hanger {
+  transform-origin: 256px 256px;
+  animation: hangerFloat 3s ease-in-out infinite;
+}
+
+.anim-sparkle-1 {
+  transform-origin: 400px 100px;
+  animation: sparkleShimmer 2s ease-in-out infinite;
+}
+
+.anim-sparkle-2 {
+  transform-origin: 100px 320px;
+  animation: sparkleShimmer 2s ease-in-out infinite 1s;
+}
+
+.anim-core {
+  transform-origin: 256px 275px;
+  animation: corePulse 1.5s ease-in-out infinite alternate;
+}
