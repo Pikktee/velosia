@@ -2576,9 +2576,7 @@ select.form-control {
   list-style: none;
   padding: 0;
   margin: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 0.65rem;
+  display: block; /* Block layout ensures list width is strictly bound to container */
 }
 
 .SwipeableList-item {
@@ -2586,11 +2584,10 @@ select.form-control {
   contain: content;
   border-radius: var(--radius-md);
   background-color: transparent; /* Changed from var(--danger) to prevent shining through glassmorphism */
-  margin-bottom: 0.25rem;
+  margin-bottom: 0.65rem; /* Replaces the flex gap spacing */
   transition: opacity 0.25s ease;
   width: 100%;
   max-width: 100%;
-  min-width: 0; /* Prevents flexbox items from expanding beyond container width */
   overflow: hidden;
   container-type: inline-size; /* Enable Container Queries context */
 }
