@@ -271,7 +271,7 @@ export default function DraftDetail({ draft, onBack, onUpdateSuccess }) {
         </div>
         
         {isAndroidApp ? (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', width: '100%' }}>
             <button 
               className="btn btn-vinted" 
               onClick={() => handlePostInApp('vinted')}
@@ -288,7 +288,7 @@ export default function DraftDetail({ draft, onBack, onUpdateSuccess }) {
             </button>
           </div>
         ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem', width: '100%' }}>
             {/* Extension Guidance Info */}
             <div style={{ display: 'flex', gap: '0.5rem', background: 'rgba(255,255,255,0.02)', padding: '0.75rem', borderRadius: 'var(--radius-sm)', fontSize: '0.825rem', border: '1px solid var(--glass-border)', color: 'var(--text-secondary)' }}>
               <Monitor size={16} style={{ color: 'var(--primary)', flexShrink: 0, marginTop: '0.15rem' }} />
@@ -636,7 +636,7 @@ export default function DraftDetail({ draft, onBack, onUpdateSuccess }) {
             {renderPriceComparison()}
           </div>
         ) : (
-          <div className="fade-in">
+          <div className="fade-in" style={{ width: '100%' }}>
             {renderPublishingAssist()}
           </div>
         )}

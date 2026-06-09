@@ -1151,6 +1151,7 @@ select.form-control {
   padding: 0;
   margin-bottom: 2rem;
   box-sizing: border-box;
+  width: 100%;
 }
 
 .detail-section-title {
