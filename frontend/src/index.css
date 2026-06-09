@@ -983,6 +983,7 @@ select.form-control {
   padding-top: 0 !important;
   padding-bottom: 0 !important;
   max-width: 100% !important;
+  width: 100% !important;
 }
 
 /* Sticky Tinder-style Detail Header */
