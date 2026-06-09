@@ -1140,6 +1140,15 @@ select.form-control {
   width: 100%;
 }
 
+@media (max-width: 480px) {
+  .detail-header-inner {
+    padding: 0 0.75rem;
+  }
+  .detail-content-container {
+    padding: 1rem 0.75rem;
+  }
+}
+
 .spin-animation {
   animation: spin 1.5s linear infinite;
 }

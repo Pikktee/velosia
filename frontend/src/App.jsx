@@ -365,8 +365,11 @@ export default function App() {
         <div 
           className={`container ${view === 'list' && drafts.length === 0 ? 'empty-state-container' : ''}`}
           style={{ 
-            paddingTop: '1rem', 
-            paddingBottom: view === 'list' && drafts.length === 0 ? 'calc(75px + env(safe-area-inset-bottom, 0px))' : 'calc(80px + env(safe-area-inset-bottom, 0px))' 
+            paddingTop: view === 'detail' ? '0' : '1rem', 
+            paddingBottom: view === 'list' && drafts.length === 0 ? 'calc(75px + env(safe-area-inset-bottom, 0px))' : 'calc(80px + env(safe-area-inset-bottom, 0px))',
+            paddingLeft: view === 'detail' ? '0' : undefined,
+            paddingRight: view === 'detail' ? '0' : undefined,
+            maxWidth: view === 'detail' ? '100%' : undefined
           }}
         >
           {view === 'capture' && (

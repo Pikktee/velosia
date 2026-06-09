@@ -263,7 +263,7 @@ export default function DraftDetail({ draft, onBack, onUpdateSuccess }) {
   const renderPublishingAssist = () => {
     return (
       <div className="detail-section-unboxed">
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid var(--glass-border)', paddingBottom: '0.5rem', marginBottom: '1.25rem' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid var(--glass-border)', paddingBottom: '0.5rem', marginBottom: '1.25rem', width: '100%' }}>
           <h3 className="detail-section-title" style={{ borderBottom: 'none', margin: 0, paddingBottom: 0 }}>
             <Share2 size={18} style={{ color: 'var(--primary)' }} />
             <span>Veröffentlichen</span>
