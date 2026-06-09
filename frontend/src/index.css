@@ -2514,7 +2514,6 @@ select.form-control {
 }
 
 .stepper-item.active {
-  transform: translateX(4px);
   opacity: 1;
 }
 
@@ -2529,6 +2528,7 @@ select.form-control {
   color: var(--text-primary);
   font-weight: 600;
   text-shadow: 0 0 8px rgba(9, 176, 183, 0.12);
+  transform: translateX(4px);
 }
 
 .stepper-item.pending {
@@ -2549,6 +2549,7 @@ select.form-control {
   font-size: 0.875rem;
   line-height: 1.4;
   transition: all 0.3s ease;
+  display: inline-block;
 }
 
 .stepper-progress-bar {
