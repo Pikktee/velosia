@@ -976,6 +976,15 @@ select.form-control {
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  padding-bottom: 0 !important;
+}
+
+.app-shell.detail-mode .app-main > div > .fade-in {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
 }
 
 .app-shell.detail-mode .app-main .container {
