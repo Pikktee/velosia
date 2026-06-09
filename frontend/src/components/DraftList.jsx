@@ -181,10 +181,10 @@ function DraftListItem({ draft, onSelect, onDelete }) {
     }
 
     // Capping left swipe to prevent stretching over full width:
-    // Max swipe is -120px. Dragging past it has rubber-band resistance
-    if (newOffset < -120) {
-      const excess = newOffset + 120;
-      newOffset = -120 + excess * 0.35; // Apply damping resistance
+    // Max swipe is -100px. Dragging past it has tight rubber-band resistance
+    if (newOffset < -100) {
+      const excess = newOffset + 100;
+      newOffset = -100 + excess * 0.1; // Apply high damping resistance
     }
 
     setSwipeOffset(newOffset);
