@@ -2570,56 +2570,21 @@ select.form-control {
   box-shadow: 0 0 8px var(--primary-glow);
 }
 
-/* --- Swipeable List & Material Design 3 List Item Styles --- */
+/* --- Vintamie Offers List Card Styles --- */
 
 .SwipeableList {
   list-style: none;
   padding: 0;
   margin: 0;
-  display: block; /* Block layout ensures list width is strictly bound to container */
-}
-
-.SwipeableList-item {
-  position: relative;
-  contain: content;
-  border-radius: var(--radius-md);
-  background-color: transparent; /* Changed from var(--danger) to prevent shining through glassmorphism */
-  margin-bottom: 0.65rem; /* Replaces the flex gap spacing */
-  transition: opacity 0.25s ease;
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
   width: 100%;
-  max-width: 100%;
-  overflow: hidden;
-  container-type: inline-size; /* Enable Container Queries context */
+  box-sizing: border-box;
 }
 
-/* Scroll snap container track */
-.SwipeableList-item.is-initialized .SwipeableList-track {
-  display: block;
-  white-space: nowrap;
-  font-size: 0;
-  overflow-x: auto;
-  overflow-y: hidden;
-  overscroll-behavior-x: none;
-  scrollbar-width: none;
-  scroll-snap-type: x mandatory;
-  border-radius: var(--radius-md);
-  width: 100%;
-  max-width: 100%;
-}
-
-.SwipeableList-item.is-initialized .SwipeableList-track::-webkit-scrollbar {
-  display: none;
-}
-
-/* Main card content */
-.SwipeableList-content {
-  display: inline-block;
-  vertical-align: top;
-  white-space: normal;
-  font-size: 1rem;
+.draft-list-item-card {
   position: relative;
-  z-index: 3;
-  scroll-snap-align: start;
   background: var(--glass-bg);
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
@@ -2627,76 +2592,21 @@ select.form-control {
   border-radius: var(--radius-md);
   box-shadow: var(--shadow-sm);
   transition: border-color 0.25s ease, box-shadow 0.25s ease, transform 0.15s cubic-bezier(0.4, 0, 0.2, 1), background-color 0.25s ease;
-  width: 100cqw; /* Bounded strictly to container width using Container Queries */
-  max-width: 100cqw;
-  box-sizing: border-box; /* Crucial to include borders in 100% width calculations */
+  width: 100%;
+  box-sizing: border-box;
+  cursor: pointer;
+  overflow: hidden;
 }
 
-.SwipeableList-content:hover {
+.draft-list-item-card:hover {
   border-color: rgba(255, 255, 255, 0.12);
   box-shadow: var(--shadow-md);
 }
 
-.SwipeableList-content:active {
+.draft-list-item-card:active {
   transform: scale(0.985);
   background: rgba(25, 30, 42, 0.65);
   border-color: rgba(9, 176, 183, 0.25);
-  box-shadow: var(--shadow-sm);
-}
-
-.SwipeableList-spacer {
-  display: inline-block;
-  vertical-align: top;
-  white-space: normal;
-  font-size: 1rem;
-  scroll-snap-align: start;
-  background-color: transparent; /* Transparent to let red absolute element below shine through */
-  z-index: 2;
-  width: 100cqw; /* Bounded strictly to container width using Container Queries */
-  max-width: 100cqw;
-}
-
-/* Stationary background action icon */
-.SwipeableList-action-icon {
-  position: absolute;
-  z-index: 1;
-  pointer-events: none;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: scale 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275), opacity 0.2s ease;
-}
-
-.SwipeableList-action-icon.right-action {
-  right: 0;
-  top: 0;
-  bottom: 0;
-  width: 80px;
-  background-color: var(--danger); /* Red action container revealed on swipe */
-  border-radius: 0 var(--radius-md) var(--radius-md) 0;
-}
-
-/* Icon visual feedback state (pops slightly when past activation threshold) */
-.SwipeableList-item.is-activating .SwipeableList-action-icon {
-  scale: 1.35;
-}
-
-/* Layout collapsing animation styles */
-.SwipeableList-item.is-removing {
-  pointer-events: none;
-  opacity: 0.5;
-  transition: height 0.25s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.25s ease, margin 0.25s ease;
-}
-
-.SwipeableList-item.is-removing .SwipeableList-action-icon {
-  scale: 0.5;
-  opacity: 0;
-}
-
-/* Draft List Item Detail Layout */
-.draft-list-item-content {
-  cursor: pointer;
-  width: 100%;
 }
 
 .draft-list-item-main {
@@ -2705,10 +2615,8 @@ select.form-control {
   gap: 1rem;
   padding: 0.75rem 1rem;
   min-height: 84px;
-  width: 100%;
-  max-width: 100%;
-  min-width: 0;
   box-sizing: border-box;
+  width: 100%;
 }
 
 .draft-list-item-thumb-container {
@@ -2729,13 +2637,13 @@ select.form-control {
   transition: transform 0.3s ease;
 }
 
-.SwipeableList-content:hover .draft-list-item-thumb {
+.draft-list-item-card:hover .draft-list-item-thumb {
   transform: scale(1.05);
 }
 
 .draft-list-item-details {
   flex: 1;
-  min-width: 0; /* Ensures truncation works */
+  min-width: 0; /* Ensures truncation works by allowing flex item to shrink */
 }
 
 .draft-list-item-title {
@@ -2750,7 +2658,7 @@ select.form-control {
   overflow: hidden;
   text-overflow: ellipsis;
   line-height: 1.25;
-  white-space: normal; /* Allow wrapping so browser has dynamic space calculation basis */
+  white-space: normal;
   max-width: 100%;
 }
 
@@ -2847,7 +2755,7 @@ select.form-control {
   transition: transform 0.25s ease, color 0.25s ease;
 }
 
-.SwipeableList-content:hover .draft-list-item-arrow {
+.draft-list-item-card:hover .draft-list-item-arrow {
   transform: translateX(3px);
   color: var(--text-secondary);
   opacity: 0.85;
@@ -2875,13 +2783,6 @@ select.form-control {
 }
 
 /* --- Vintamie Mobile Layout Optimizations --- */
-
-@media (max-width: 768px) {
-  /* Hide delete button on mobile since swipe-to-delete is primary */
-  .draft-list-item-delete-btn {
-    display: none !important;
-  }
-}
 
 @media (max-width: 480px) {
   .draft-list-item-main {
