@@ -136,7 +136,7 @@ export default function Settings({ user, onLogout, onUpdateUser }) {
                   <span>Konto &amp; Sitzung</span>
                 </h3>
                 
-                <div className="profile-header-info" style={{ marginBottom: 0, paddingBottom: 0 }}>
+                <div className="profile-header-info" style={{ marginBottom: '0.25rem' }}>
                   <div className="profile-avatar-wrapper">
                     <User size={26} />
                   </div>
