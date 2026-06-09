@@ -51,23 +51,13 @@ body {
   -moz-osx-font-smoothing: grayscale;
 }
 
-/* Scrollbar customization */
+/* Hide scrollbars globally for native mobile app feel */
+* {
+  scrollbar-width: none; /* Firefox */
+}
+
 ::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
-}
-
-::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.1);
-  border-radius: 99px;
-}
-
-::-webkit-scrollbar-thumb:hover {
-  background: var(--primary);
+  display: none; /* Chrome, Safari, Edge, Android WebView */
 }
 
 /* Typography */
@@ -977,6 +967,17 @@ select.form-control {
   display: none !important;
 }
 
+.app-shell.detail-mode .app-main {
+  overflow-y: hidden;
+}
+
+.app-shell.detail-mode .app-main > div {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
 .app-shell.detail-mode .app-main .container {
   padding-left: 0 !important;
   padding-right: 0 !important;
@@ -986,10 +987,9 @@ select.form-control {
   width: 100% !important;
 }
 
-/* Sticky Tinder-style Detail Header */
+/* Sticky Tinder-style Detail Header (now fixed, not sticky) */
 .detail-sticky-header {
-  position: sticky;
-  top: 0;
+  flex-shrink: 0;
   z-index: 100;
   background: #0e121a;
   border-bottom: 1px solid rgba(255, 255, 255, 0.08);
@@ -1139,6 +1139,11 @@ select.form-control {
   padding-bottom: calc(3rem + env(safe-area-inset-bottom, 0px)) !important;
   box-sizing: border-box;
   width: 100%;
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  overscroll-behavior-y: contain;
+  -webkit-overflow-scrolling: touch;
 }
 
 @media (max-width: 480px) {
