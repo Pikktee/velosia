@@ -123,6 +123,7 @@ function DraftListItem({ draft, onSelect, onDelete }) {
   
   const itemRef = useRef(null);
   const cardRef = useRef(null);
+  const hasSwiped = useRef(false);
 
   const formatDate = (dateString) => {
     const d = new Date(dateString);
@@ -137,7 +138,9 @@ function DraftListItem({ draft, onSelect, onDelete }) {
     if (isDeleting) return;
     setStartX(e.touches[0].clientX);
     setStartY(e.touches[0].clientY);
+    setSwipeOffset(0);
     setIsSwiping(true);
+    hasSwiped.current = false;
   };
 
   const handleTouchMove = (e) => {
@@ -152,6 +155,17 @@ function DraftListItem({ draft, onSelect, onDelete }) {
       setIsSwiping(false);
       setSwipeOffset(0);
       return;
+    }
+
+    // Prevent default browser scrolling/navigation if swiping horizontally
+    if (Math.abs(diffX) > Math.abs(diffY) && Math.abs(diffX) > 5) {
+      if (e.cancelable) {
+        e.preventDefault();
+      }
+    }
+
+    if (Math.abs(diffX) > 10) {
+      hasSwiped.current = true;
     }
 
     // Only allow swiping to the left (negative offset)
@@ -172,6 +186,12 @@ function DraftListItem({ draft, onSelect, onDelete }) {
     } else {
       setSwipeOffset(0);
     }
+  };
+
+  const handleTouchCancel = () => {
+    if (isDeleting) return;
+    setIsSwiping(false);
+    setSwipeOffset(0);
   };
 
   const triggerDelete = () => {
@@ -208,6 +228,17 @@ function DraftListItem({ draft, onSelect, onDelete }) {
     }
   };
 
+  const handleClick = (e) => {
+    if (isDeleting) return;
+    if (hasSwiped.current) {
+      e.preventDefault();
+      e.stopPropagation();
+      hasSwiped.current = false;
+      return;
+    }
+    onSelect(draft);
+  };
+
   return (
     <li 
       ref={itemRef}
@@ -215,6 +246,7 @@ function DraftListItem({ draft, onSelect, onDelete }) {
       onTouchStart={handleTouchStart}
       onTouchMove={handleTouchMove}
       onTouchEnd={handleTouchEnd}
+      onTouchCancel={handleTouchCancel}
     >
       {/* Background delete action (red bar with stationary trash icon) */}
       <div className="draft-list-item-swipe-bg">
@@ -227,7 +259,7 @@ function DraftListItem({ draft, onSelect, onDelete }) {
       <div 
         ref={cardRef}
         className="draft-list-item-card"
-        onClick={() => !isDeleting && onSelect(draft)}
+        onClick={handleClick}
         style={{
           transform: `translateX(${swipeOffset}px)`,
           transition: isSwiping ? 'none' : 'transform 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275)'

@@ -2587,6 +2587,7 @@ select.form-control {
   position: relative;
   width: 100%;
   box-sizing: border-box;
+  touch-action: pan-y;
 }
 
 .draft-list-item-swipe-bg {
@@ -2614,6 +2615,7 @@ select.form-control {
 
 .draft-list-item-card {
   position: relative;
+  z-index: 2;
   background: var(--glass-bg);
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
@@ -2625,6 +2627,7 @@ select.form-control {
   box-sizing: border-box;
   cursor: pointer;
   overflow: hidden;
+  touch-action: pan-y;
 }
 
 .draft-list-item-card:hover {
