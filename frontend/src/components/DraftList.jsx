@@ -98,9 +98,6 @@ export default function DraftList({ drafts, onSelectDraft, onDeleteDraft }) {
         <h2 className="page-title">
           Deine Angebote <span className="drafts-count-badge">{drafts.length}</span>
         </h2>
-        <span style={{ fontSize: '0.725rem', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
-          <span>Wische zum Löschen</span>
-        </span>
       </div>
 
       <ul className="SwipeableList">
