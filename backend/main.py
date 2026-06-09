@@ -71,7 +71,7 @@ def run_migrations():
 
 run_migrations()
 
-app = FastAPI(title="Vintamie API", version="2.3.05")
+app = FastAPI(title="Vintamie API", version="2.3.06")
 
 UPLOAD_DIR = "/data/uploads" if os.path.isdir("/data") else "uploads"
 os.makedirs(UPLOAD_DIR, exist_ok=True)
@@ -180,13 +180,13 @@ def delete_my_account(
             try:
                 paths = json.loads(draft.image_paths)
                 for path in paths:
-                    relative_path = path.lstrip("/")
+                    relative_path = os.path.join(UPLOAD_DIR, os.path.basename(path))
                     if os.path.exists(relative_path):
                         os.remove(relative_path)
             except Exception as e:
                 print(f"Error removing image files for draft {draft.id}: {e}", flush=True)
         elif draft.image_path:
-            relative_path = draft.image_path.lstrip("/")
+            relative_path = os.path.join(UPLOAD_DIR, os.path.basename(draft.image_path))
             if os.path.exists(relative_path):
                 try:
                     os.remove(relative_path)
@@ -417,13 +417,13 @@ def delete_draft(
         try:
             paths = json.loads(db_draft.image_paths)
             for path in paths:
-                relative_path = path.lstrip("/")
+                relative_path = os.path.join(UPLOAD_DIR, os.path.basename(path))
                 if os.path.exists(relative_path):
                     os.remove(relative_path)
         except Exception as e:
             print(f"Error removing image files: {e}")
     elif db_draft.image_path:
-        relative_path = db_draft.image_path.lstrip("/")
+        relative_path = os.path.join(UPLOAD_DIR, os.path.basename(db_draft.image_path))
         if os.path.exists(relative_path):
             try:
                 os.remove(relative_path)
@@ -524,7 +524,7 @@ def delete_draft_image(
 
     existing_paths.remove(image_path)
     
-    local_path = image_path.lstrip("/")
+    local_path = os.path.join(UPLOAD_DIR, os.path.basename(image_path))
     if os.path.exists(local_path):
         try:
             os.remove(local_path)
@@ -546,7 +546,7 @@ def regenerate_draft_field_endpoint(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user)
 ):
-    if req.field not in ["title", "description", "category"]:
+    if req.field not in ["title", "description"]:
         raise HTTPException(status_code=400, detail="Ungültiges Feld zur Regeneration.")
 
     db_draft = db.query(models.Draft).filter(
@@ -560,12 +560,12 @@ def regenerate_draft_field_endpoint(
     if db_draft.image_paths:
         try:
             paths = json.loads(db_draft.image_paths)
-            image_paths = [p.lstrip("/") for p in paths]
+            image_paths = [os.path.join(UPLOAD_DIR, os.path.basename(p)) for p in paths]
         except Exception:
             if db_draft.image_path:
-                image_paths = [db_draft.image_path.lstrip("/")]
+                image_paths = [os.path.join(UPLOAD_DIR, os.path.basename(db_draft.image_path))]
     elif db_draft.image_path:
-        image_paths = [db_draft.image_path.lstrip("/")]
+        image_paths = [os.path.join(UPLOAD_DIR, os.path.basename(db_draft.image_path))]
 
     if not image_paths:
         raise HTTPException(status_code=400, detail="Keine Bilder im Angebot vorhanden, um KI-Generierung auszuführen.")
@@ -580,8 +580,6 @@ def regenerate_draft_field_endpoint(
         db_draft.title = new_val
     elif req.field == "description":
         db_draft.description = new_val
-    elif req.field == "category":
-        db_draft.category = new_val
 
     db.commit()
     db.refresh(db_draft)
@@ -714,7 +712,7 @@ def delete_bug_report(
         raise HTTPException(status_code=404, detail="Bug Report wurde nicht gefunden.")
     
     if db_bug.screenshot_path:
-        local_path = db_bug.screenshot_path.lstrip("/")
+        local_path = os.path.join(UPLOAD_DIR, os.path.basename(db_bug.screenshot_path))
         if os.path.exists(local_path):
             try:
                 os.remove(local_path)

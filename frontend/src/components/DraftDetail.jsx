@@ -170,8 +170,6 @@ export default function DraftDetail({ draft, onBack, onUpdateSuccess }) {
         setTitle(updated.title || '');
       } else if (field === 'description') {
         setDescription(updated.description || '');
-      } else if (field === 'category') {
-        setCategory(updated.category || 'Sonstiges');
       }
       onUpdateSuccess(updated);
     } catch (err) {
@@ -480,9 +478,11 @@ export default function DraftDetail({ draft, onBack, onUpdateSuccess }) {
               disabled={regeneratingField !== null || allImages.length === 0}
               title={allImages.length === 0 ? "Bilder hinzufügen, um Titel per KI zu generieren" : "Titel per KI neu generieren"}
             >
-              <RefreshCw size={11} style={{ animation: regeneratingField === 'title' ? 'spin 1.5s linear infinite' : 'none', marginRight: '0.15rem' }} />
-              <Sparkles size={11} style={{ display: regeneratingField === 'title' ? 'none' : 'inline' }} />
-              <span>KI</span>
+              {regeneratingField === 'title' ? (
+                <RefreshCw size={11} className="spin-animation" />
+              ) : (
+                <Sparkles size={11} />
+              )}
             </button>
           </div>
           <input 
@@ -520,25 +520,12 @@ export default function DraftDetail({ draft, onBack, onUpdateSuccess }) {
           <div>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem', flexWrap: 'wrap', gap: '0.5rem' }}>
               <label htmlFor="edit-category" style={{ marginBottom: 0 }}>Kategorie</label>
-              <button 
-                type="button"
-                className="ki-regen-btn"
-                onClick={() => handleRegenerateField('category')}
-                disabled={regeneratingField !== null || allImages.length === 0}
-                title={allImages.length === 0 ? "Bilder hinzufügen, um Kategorie per KI zu bestimmen" : "Kategorie per KI neu bestimmen"}
-              >
-                <RefreshCw size={11} style={{ animation: regeneratingField === 'category' ? 'spin 1.5s linear infinite' : 'none', marginRight: '0.15rem' }} />
-                <Sparkles size={11} style={{ display: regeneratingField === 'category' ? 'none' : 'inline' }} />
-                <span>KI</span>
-              </button>
             </div>
             <select 
               id="edit-category" 
               className="form-control" 
               value={category} 
               onChange={(e) => setCategory(e.target.value)}
-              disabled={regeneratingField === 'category'}
-              style={{ opacity: regeneratingField === 'category' ? 0.6 : 1 }}
             >
               {categories.map((cat) => (
                 <option key={cat} value={cat}>{cat}</option>
@@ -572,9 +559,11 @@ export default function DraftDetail({ draft, onBack, onUpdateSuccess }) {
               disabled={regeneratingField !== null || allImages.length === 0}
               title={allImages.length === 0 ? "Bilder hinzufügen, um Beschreibung per KI zu generieren" : "Beschreibung per KI neu generieren"}
             >
-              <RefreshCw size={11} style={{ animation: regeneratingField === 'description' ? 'spin 1.5s linear infinite' : 'none', marginRight: '0.15rem' }} />
-              <Sparkles size={11} style={{ display: regeneratingField === 'description' ? 'none' : 'inline' }} />
-              <span>KI</span>
+              {regeneratingField === 'description' ? (
+                <RefreshCw size={11} className="spin-animation" />
+              ) : (
+                <Sparkles size={11} />
+              )}
             </button>
           </div>
           <textarea 

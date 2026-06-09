@@ -263,18 +263,6 @@ def regenerate_draft_field(image_paths: List[str], field: str, user = None) -> s
                 "Erwähne wichtige Details wie Zustand, Farbe und Besonderheiten. Füge KEINE Hashtags hinzu. "
                 "Gib AUSSCHLIESSLICH die Beschreibung zurück, ohne Einleitung, ohne zusätzliche Kommentare, ohne Markdown."
             )
-        elif field == "category":
-            category_pref = getattr(user, "default_category", "") or ""
-            category_instruction = ""
-            if category_pref and category_pref != "Keine Präferenz":
-                category_instruction = f" Bevorzuge dabei die Kategorie '{category_pref}', falls diese zum Artikel passt."
-            
-            prompt = (
-                "Analysiere diese Fotos eines Artikels. Wähle die passendste Hauptkategorie auf Deutsch aus. "
-                "Wähle exakt einen dieser Werte: 'Damenbekleidung', 'Herrenbekleidung', 'Kinder', 'Haus & Garten', 'Elektronik', "
-                f"'Bücher & Medien', 'Sonstiges'.{category_instruction} "
-                "Gib AUSSCHLIESSLICH den genauen Kategorienamen als Text zurück, ohne Anführungszeichen, ohne Einleitung."
-            )
         else:
             raise ValueError(f"Ungültiges Feld zur Regeneration: {field}")
 
