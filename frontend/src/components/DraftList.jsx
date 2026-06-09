@@ -1,4 +1,5 @@
 import React, { useRef, useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { Tag, Sparkles, Trash2, Calendar, ShoppingBag, Camera, FolderHeart, ChevronRight } from 'lucide-react';
 import { getImageUrl } from '../utils/api';
 
@@ -150,6 +151,7 @@ function DraftListItem({ draft, onSelect, onDelete }) {
   const [swipeOffset, setSwipeOffset] = useState(0);
   const [isSwiping, setIsSwiping] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [showConfirm, setShowConfirm] = useState(false);
   
   const itemRef = useRef(null);
   const cardRef = useRef(null);
@@ -291,13 +293,23 @@ function DraftListItem({ draft, onSelect, onDelete }) {
 
   const handleDeleteClick = (e) => {
     e.stopPropagation();
-    if (confirm('Möchtest du dieses Angebot wirklich löschen?')) {
-      triggerDelete();
-    } else {
-      // Close swipe on cancel
-      setSwipeOffset(0);
-      currentRestOffset.current = 0;
+    setShowConfirm(true);
+  };
+
+  const handleConfirmDelete = () => {
+    setShowConfirm(false);
+    triggerDelete();
+  };
+
+  const handleCancelDelete = (e) => {
+    if (e) {
+      e.preventDefault();
+      e.stopPropagation();
     }
+    setShowConfirm(false);
+    // Snap closed
+    setSwipeOffset(0);
+    currentRestOffset.current = 0;
   };
 
   const handleClick = (e) => {
@@ -394,6 +406,21 @@ function DraftListItem({ draft, onSelect, onDelete }) {
           </div>
         </div>
       </div>
+
+      {/* Custom Confirmation Modal Portal */}
+      {showConfirm && createPortal(
+        <div className="confirm-modal-overlay" onClick={handleCancelDelete}>
+          <div className="confirm-modal-card" onClick={(e) => e.stopPropagation()}>
+            <h3>Angebot löschen?</h3>
+            <p>Möchtest du dieses Angebot wirklich dauerhaft löschen?</p>
+            <div className="confirm-modal-buttons">
+              <button className="confirm-btn-cancel" onClick={handleCancelDelete}>Abbrechen</button>
+              <button className="confirm-btn-delete" onClick={handleConfirmDelete}>Löschen</button>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
     </li>
   );
 }
