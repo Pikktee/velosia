@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Camera, FolderHeart, Sparkles, User, Cloud, HelpCircle } from 'lucide-react';
+import { Camera, FolderHeart, Sparkles, User, Cloud, HelpCircle, Rocket } from 'lucide-react';
 import CameraCapture from './components/CameraCapture';
 import DraftList from './components/DraftList';
 import DraftDetail from './components/DraftDetail';
@@ -10,7 +10,7 @@ import Settings from './components/Settings';
 import LandingPage from './components/LandingPage';
 import BugReportModal from './components/BugReportModal';
 import IssueManagement from './components/IssueManagement';
-import { getDrafts, deleteDraft, isAuthenticated, setAuthToken, getMe, uploadAndAnalyze } from './utils/api';
+import { getDrafts, deleteDraft, isAuthenticated, setAuthToken, getMe, uploadAndAnalyze, uploadTurbo } from './utils/api';
 
 
 export default function App() {
@@ -29,6 +29,10 @@ export default function App() {
   const [tempAnalysisResult, setTempAnalysisResult] = useState(null);
   const [prevView, setPrevView] = useState('list');
   const [showBugReportModal, setShowBugReportModal] = useState(false);
+  const [turboMode, setTurboMode] = useState(false);
+  const [rocketLaunch, setRocketLaunch] = useState(false);
+  const [tempTurboResults, setTempTurboResults] = useState(null);
+  const longPressTimer = useRef(null);
 
 
   // Track previous view for closing camera/getting back
@@ -57,6 +61,7 @@ export default function App() {
         capturedImages.forEach(img => URL.revokeObjectURL(img.previewUrl));
         setCapturedImages([]);
         setAnalysisError(null);
+        setTurboMode(false);
         setView(prevView || 'list');
         return true;
       } else if (view === 'detail') {
@@ -205,12 +210,90 @@ export default function App() {
     }
   };
 
+  // --- Camera button: short tap = normal capture, long press = Turbo mode ---
+  const LONG_PRESS_MS = 450;
+
+  const openNormalCapture = () => {
+    setAnalysisError(null);
+    setTurboMode(false);
+    setView('capture');
+  };
+
+  const triggerTurboLaunch = () => {
+    if (navigator.vibrate) {
+      try { navigator.vibrate(40); } catch (e) { /* ignore */ }
+    }
+    setRocketLaunch(true);
+    setTimeout(() => {
+      setRocketLaunch(false);
+      setAnalysisError(null);
+      setTurboMode(true);
+      setView('capture');
+    }, 1100); // matches the rocket-fly animation duration
+  };
+
+  const startCameraPress = () => {
+    if (longPressTimer.current) clearTimeout(longPressTimer.current);
+    longPressTimer.current = setTimeout(() => {
+      longPressTimer.current = null;
+      triggerTurboLaunch();
+    }, LONG_PRESS_MS);
+  };
+
+  const endCameraPress = () => {
+    if (longPressTimer.current) {
+      // Released before the long-press threshold -> normal capture
+      clearTimeout(longPressTimer.current);
+      longPressTimer.current = null;
+      openNormalCapture();
+    }
+  };
+
+  const cancelCameraPress = () => {
+    if (longPressTimer.current) {
+      clearTimeout(longPressTimer.current);
+      longPressTimer.current = null;
+    }
+  };
+
+  const handleTurboUpload = async () => {
+    if (capturedImages.length === 0) return;
+
+    setAnalysisError(null);
+    setIsAnalysisFinished(false);
+    setTempAnalysisResult(null);
+    setTempTurboResults(null);
+    setView('analyzing');
+
+    const controller = new AbortController();
+    setAbortController(controller);
+
+    try {
+      const filesToSend = capturedImages.map(img => img.file);
+      const results = await uploadTurbo(filesToSend, controller.signal);
+
+      setTempTurboResults(results);
+      setIsAnalysisFinished(true);
+    } catch (err) {
+      if (err.name === 'AbortError') {
+        console.log("Turbo analysis cancelled by user.");
+        setView('capture');
+      } else {
+        console.error("Turbo analysis failed:", err);
+        setAnalysisError(err.message || 'Die Turbo-Analyse ist fehlgeschlagen. Versuche es erneut.');
+        setView('capture');
+      }
+      setAbortController(null);
+    }
+  };
+
   const handleUploadAndAnalyze = async (condition, details) => {
     if (capturedImages.length === 0) return;
 
     setAnalysisError(null);
     setIsAnalysisFinished(false);
     setTempAnalysisResult(null);
+    setTempTurboResults(null);
     setView('analyzing');
 
     const controller = new AbortController();
@@ -237,6 +320,21 @@ export default function App() {
   };
 
   const handleAnalysisLoaderComplete = () => {
+    // Turbo batch: multiple drafts created at once -> land back in the list
+    if (tempTurboResults) {
+      capturedImages.forEach(img => URL.revokeObjectURL(img.previewUrl));
+      setCapturedImages([]);
+      setAbortController(null);
+
+      setDrafts((prev) => [...tempTurboResults, ...prev]);
+      setTempTurboResults(null);
+      setIsAnalysisFinished(false);
+      setTurboMode(false);
+      setSelectedDraft(null);
+      setView('list');
+      return;
+    }
+
     if (!tempAnalysisResult) return;
 
     // Revoke preview URLs on success
@@ -344,8 +442,17 @@ export default function App() {
         <div className="header-actions">
           {view === 'capture' && (
             <div className="status-badge">
-              <Camera size={12} style={{ color: 'var(--primary)' }} />
-              <span>Fotos hinzufügen</span>
+              {turboMode ? (
+                <>
+                  <Rocket size={12} style={{ color: 'var(--secondary)' }} />
+                  <span>Turbo: alle Artikel fotografieren</span>
+                </>
+              ) : (
+                <>
+                  <Camera size={12} style={{ color: 'var(--primary)' }} />
+                  <span>Fotos hinzufügen</span>
+                </>
+              )}
             </div>
           )}
 
@@ -373,13 +480,16 @@ export default function App() {
             <CameraCapture
               selectedImages={capturedImages}
               setSelectedImages={setCapturedImages}
+              turbo={turboMode}
               onAnalysisStart={() => setView('specs')}
+              onTurboFinish={handleTurboUpload}
               analysisError={analysisError}
               onClearError={() => setAnalysisError(null)}
               onClose={() => {
                 capturedImages.forEach(img => URL.revokeObjectURL(img.previewUrl));
                 setCapturedImages([]);
                 setAnalysisError(null);
+                setTurboMode(false);
                 setView(prevView || 'list');
               }}
             />
@@ -394,10 +504,11 @@ export default function App() {
           )}
 
           {view === 'analyzing' && (
-            <AnalysisLoader 
+            <AnalysisLoader
               isFinished={isAnalysisFinished}
+              turbo={turboMode}
               onComplete={handleAnalysisLoaderComplete}
-              onCancel={handleCancelAnalysis} 
+              onCancel={handleCancelAnalysis}
             />
           )}
 
@@ -473,10 +584,12 @@ export default function App() {
             flexShrink: 0
           }}>
             <button
-              onClick={() => {
-                setAnalysisError(null);
-                setView('capture');
-              }}
+              onMouseDown={startCameraPress}
+              onMouseUp={endCameraPress}
+              onTouchStart={startCameraPress}
+              onTouchEnd={(e) => { e.preventDefault(); endCameraPress(); }}
+              onTouchCancel={cancelCameraPress}
+              onContextMenu={(e) => e.preventDefault()}
               style={{
                 width: '60px',
                 height: '60px',
@@ -489,15 +602,20 @@ export default function App() {
                 justifyContent: 'center',
                 boxShadow: '0 8px 20px rgba(9, 176, 183, 0.4)',
                 cursor: 'pointer',
+                userSelect: 'none',
+                WebkitUserSelect: 'none',
+                WebkitTouchCallout: 'none',
+                touchAction: 'manipulation',
                 transition: 'transform 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275), box-shadow 0.2s ease',
                 transform: view === 'capture' || view === 'analyzing' ? 'scale(1.15)' : 'scale(1)'
               }}
-              title="Neue Aufnahme"
+              title="Tippen für neue Aufnahme · Gedrückt halten für Turbo-Modus"
               onMouseEnter={(e) => {
                 e.currentTarget.style.transform = 'scale(1.2)';
                 e.currentTarget.style.boxShadow = '0 10px 25px rgba(9, 176, 183, 0.6)';
               }}
               onMouseLeave={(e) => {
+                cancelCameraPress();
                 e.currentTarget.style.transform = view === 'capture' || view === 'analyzing' ? 'scale(1.15)' : 'scale(1)';
                 e.currentTarget.style.boxShadow = '0 8px 20px rgba(9, 176, 183, 0.4)';
               }}
@@ -517,10 +635,24 @@ export default function App() {
         </nav>
       )}
 
+      {/* Turbo rocket launch animation (triggered by long-pressing the camera button) */}
+      {rocketLaunch && (
+        <div className="rocket-launch-overlay" aria-hidden="true">
+          <div className="rocket-vehicle">
+            <Rocket size={40} strokeWidth={2} />
+            <div className="rocket-trail" />
+          </div>
+          <div className="firework fw-1" />
+          <div className="firework fw-2" />
+          <div className="firework fw-3" />
+          <div className="firework fw-4" />
+        </div>
+      )}
+
       {showBugReportModal && (
-        <BugReportModal 
-          currentView={view} 
-          onClose={() => setShowBugReportModal(false)} 
+        <BugReportModal
+          currentView={view}
+          onClose={() => setShowBugReportModal(false)}
         />
       )}
     </div>

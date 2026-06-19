@@ -92,7 +92,7 @@ To release a new version, update version numbers in all configuration files, pus
 ## Agent Integration & Auto-Deployment
 
 > [!IMPORTANT]
-> **Aktueller Fokus:** Bis auf Weiteres soll ausschließlich die **Android-App** (`/android`) weiterentwickelt werden.
+> **Aktueller Fokus:** Die **Android-App** (der WebView-Wrapper) ist die primäre Zielplattform – alles muss reibungslos in der App laufen. Das bedeutet aber **nicht**, dass nur `/android` bearbeitet wird: Die App ist eine reine WebView-Hülle, die das React-Frontend lädt. Features wie Kamera-Erfassung (`getUserMedia` im Frontend) und KI-Logik (Backend) leben daher in `/frontend` und `/backend` und erscheinen automatisch in der App. Native Kotlin-Änderungen (`/android`) sind nur für echte Wrapper-Belange nötig (Autofill-Bridge, Datei-Chooser, Permissions, OTA-Update). Eine eigenständige Web-App wird perspektivisch nicht mehr aktiv beworben, da das automatisierte Einstellen bei Vinted/Kleinanzeigen zuverlässig nur über die App-WebView (bzw. die WebExtension auf Desktop/Firefox) funktioniert.
 
 > [!IMPORTANT]
 > Nach jedem erfolgreichen Ergebnis im Chat (z. B. dem Abschluss einer Feature-Implementierung oder Fehlerbehebung) muss der KI-Agent automatisch ein Git-Push und Deployment durch Ausführen des Skripts `./deploy.py` initiieren.

@@ -1,6 +1,6 @@
 import React, { useRef, useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { Tag, Sparkles, Trash2, Calendar, ShoppingBag, Camera, FolderHeart, ChevronRight } from 'lucide-react';
+import { Tag, Sparkles, Trash2, Calendar, ShoppingBag, Camera, FolderHeart, ChevronRight, Rocket } from 'lucide-react';
 import { getImageUrl } from '../utils/api';
 
 export default function DraftList({ drafts, isLoading, onSelectDraft, onDeleteDraft }) {
@@ -385,6 +385,12 @@ function DraftListItem({ draft, onSelect, onDelete }) {
                 <Calendar size={11} />
                 <span>{formatDate(draft.created_at)}</span>
               </span>
+              {draft.is_turbo && (
+                <span className="draft-list-item-badge turbo-badge">
+                  <Rocket size={11} />
+                  <span>Turbo</span>
+                </span>
+              )}
             </div>
           </div>
 

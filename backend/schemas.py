@@ -56,6 +56,7 @@ class DraftBase(BaseModel):
     sources: Optional[str] = None # JSON string: [{"title": "...", "price": 12.0, "url": "..."}]
     attributes: Optional[str] = None # JSON string: {"Größe": "M", "Marke": "Nike", ...}
     image_paths: Optional[str] = None
+    is_turbo: Optional[bool] = False
 
 class DraftCreate(DraftBase):
     pass

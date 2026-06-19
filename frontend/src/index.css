@@ -2756,6 +2756,13 @@ select.form-control {
   color: var(--primary);
 }
 
+.draft-list-item-badge.turbo-badge {
+  background: linear-gradient(135deg, rgba(236, 72, 153, 0.16), rgba(9, 176, 183, 0.14));
+  border: 1px solid rgba(236, 72, 153, 0.35);
+  color: var(--secondary);
+  font-weight: 600;
+}
+
 .draft-list-item-date {
   font-size: 0.7rem;
   color: var(--text-muted);
@@ -3090,6 +3097,93 @@ select.form-control {
     transform: scale(1);
     opacity: 1;
   }
+}
+
+/* --- Turbo mode rocket launch animation --- */
+.rocket-launch-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 300;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+.rocket-vehicle {
+  position: absolute;
+  bottom: 64px;
+  left: 50%;
+  color: var(--secondary);
+  transform: translateX(-50%);
+  filter: drop-shadow(0 0 12px rgba(236, 72, 153, 0.7));
+  animation: rocketFly 1.1s cubic-bezier(0.45, 0, 0.55, 1) forwards;
+}
+
+.rocket-vehicle svg {
+  display: block;
+  transform: rotate(45deg); /* lucide rocket points to upper-right; aim it straight up */
+}
+
+.rocket-trail {
+  position: absolute;
+  bottom: -44px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 6px;
+  height: 44px;
+  border-radius: 3px;
+  background: linear-gradient(to bottom, rgba(251, 191, 36, 0.9), rgba(236, 72, 153, 0));
+  animation: rocketTrailFlicker 0.12s ease-in-out infinite;
+}
+
+@keyframes rocketFly {
+  0% { transform: translateX(-50%) translateY(0) scale(1); opacity: 1; }
+  15% { transform: translateX(-50%) translateY(-12px) scale(1.05); opacity: 1; }
+  75% { opacity: 1; }
+  100% { transform: translateX(-50%) translateY(-92vh) scale(0.5); opacity: 0; }
+}
+
+@keyframes rocketTrailFlicker {
+  0%, 100% { opacity: 0.9; height: 44px; }
+  50% { opacity: 0.5; height: 32px; }
+}
+
+.firework {
+  position: absolute;
+  left: 50%;
+  top: 22%;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  opacity: 0;
+  transform: translate(-50%, -50%) scale(0);
+}
+
+.firework::before,
+.firework::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  box-shadow:
+    0 -22px 0 -4px currentColor,
+    0 22px 0 -4px currentColor,
+    -22px 0 0 -4px currentColor,
+    22px 0 0 -4px currentColor,
+    16px 16px 0 -5px currentColor,
+    -16px 16px 0 -5px currentColor,
+    16px -16px 0 -5px currentColor,
+    -16px -16px 0 -5px currentColor;
+}
+
+.firework.fw-1 { color: var(--secondary); top: 20%; left: 44%; animation: fireworkBurst 0.75s ease-out 0.5s forwards; }
+.firework.fw-2 { color: var(--primary);   top: 16%; left: 56%; animation: fireworkBurst 0.8s ease-out 0.62s forwards; }
+.firework.fw-3 { color: #fbbf24;          top: 26%; left: 52%; animation: fireworkBurst 0.7s ease-out 0.7s forwards; }
+.firework.fw-4 { color: var(--secondary); top: 12%; left: 48%; animation: fireworkBurst 0.85s ease-out 0.8s forwards; }
+
+@keyframes fireworkBurst {
+  0% { opacity: 1; transform: translate(-50%, -50%) scale(0.2); }
+  70% { opacity: 1; }
+  100% { opacity: 0; transform: translate(-50%, -50%) scale(1.9); }
 }
 
 

@@ -8,11 +8,12 @@ import shutil
 import uuid
 import json
 from typing import List
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import models
 import schemas
 from database import engine, get_db
-from services.gemini_service import analyze_item_image
+from services.gemini_service import analyze_item_image, group_images_by_offer
 from auth_utils import verify_password, get_password_hash, create_access_token, decode_access_token
 from google.oauth2 import id_token
 from google.auth.transport import requests as google_requests
@@ -48,6 +49,14 @@ def run_migrations():
         db.rollback()
         print(f"Migration note: attributes column might already exist. ({e})", flush=True)
 
+    try:
+        db.execute(text("ALTER TABLE drafts ADD COLUMN is_turbo BOOLEAN DEFAULT 0"))
+        db.commit()
+        print("Successfully ran migrations: added is_turbo column to drafts.", flush=True)
+    except Exception as e:
+        db.rollback()
+        print(f"Migration note: is_turbo column might already exist. ({e})", flush=True)
+
     # User settings migrations
     for col_name, col_type in [
         ("ai_tone", "VARCHAR(50) DEFAULT 'locker'"),
@@ -71,7 +80,7 @@ def run_migrations():
 
 run_migrations()
 
-app = FastAPI(title="Vintamie API", version="2.3.14")
+app = FastAPI(title="Vintamie API", version="2.3.15")
 
 UPLOAD_DIR = "/data/uploads" if os.path.isdir("/data") else "uploads"
 os.makedirs(UPLOAD_DIR, exist_ok=True)
@@ -354,6 +363,120 @@ def upload_and_analyze(
         raise HTTPException(status_code=500, detail=f"Datenbankfehler: {e}")
 
     return db_draft
+
+@app.post("/api/upload/turbo", response_model=List[schemas.DraftResponse], status_code=status.HTTP_201_CREATED)
+def upload_turbo(
+    files: List[UploadFile] = File(...),
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user)
+):
+    """
+    Turbo mode: accepts many photos of several different items in one go,
+    lets the AI group the photos by item, then auto-creates one finished
+    draft per group (title, description, category, price) without any further
+    user input. Returns the list of created drafts (newest first).
+    """
+    if not files:
+        raise HTTPException(status_code=400, detail="Es wurden keine Bilder hochgeladen.")
+
+    def _cleanup(paths):
+        for p in paths:
+            if os.path.exists(p):
+                try:
+                    os.remove(p)
+                except Exception:
+                    pass
+
+    # 1. Save all uploaded images
+    saved_paths = []
+    local_paths = []
+    for f in files:
+        if not f.content_type or not f.content_type.startswith("image/"):
+            _cleanup(local_paths)
+            raise HTTPException(status_code=400, detail="Alle Dateien müssen Bilder sein.")
+
+        file_extension = os.path.splitext(f.filename)[1]
+        unique_filename = f"{uuid.uuid4()}{file_extension}"
+        file_path = os.path.join(UPLOAD_DIR, unique_filename)
+        try:
+            with open(file_path, "wb") as buffer:
+                shutil.copyfileobj(f.file, buffer)
+            saved_paths.append(f"/uploads/{unique_filename}")
+            local_paths.append(file_path)
+        except Exception as e:
+            _cleanup(local_paths)
+            raise HTTPException(status_code=500, detail=f"Bild konnte nicht gespeichert werden: {e}")
+
+    # 2. Let the AI group photos into separate offers (robust, never raises)
+    try:
+        groups = group_images_by_offer(local_paths)
+    except Exception:
+        groups = [list(range(len(local_paths)))]
+    if not groups:
+        groups = [list(range(len(local_paths)))]
+
+    # 3. Analyze each group in parallel (analyze_item_image is sync + network-bound)
+    def analyze_group(group):
+        group_local = [local_paths[i] for i in group]
+        return analyze_item_image(group_local, user=current_user, user_condition=None, user_details=None)
+
+    results = [None] * len(groups)
+    errors = []
+    max_workers = min(len(groups), 4)
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        future_to_idx = {executor.submit(analyze_group, groups[i]): i for i in range(len(groups))}
+        for future in as_completed(future_to_idx):
+            idx = future_to_idx[future]
+            try:
+                results[idx] = future.result()
+            except Exception as e:
+                print(f"Vintamie Turbo: Analyse von Gruppe {idx} fehlgeschlagen: {e}", flush=True)
+                errors.append(str(e))
+
+    # 4. Persist one draft per successfully analyzed group
+    created_drafts = []
+    used_indices = set()
+    for i, group in enumerate(groups):
+        analysis = results[i]
+        if analysis is None:
+            continue
+        group_saved = [saved_paths[j] for j in group]
+        used_indices.update(group)
+        created_drafts.append(models.Draft(
+            user_id=current_user.id,
+            title=analysis["title"],
+            description=analysis["description"],
+            category=analysis["category"],
+            condition=analysis["condition"],
+            price=analysis["price"],
+            sources=analysis.get("sources"),
+            attributes=analysis.get("attributes"),
+            image_path=group_saved[0],
+            image_paths=json.dumps(group_saved),
+            is_turbo=True
+        ))
+
+    if not created_drafts:
+        _cleanup(local_paths)
+        detail = f"Turbo-Analyse fehlgeschlagen: {errors[0]}" if errors else "KI-Analyse fehlgeschlagen."
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=detail)
+
+    # Remove images that belong to failed groups (no draft references them)
+    _cleanup([p for j, p in enumerate(local_paths) if j not in used_indices])
+
+    try:
+        for d in created_drafts:
+            db.add(d)
+        db.commit()
+        for d in created_drafts:
+            db.refresh(d)
+    except Exception as e:
+        _cleanup([p for j, p in enumerate(local_paths) if j in used_indices])
+        raise HTTPException(status_code=500, detail=f"Datenbankfehler: {e}")
+
+    # Return newest first, consistent with the drafts list ordering
+    created_drafts.reverse()
+    return created_drafts
 
 @app.get("/api/drafts", response_model=List[schemas.DraftResponse])
 def get_all_drafts(

@@ -168,6 +168,35 @@ export const uploadAndAnalyze = async (files, condition, details, signal) => {
   return response.json();
 };
 
+// Turbo mode: upload many photos at once, the backend groups them by item
+// and returns an ARRAY of auto-created drafts (one per detected offer).
+export const uploadTurbo = async (files, signal) => {
+  const formData = new FormData();
+  if (Array.isArray(files)) {
+    files.forEach(file => formData.append('files', file));
+  } else {
+    formData.append('files', files);
+  }
+
+  // For multipart/form-data, fetch sets the boundary itself (Content-Type null),
+  // but we still need the Authorization header.
+  const headers = getHeaders(null);
+
+  const response = await fetch(`${API_BASE_URL}/api/upload/turbo`, {
+    method: 'POST',
+    headers: headers,
+    body: formData,
+    signal,
+  });
+
+  if (!response.ok) {
+    const errorData = await response.json();
+    throw new Error(errorData.detail || 'Fehler beim Turbo-Upload.');
+  }
+
+  return response.json();
+};
+
 export const getDrafts = async () => {
   const response = await fetch(`${API_BASE_URL}/api/drafts`, {
     method: 'GET',

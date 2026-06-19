@@ -50,6 +50,131 @@ def apply_custom_footer(description: str, user) -> str:
         return description
     return f"{description}\n\n{footer}"
 
+def _get_models_to_try() -> List[str]:
+    models_to_try = []
+    if GEMINI_MODEL:
+        models_to_try.append(GEMINI_MODEL)
+    for m in ["gemini-2.5-flash", "gemini-2.0-flash"]:
+        if m not in models_to_try:
+            models_to_try.append(m)
+    return models_to_try
+
+
+def _validate_groups(raw_groups, n: int) -> List[List[int]]:
+    """
+    Sanitize the AI grouping result so that no image gets lost or duplicated.
+    Every index 0..n-1 ends up in exactly one group. Indices the model forgot
+    are appended as their own single-image groups. Never raises.
+    """
+    seen = set()
+    cleaned = []
+    if isinstance(raw_groups, list):
+        for group in raw_groups:
+            if not isinstance(group, list):
+                continue
+            valid = []
+            for i in group:
+                # Gemini sometimes returns indices as strings ("0")
+                try:
+                    idx = int(i)
+                except (TypeError, ValueError):
+                    continue
+                if 0 <= idx < n and idx not in seen:
+                    seen.add(idx)
+                    valid.append(idx)
+            if valid:
+                cleaned.append(valid)
+    # Append any forgotten images as their own offers
+    missing = [i for i in range(n) if i not in seen]
+    for i in missing:
+        cleaned.append([i])
+    return cleaned or [list(range(n))]
+
+
+def group_images_by_offer(image_paths: List[str]) -> List[List[int]]:
+    """
+    Turbo mode: looks at ALL photos at once and decides which photos belong to
+    the same physical item. Returns a list of groups of 0-based image indices,
+    e.g. [[0, 1], [2], [3, 4, 5]]. Each group becomes one separate offer.
+
+    Robust by design: any failure falls back to a single group containing all
+    images (the user then gets one draft instead of a crash), and partial AI
+    output is repaired by _validate_groups so no photo is ever dropped.
+    """
+    n = len(image_paths)
+    if n == 0:
+        return []
+    if n == 1:
+        return [[0]]
+
+    if not GEMINI_API_KEY:
+        print("WARNING: GEMINI_API_KEY is not set. Turbo grouping -> one offer per photo (mock).")
+        return [[i] for i in range(n)]
+
+    try:
+        # Load + resize images in place (same optimization as analyze_item_image)
+        imgs = []
+        for path in image_paths:
+            img = Image.open(path)
+            if img.width > 1024 or img.height > 1024:
+                img.thumbnail((1024, 1024))
+                if img.mode in ("RGBA", "P"):
+                    img = img.convert("RGB")
+                img.save(path, format="JPEG", quality=85)
+                img = Image.open(path)
+            imgs.append(img)
+
+        intro = (
+            f"Du erhältst {n} nummerierte Fotos (Bild 0 bis Bild {n - 1}). Darauf sind ein oder mehrere "
+            "unterschiedliche Verkaufsartikel zu sehen. Pro Artikel kann es ein oder mehrere Fotos geben "
+            "(z. B. Vorderseite, Rückseite, Detailaufnahme, Etikett desselben Teils). Die Fotos eines Artikels "
+            "liegen MEISTENS direkt hintereinander, das ist aber NICHT garantiert. Hier sind die Fotos der Reihe nach:"
+        )
+        outro = (
+            "Gruppiere die Bild-Nummern danach, welche Fotos denselben physischen Artikel zeigen.\n"
+            "Regeln:\n"
+            f"- Jede Bild-Nummer von 0 bis {n - 1} muss in GENAU einer Gruppe vorkommen.\n"
+            "- Verwende keine Nummer doppelt und lass keine Nummer aus.\n"
+            "- Ordne Fotos nur dann zusammen, wenn klar derselbe Gegenstand zu sehen ist.\n"
+            "Antworte AUSSCHLIESSLICH mit JSON in exakt diesem Format: {\"groups\": [[0,1],[2],[3,4,5]]}. "
+            "Kein Markdown, keine Erklärung."
+        )
+
+        parts = [intro]
+        for idx, img in enumerate(imgs):
+            parts.append(f"Bild {idx}:")
+            parts.append(img)
+        parts.append(outro)
+
+        response = None
+        last_error = None
+        for model_name in _get_models_to_try():
+            try:
+                print(f"Vintamie Turbo: Gruppiere {n} Fotos mit Modell '{model_name}'...")
+                model = genai.GenerativeModel(model_name)
+                response = model.generate_content(
+                    parts,
+                    generation_config={"response_mime_type": "application/json"}
+                )
+                break
+            except Exception as e:
+                print(f"Vintamie Turbo: Modell '{model_name}' fehlgeschlagen bei Gruppierung: {e}")
+                last_error = e
+
+        if not response:
+            print(f"Vintamie Turbo: Gruppierung fehlgeschlagen ({last_error}). Fallback: alle Fotos -> 1 Angebot.")
+            return [list(range(n))]
+
+        data = json.loads(response.text)
+        groups = _validate_groups(data.get("groups", []), n)
+        print(f"Vintamie Turbo: {n} Fotos in {len(groups)} Angebot(e) gruppiert -> {groups}")
+        return groups
+
+    except Exception as e:
+        print(f"Vintamie Turbo: Unerwarteter Fehler bei Gruppierung ({e}). Fallback: alle Fotos -> 1 Angebot.")
+        return [list(range(n))]
+
+
 def analyze_item_image(image_paths: List[str], user = None, user_condition: str = None, user_details: str = None) -> dict:
     """
     Step 1: Identifies search keywords from the images.

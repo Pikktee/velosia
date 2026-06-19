@@ -1,14 +1,20 @@
 import React, { useState, useEffect } from 'react';
 import { Check, Loader2 } from 'lucide-react';
 
-export default function AnalysisLoader({ isFinished = false, onComplete = () => {}, onCancel }) {
+export default function AnalysisLoader({ isFinished = false, turbo = false, onComplete = () => {}, onCancel }) {
   const [activeStep, setActiveStep] = useState(0);
 
-  const steps = [
-    "Fotos werden per Vision-AI analysiert...",
-    "Vergleichspreise werden live gescrapt...",
-    "Angebot wird finalisiert..."
-  ];
+  const steps = turbo
+    ? [
+        "Fotos werden den Artikeln zugeordnet...",
+        "Vergleichspreise werden live gescrapt...",
+        "Deine Angebote werden automatisch erstellt..."
+      ]
+    : [
+        "Fotos werden per Vision-AI analysiert...",
+        "Vergleichspreise werden live gescrapt...",
+        "Angebot wird finalisiert..."
+      ];
 
   useEffect(() => {
     if (!isFinished) {
@@ -90,10 +96,12 @@ export default function AnalysisLoader({ isFinished = false, onComplete = () => 
       </svg>
 
       <h3 style={{ fontFamily: 'var(--font-title)', fontSize: '1.35rem', fontWeight: 700, color: 'var(--text-primary)', margin: 0 }}>
-        Vintamie arbeitet...
+        {turbo ? 'Turbo-Modus läuft...' : 'Vintamie arbeitet...'}
       </h3>
       <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', marginTop: '0.25rem', marginBottom: 0 }}>
-        Dein Angebot wird in Echtzeit analysiert und erstellt.
+        {turbo
+          ? 'Aus deinen Fotos werden automatisch mehrere Angebote erstellt.'
+          : 'Dein Angebot wird in Echtzeit analysiert und erstellt.'}
       </p>
 
       {/* Stepper Container */}

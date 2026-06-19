@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Float, DateTime, ForeignKey
+from sqlalchemy import Column, Integer, String, Float, Boolean, DateTime, ForeignKey
 from sqlalchemy.orm import relationship
 from datetime import datetime
 from database import Base
@@ -48,6 +48,8 @@ class Draft(Base):
     sources = Column(String, nullable=True)
     # JSON string of Kleinanzeigen attribute fields: {"Größe": "M", "Marke": "Nike", ...}
     attributes = Column(String, nullable=True)
+    # True if this draft was auto-created in "Turbo" batch mode (multiple offers from one photo session)
+    is_turbo = Column(Boolean, default=False, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
 
     # Relationships

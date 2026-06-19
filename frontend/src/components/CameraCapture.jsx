@@ -1,13 +1,15 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Camera, Upload, Image as ImageIcon, Sparkles, X, RotateCw, AlertCircle } from 'lucide-react';
+import { Camera, Upload, Image as ImageIcon, Sparkles, X, RotateCw, AlertCircle, Rocket } from 'lucide-react';
 
-const CameraCapture = ({ 
-  selectedImages = [], 
-  setSelectedImages, 
-  onAnalysisStart, 
-  analysisError, 
-  onClearError, 
-  onClose 
+const CameraCapture = ({
+  selectedImages = [],
+  setSelectedImages,
+  turbo = false,
+  onAnalysisStart,
+  onTurboFinish,
+  analysisError,
+  onClearError,
+  onClose
 }) => {
   const [facingMode, setFacingMode] = useState('environment'); // 'environment' or 'user'
   const [error, setError] = useState(null);
@@ -245,6 +247,37 @@ const CameraCapture = ({
         </div>
       )}
 
+      {/* Turbo mode hint banner */}
+      {turbo && !analysisError && (
+        <div style={{
+          position: 'absolute',
+          top: 'calc(12px + env(safe-area-inset-top, 0px))',
+          left: '50%',
+          transform: 'translateX(-50%)',
+          width: 'calc(100% - 2.5rem)',
+          maxWidth: '360px',
+          background: 'rgba(236, 72, 153, 0.18)',
+          backdropFilter: 'blur(16px)',
+          WebkitBackdropFilter: 'blur(16px)',
+          border: '1px solid rgba(236, 72, 153, 0.4)',
+          borderRadius: 'var(--radius-sm)',
+          padding: '0.6rem 0.9rem',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '0.5rem',
+          color: '#fbcfe8',
+          fontSize: '0.8rem',
+          lineHeight: '1.3',
+          zIndex: 135,
+          boxShadow: '0 8px 32px rgba(0, 0, 0, 0.5)'
+        }}>
+          <Rocket size={16} style={{ flexShrink: 0, color: 'var(--secondary)' }} />
+          <span style={{ flexGrow: 1 }}>
+            <strong>Turbo aktiv.</strong> Fotografiere nacheinander alle Artikel – am Ende werden daraus automatisch mehrere Angebote erstellt.
+          </span>
+        </div>
+      )}
+
       {/* Hidden inputs */}
       <input
         ref={fileInputRef}
@@ -467,7 +500,7 @@ const CameraCapture = ({
             {selectedImages.length > 0 && (
               <button
                 className="btn btn-primary"
-                onClick={onAnalysisStart}
+                onClick={turbo ? onTurboFinish : onAnalysisStart}
                 disabled={selectedImages.some(img => img.isCompressing)}
                 style={{
                   minHeight: 'auto',
@@ -487,8 +520,17 @@ const CameraCapture = ({
                   cursor: selectedImages.some(img => img.isCompressing) ? 'not-allowed' : 'pointer'
                 }}
               >
-                <Sparkles size={14} />
-                <span>Los!</span>
+                {turbo ? (
+                  <>
+                    <Rocket size={14} />
+                    <span>Fertig ({selectedImages.length})</span>
+                  </>
+                ) : (
+                  <>
+                    <Sparkles size={14} />
+                    <span>Los!</span>
+                  </>
+                )}
               </button>
             )}
           </div>
