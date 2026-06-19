@@ -211,7 +211,7 @@ export default function App() {
   };
 
   // --- Camera button: short tap = normal capture, long press = Turbo mode ---
-  const LONG_PRESS_MS = 450;
+  const LONG_PRESS_MS = 1000;
 
   const openNormalCapture = () => {
     setAnalysisError(null);
