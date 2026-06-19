@@ -32,6 +32,8 @@ export default function App() {
   const [turboMode, setTurboMode] = useState(false);
   const [rocketLaunch, setRocketLaunch] = useState(false);
   const [tempTurboResults, setTempTurboResults] = useState(null);
+  // Persisted backup of turbo photos so an accidental exit doesn't lose them
+  const [turboImages, setTurboImages] = useState([]);
   const longPressTimer = useRef(null);
 
 
@@ -58,10 +60,15 @@ export default function App() {
         setView('capture');
         return true;
       } else if (view === 'capture') {
-        capturedImages.forEach(img => URL.revokeObjectURL(img.previewUrl));
-        setCapturedImages([]);
+        if (turboMode) {
+          setTurboImages(capturedImages); // keep turbo photos for restore
+          setCapturedImages([]);
+          setTurboMode(false);
+        } else {
+          capturedImages.forEach(img => URL.revokeObjectURL(img.previewUrl));
+          setCapturedImages([]);
+        }
         setAnalysisError(null);
-        setTurboMode(false);
         setView(prevView || 'list');
         return true;
       } else if (view === 'detail') {
@@ -79,7 +86,7 @@ export default function App() {
     return () => {
       delete window.onAndroidBack;
     };
-  }, [view, prevView, capturedImages]);
+  }, [view, prevView, capturedImages, turboMode]);
 
   // Check auth state on mount and manage redirects
   useEffect(() => {
@@ -216,20 +223,35 @@ export default function App() {
   const openNormalCapture = () => {
     setAnalysisError(null);
     setTurboMode(false);
+    setCapturedImages([]); // normal capture always starts fresh
     setView('capture');
   };
 
   const triggerTurboLaunch = () => {
     if (navigator.vibrate) {
-      try { navigator.vibrate(40); } catch (e) { /* ignore */ }
+      try { navigator.vibrate([30, 40, 60]); } catch (e) { /* ignore */ }
     }
+    setAnalysisError(null);
+    setTurboMode(true);
+    setCapturedImages(turboImages); // restore any photos from a previously aborted turbo session
+    setView('capture');             // mount the camera immediately, behind the launch overlay
     setRocketLaunch(true);
-    setTimeout(() => {
-      setRocketLaunch(false);
-      setAnalysisError(null);
-      setTurboMode(true);
-      setView('capture');
-    }, 1100); // matches the rocket-fly animation duration
+    setTimeout(() => setRocketLaunch(false), 1500); // remove overlay once the backdrop has faded
+  };
+
+  // Close the camera. In turbo mode the captured photos are preserved (not revoked)
+  // so an accidental exit can be undone by simply reopening turbo.
+  const closeCamera = () => {
+    if (turboMode) {
+      setTurboImages(capturedImages);
+      setCapturedImages([]);
+      setTurboMode(false);
+    } else {
+      capturedImages.forEach(img => URL.revokeObjectURL(img.previewUrl));
+      setCapturedImages([]);
+    }
+    setAnalysisError(null);
+    setView(prevView || 'list');
   };
 
   const startCameraPress = () => {
@@ -324,6 +346,7 @@ export default function App() {
     if (tempTurboResults) {
       capturedImages.forEach(img => URL.revokeObjectURL(img.previewUrl));
       setCapturedImages([]);
+      setTurboImages([]); // turbo finished successfully -> drop the backup
       setAbortController(null);
 
       setDrafts((prev) => [...tempTurboResults, ...prev]);
@@ -485,13 +508,7 @@ export default function App() {
               onTurboFinish={handleTurboUpload}
               analysisError={analysisError}
               onClearError={() => setAnalysisError(null)}
-              onClose={() => {
-                capturedImages.forEach(img => URL.revokeObjectURL(img.previewUrl));
-                setCapturedImages([]);
-                setAnalysisError(null);
-                setTurboMode(false);
-                setView(prevView || 'list');
-              }}
+              onClose={closeCamera}
             />
           )}
 
@@ -635,11 +652,12 @@ export default function App() {
         </nav>
       )}
 
-      {/* Turbo rocket launch animation (triggered by long-pressing the camera button) */}
+      {/* Turbo rocket launch animation: backdrop fades out as the rocket flies up, revealing the camera */}
       {rocketLaunch && (
         <div className="rocket-launch-overlay" aria-hidden="true">
+          <div className="rocket-launch-backdrop" />
           <div className="rocket-vehicle">
-            <Rocket size={40} strokeWidth={2} />
+            <Rocket size={44} strokeWidth={2} />
             <div className="rocket-trail" />
           </div>
           <div className="firework fw-1" />

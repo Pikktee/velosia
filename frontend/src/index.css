@@ -3108,14 +3108,28 @@ select.form-control {
   overflow: hidden;
 }
 
+/* Opaque backdrop hiding the camera start-up, then fading to reveal the live camera */
+.rocket-launch-backdrop {
+  position: absolute;
+  inset: 0;
+  background: var(--bg-gradient);
+  animation: backdropReveal 1.5s ease-in forwards;
+}
+
+@keyframes backdropReveal {
+  0% { opacity: 1; }
+  30% { opacity: 1; }
+  100% { opacity: 0; }
+}
+
 .rocket-vehicle {
   position: absolute;
-  bottom: 64px;
+  bottom: 72px;
   left: 50%;
   color: var(--secondary);
   transform: translateX(-50%);
-  filter: drop-shadow(0 0 12px rgba(236, 72, 153, 0.7));
-  animation: rocketFly 1.1s cubic-bezier(0.45, 0, 0.55, 1) forwards;
+  filter: drop-shadow(0 0 14px rgba(236, 72, 153, 0.8));
+  animation: rocketFly 1.25s cubic-bezier(0.5, 0, 0.7, 1) forwards;
 }
 
 .rocket-vehicle svg {
@@ -3136,10 +3150,11 @@ select.form-control {
 }
 
 @keyframes rocketFly {
-  0% { transform: translateX(-50%) translateY(0) scale(1); opacity: 1; }
-  15% { transform: translateX(-50%) translateY(-12px) scale(1.05); opacity: 1; }
-  75% { opacity: 1; }
-  100% { transform: translateX(-50%) translateY(-92vh) scale(0.5); opacity: 0; }
+  0% { transform: translateX(-50%) translateY(0) scale(0.9); opacity: 0; }
+  10% { transform: translateX(-50%) translateY(8px) scale(1); opacity: 1; }
+  22% { transform: translateX(-50%) translateY(-10px) scale(1.08); opacity: 1; }
+  80% { opacity: 1; }
+  100% { transform: translateX(-50%) translateY(-115vh) scale(0.4); opacity: 0; }
 }
 
 @keyframes rocketTrailFlicker {
@@ -3185,5 +3200,294 @@ select.form-control {
   70% { opacity: 1; }
   100% { opacity: 0; transform: translate(-50%, -50%) scale(1.9); }
 }
+
+/* --- Permanent small TURBO indicator inside the camera --- */
+.camera-turbo-pill {
+  position: absolute;
+  top: calc(20px + env(safe-area-inset-top, 0px));
+  left: 1.25rem;
+  z-index: 130;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.3rem 0.6rem;
+  border-radius: 99px;
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  color: #fff;
+  background: linear-gradient(135deg, var(--secondary) 0%, #d53f8c 100%);
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  box-shadow: 0 4px 14px var(--secondary-glow);
+}
+
+.camera-turbo-pill svg {
+  animation: turboPillFloat 2.4s ease-in-out infinite;
+}
+
+@keyframes turboPillFloat {
+  0%, 100% { transform: translateY(0) rotate(0deg); }
+  50% { transform: translateY(-2px) rotate(-8deg); }
+}
+
+/* --- Captured photos review chip + grid overlay --- */
+.camera-review-chip {
+  align-self: center;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.4rem 0.85rem;
+  border-radius: 99px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: #fff;
+  background: rgba(15, 18, 27, 0.7);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  cursor: pointer;
+  transition: background 0.2s ease, transform 0.15s ease;
+}
+
+.camera-review-chip:active { transform: scale(0.96); }
+
+.camera-review-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 160;
+  background: rgba(7, 9, 13, 0.96);
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+  display: flex;
+  flex-direction: column;
+  animation: fadeIn 0.25s ease;
+}
+
+.camera-review-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: calc(18px + env(safe-area-inset-top, 0px)) 1.25rem 0.85rem 1.25rem;
+  border-bottom: 1px solid var(--glass-border);
+}
+
+.camera-review-header h3 {
+  font-family: var(--font-title);
+  font-size: 1.05rem;
+  font-weight: 700;
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+}
+
+.camera-review-header h3 svg { color: var(--secondary); }
+
+.camera-review-close {
+  width: 38px;
+  height: 38px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  border: 1px solid var(--glass-border);
+  background: rgba(255, 255, 255, 0.06);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.camera-review-grid {
+  flex: 1;
+  overflow-y: auto;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0.6rem;
+  padding: 1rem 1.25rem calc(20px + env(safe-area-inset-bottom, 0px)) 1.25rem;
+  align-content: start;
+}
+
+.camera-review-cell {
+  position: relative;
+  aspect-ratio: 1 / 1;
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  border: 1px solid var(--glass-border);
+  background: #11141d;
+}
+
+.camera-review-cell img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.camera-review-cell-index {
+  position: absolute;
+  bottom: 4px;
+  left: 4px;
+  font-size: 0.65rem;
+  font-weight: 700;
+  color: #fff;
+  background: rgba(0, 0, 0, 0.55);
+  padding: 0.05rem 0.35rem;
+  border-radius: 5px;
+}
+
+.camera-review-cell-delete {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  border: none;
+  background: rgba(239, 68, 68, 0.95);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+}
+
+.camera-review-empty {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  color: var(--text-secondary);
+  text-align: center;
+  padding: 2rem;
+}
+
+/* --- One-time turbo onboarding card --- */
+.turbo-onboarding-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 170;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1.5rem;
+  background: rgba(7, 9, 13, 0.78);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  animation: fadeIn 0.3s ease;
+}
+
+.turbo-onboarding-card {
+  position: relative;
+  width: 100%;
+  max-width: 360px;
+  padding: 1.75rem 1.5rem 1.5rem 1.5rem;
+  border-radius: var(--radius-lg);
+  background: linear-gradient(160deg, rgba(30, 20, 32, 0.92), rgba(16, 20, 29, 0.95));
+  border: 1px solid rgba(236, 72, 153, 0.35);
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.55), 0 0 0 1px rgba(255, 255, 255, 0.04) inset;
+  text-align: center;
+  overflow: hidden;
+  animation: scaleInModal 0.35s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+.turbo-onboarding-card::before {
+  content: '';
+  position: absolute;
+  top: -40%;
+  left: -10%;
+  width: 120%;
+  height: 80%;
+  background: radial-gradient(circle, rgba(236, 72, 153, 0.22), transparent 60%);
+  pointer-events: none;
+}
+
+.turbo-onboarding-rocket {
+  position: relative;
+  width: 64px;
+  height: 64px;
+  margin: 0 auto 1rem auto;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  background: linear-gradient(135deg, var(--secondary) 0%, var(--primary) 130%);
+  box-shadow: 0 8px 26px var(--secondary-glow);
+  animation: hangerFloat 3s ease-in-out infinite;
+}
+
+.turbo-onboarding-card h2 {
+  font-family: var(--font-title);
+  font-size: 1.45rem;
+  font-weight: 800;
+  margin: 0 0 0.35rem 0;
+  background: linear-gradient(135deg, #fff 0%, var(--secondary) 120%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.turbo-onboarding-card > p {
+  color: var(--text-secondary);
+  font-size: 0.85rem;
+  line-height: 1.4;
+  margin: 0 0 1.25rem 0;
+}
+
+.turbo-onboarding-steps {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+  text-align: left;
+  margin-bottom: 1.5rem;
+}
+
+.turbo-onboarding-step {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.turbo-onboarding-step-icon {
+  flex-shrink: 0;
+  width: 38px;
+  height: 38px;
+  border-radius: 11px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--secondary);
+  background: rgba(236, 72, 153, 0.12);
+  border: 1px solid rgba(236, 72, 153, 0.25);
+}
+
+.turbo-onboarding-step span {
+  font-size: 0.85rem;
+  line-height: 1.35;
+  color: var(--text-primary);
+}
+
+.turbo-onboarding-cta {
+  width: 100%;
+  padding: 0.85rem;
+  border-radius: 99px;
+  border: none;
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: #fff;
+  cursor: pointer;
+  background: linear-gradient(135deg, var(--secondary) 0%, #d53f8c 100%);
+  box-shadow: 0 8px 22px var(--secondary-glow);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.45rem;
+  transition: transform 0.15s ease, box-shadow 0.2s ease;
+}
+
+.turbo-onboarding-cta:active { transform: scale(0.97); }
 
 

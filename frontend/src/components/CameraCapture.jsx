@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Camera, Upload, Image as ImageIcon, Sparkles, X, RotateCw, AlertCircle, Rocket } from 'lucide-react';
+import { Camera, Upload, Image as ImageIcon, Images, Sparkles, X, RotateCw, AlertCircle, Rocket, Trash2, Wand2, Layers } from 'lucide-react';
 
 const CameraCapture = ({
   selectedImages = [],
@@ -14,6 +14,15 @@ const CameraCapture = ({
   const [facingMode, setFacingMode] = useState('environment'); // 'environment' or 'user'
   const [error, setError] = useState(null);
   const [flash, setFlash] = useState(false);
+  const [showReview, setShowReview] = useState(false);
+  const [showOnboarding, setShowOnboarding] = useState(
+    () => turbo && !localStorage.getItem('vintamie_turbo_onboarded')
+  );
+
+  const dismissOnboarding = () => {
+    try { localStorage.setItem('vintamie_turbo_onboarded', '1'); } catch (e) { /* ignore */ }
+    setShowOnboarding(false);
+  };
 
   const videoRef = useRef(null);
   const streamRef = useRef(null);
@@ -247,34 +256,11 @@ const CameraCapture = ({
         </div>
       )}
 
-      {/* Turbo mode hint banner */}
-      {turbo && !analysisError && (
-        <div style={{
-          position: 'absolute',
-          top: 'calc(12px + env(safe-area-inset-top, 0px))',
-          left: '50%',
-          transform: 'translateX(-50%)',
-          width: 'calc(100% - 2.5rem)',
-          maxWidth: '360px',
-          background: 'rgba(236, 72, 153, 0.18)',
-          backdropFilter: 'blur(16px)',
-          WebkitBackdropFilter: 'blur(16px)',
-          border: '1px solid rgba(236, 72, 153, 0.4)',
-          borderRadius: 'var(--radius-sm)',
-          padding: '0.6rem 0.9rem',
-          display: 'flex',
-          alignItems: 'center',
-          gap: '0.5rem',
-          color: '#fbcfe8',
-          fontSize: '0.8rem',
-          lineHeight: '1.3',
-          zIndex: 135,
-          boxShadow: '0 8px 32px rgba(0, 0, 0, 0.5)'
-        }}>
-          <Rocket size={16} style={{ flexShrink: 0, color: 'var(--secondary)' }} />
-          <span style={{ flexGrow: 1 }}>
-            <strong>Turbo aktiv.</strong> Fotografiere nacheinander alle Artikel – am Ende werden daraus automatisch mehrere Angebote erstellt.
-          </span>
+      {/* Permanent small TURBO indicator */}
+      {turbo && !error && (
+        <div className="camera-turbo-pill">
+          <Rocket size={13} strokeWidth={2.5} />
+          <span>TURBO</span>
         </div>
       )}
 
@@ -402,7 +388,15 @@ const CameraCapture = ({
 
       {/* Camera Controls Overlay (Gallery, Shutter, Analyze) */}
       <div className="camera-overlay-bottom">
-        
+
+        {/* Review chip: open a full grid to view & remove all captured photos */}
+        {selectedImages.length > 0 && (
+          <button className="camera-review-chip" onClick={() => setShowReview(true)}>
+            <Images size={15} />
+            <span>{selectedImages.length} {selectedImages.length === 1 ? 'Foto' : 'Fotos'} – alle ansehen</span>
+          </button>
+        )}
+
         {/* Captured Thumbnails in Camera view */}
         {selectedImages.length > 0 && (
           <div className="camera-thumbnails-container">
@@ -536,6 +530,84 @@ const CameraCapture = ({
           </div>
         </div>
       </div>
+
+      {/* Full-screen review: see all captured photos and remove any of them */}
+      {showReview && (
+        <div className="camera-review-overlay">
+          <div className="camera-review-header">
+            <h3>
+              <Images size={18} />
+              {selectedImages.length} {selectedImages.length === 1 ? 'Foto' : 'Fotos'}
+            </h3>
+            <button
+              className="camera-review-close"
+              onClick={() => setShowReview(false)}
+              title="Zurück zur Kamera"
+            >
+              <X size={20} />
+            </button>
+          </div>
+
+          {selectedImages.length === 0 ? (
+            <div className="camera-review-empty">
+              <ImageIcon size={40} style={{ opacity: 0.5 }} />
+              <p>Keine Fotos mehr vorhanden.<br />Nimm neue Fotos auf.</p>
+            </div>
+          ) : (
+            <div className="camera-review-grid">
+              {selectedImages.map((img, idx) => (
+                <div
+                  key={img.id}
+                  className="camera-review-cell"
+                  style={{ opacity: img.isCompressing ? 0.6 : 1 }}
+                >
+                  <img src={img.previewUrl} alt={`Foto ${idx + 1}`} />
+                  <span className="camera-review-cell-index">{idx + 1}</span>
+                  <button
+                    className="camera-review-cell-delete"
+                    onClick={() => removeImage(img.id)}
+                    title="Foto entfernen"
+                  >
+                    <Trash2 size={14} />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* One-time turbo onboarding */}
+      {turbo && showOnboarding && (
+        <div className="turbo-onboarding-overlay">
+          <div className="turbo-onboarding-card">
+            <div className="turbo-onboarding-rocket">
+              <Rocket size={30} strokeWidth={2} />
+            </div>
+            <h2>Turbo-Modus</h2>
+            <p>Erfasse viele Artikel in einem Rutsch – Vintamie erledigt den Rest.</p>
+
+            <div className="turbo-onboarding-steps">
+              <div className="turbo-onboarding-step">
+                <div className="turbo-onboarding-step-icon"><Camera size={18} /></div>
+                <span>Fotografiere nacheinander <strong>alle Artikel</strong> – so viele Fotos du möchtest.</span>
+              </div>
+              <div className="turbo-onboarding-step">
+                <div className="turbo-onboarding-step-icon"><Wand2 size={18} /></div>
+                <span>Die <strong>KI erkennt automatisch</strong>, welche Fotos zum selben Artikel gehören.</span>
+              </div>
+              <div className="turbo-onboarding-step">
+                <div className="turbo-onboarding-step-icon"><Layers size={18} /></div>
+                <span>Daraus entstehen <strong>mehrere fertige Angebote</strong> auf einmal.</span>
+              </div>
+            </div>
+
+            <button className="turbo-onboarding-cta" onClick={dismissOnboarding}>
+              <Rocket size={16} /> Los geht's!
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
