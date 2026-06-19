@@ -8,6 +8,8 @@ on:
       - 'android/**'
       - 'VERSION'
       - '.github/workflows/android.yml'
+  # Allow building & uploading the APK on demand from the Actions tab
+  workflow_dispatch:
 
 jobs:
   build:
