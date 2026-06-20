@@ -60,11 +60,20 @@ class Draft(Base):
 
     @property
     def category_path(self) -> Optional[str]:
-        """Kleinanzeigen category tree path (e.g. "161/176") looked up from the
-        chosen category name. Lets the autofill engine jump straight to the
-        category. Returns None for categories not yet mapped in the catalog."""
+        """Kleinanzeigen category tree path (e.g. "161/176/staubsauger") derived
+        from the stored category. New drafts store the unique full breadcrumb
+        ("Elektronik > Haushaltsgeräte > Staubsauger") which maps losslessly to a
+        path; legacy drafts with a plain name fall back to a fuzzy/curated lookup.
+        Lets the autofill engine jump straight to the category."""
         if not self.category:
             return None
+        try:
+            from data import kleinanzeigen_taxonomy as tax
+            path = tax.path_for_breadcrumb(self.category) or tax.resolve_to_path(self.category)
+            if path:
+                return path
+        except Exception:
+            pass
         try:
             from data.kleinanzeigen_categories import find_category
             cat = find_category(self.category)

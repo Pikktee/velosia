@@ -318,6 +318,41 @@ def build_catalog_prompt() -> str:
     return "\n".join(lines)
 
 
+def clean_generic_attributes(raw: Dict, condition: Optional[str] = None) -> Dict[str, str]:
+    """Category-agnostic attribute cleaning for the full-taxonomy flow.
+
+    The curated catalog only defines attributes for ~20 categories, but with the
+    full taxonomy the AI may pick any of 3000+ categories. The autofill engine
+    matches attributes onto the live form *generically by visible field label*,
+    so we don't need a per-category schema here — we just keep the AI's proposed
+    fields, drop empties, normalise the common Versand/Zustand values, and
+    backfill Zustand from the draft's condition.
+    """
+    out: Dict[str, str] = {}
+    if isinstance(raw, dict):
+        for k, v in raw.items():
+            if v is None:
+                continue
+            key = str(k).strip()
+            val = str(v).strip()
+            if not key or not val:
+                continue
+            low = key.lower()
+            if low == "versand":
+                vl = val.lower()
+                if "abhol" in vl or "nur " in vl:
+                    val = "Nur Abholung"
+                elif "versand" in vl or "möglich" in vl or "moeglich" in vl or "ja" == vl:
+                    val = "Versand möglich"
+            out[key] = val
+
+    if condition and not any(kk.lower() == "zustand" for kk in out):
+        z = CONDITION_TO_ZUSTAND.get(condition.strip().lower())
+        if z:
+            out["Zustand"] = z
+    return out
+
+
 def validate_attributes(category_name: Optional[str], raw: Dict, condition: Optional[str] = None) -> Dict[str, str]:
     """
     Keep only attributes defined for the chosen category, normalise select

@@ -5,6 +5,7 @@ import json
 from dotenv import load_dotenv
 from services.price_comparison import search_marketplace_prices
 from data import kleinanzeigen_categories as kacat
+from data import kleinanzeigen_taxonomy as katax
 
 load_dotenv()
 
@@ -257,7 +258,7 @@ def analyze_item_image(image_paths: List[str], user = None, user_condition: str 
         if category_pref and category_pref != "Keine Präferenz":
             category_instruction = f" Bevorzuge dabei die Kategorie '{category_pref}', falls diese zum Artikel passt."
 
-        catalog_prompt = kacat.build_catalog_prompt()
+        selection_prompt = katax.selection_prompt()
         condition_prompt = "- 'condition': Eine Einschätzung des Zustands. Wähle exakt einen dieser Werte: 'Neu', 'Sehr gut', 'Gut', 'In Ordnung'."
         if user_condition and user_condition.strip() and user_condition.lower() != "automatisch":
             condition_prompt = f"- 'condition': Setze den Zustand exakt auf den Wert '{user_condition}'."
@@ -273,16 +274,18 @@ def analyze_item_image(image_paths: List[str], user = None, user_condition: str 
             f"- Gefundener Medianpreis für ähnliche Artikel: {comparison['median_price']} EUR\n"
             f"- Preisspanne aktiver Angebote: {comparison['min_price']} EUR - {comparison['max_price']} EUR\n"
             f"- Vergleichsangebote: {sources_str}\n\n"
-            "Wähle die passende Kategorie AUSSCHLIESSLICH aus dieser Kleinanzeigen-Liste. Hinter jeder Kategorie "
-            "stehen ihre Zusatzfelder mit den erlaubten Werten (Freitext-Felder kannst du frei befüllen):\n"
-            f"{catalog_prompt}\n\n"
+            "Wähle die EXAKT passende Kleinanzeigen-Kategorie aus dieser Liste. Jede Zeile ist ein vollständiger "
+            "Kategorie-Pfad (Hauptkategorie > Unterkategorie > Art). Kopiere die zutreffende Zeile WORTWÖRTLICH "
+            "(inklusive der ' > '-Trenner) als Wert für 'category'. Erfinde keine eigenen Kategorien:\n"
+            f"{selection_prompt}\n\n"
             "Erstelle eine strukturierte JSON-Antwort mit folgenden Feldern auf Deutsch:\n"
             "- 'title': Ein aussagekräftiger Titel (max. 80 Zeichen), optimiert für Vinted/Kleinanzeigen.\n"
             f"- 'description': {tone_instruction} Nenne wichtige Details (wie Schnitt, Muster). Füge KEINE Hashtags hinzu.{details_instruction}\n"
-            f"- 'category': Exakt einer der Kategorienamen aus der obigen Liste (z.B. 'Damenbekleidung').{category_instruction}\n"
-            "- 'attributes': Ein JSON-Objekt mit den Zusatzfeldern der gewählten Kategorie. Schlüssel = exakte "
-            "Feldbezeichnung aus der Liste, Wert = einer der erlaubten Werten (bzw. Freitext). Lass Felder weg, "
-            "die du nicht sicher bestimmen kannst. Beispiel: {\"Größe\": \"M\", \"Marke\": \"Nike\", \"Farbe\": \"Schwarz\", \"Versand\": \"Versand möglich\"}.\n"
+            f"- 'category': Eine WORTWÖRTLICH kopierte Zeile aus der obigen Kategorie-Liste (z.B. 'Elektronik > Haushaltsgeräte > Staubsauger').{category_instruction}\n"
+            "- 'attributes': Ein JSON-Objekt mit passenden Zusatzfeldern für das Inserat. Übliche Felder sind "
+            "'Art', 'Marke', 'Größe', 'Farbe', 'Material', 'Zustand' und 'Versand' ('Versand möglich' oder "
+            "'Nur Abholung'). Wähle nur Felder, die du sicher bestimmen kannst. "
+            "Beispiel: {\"Marke\": \"Nike\", \"Größe\": \"M\", \"Farbe\": \"Schwarz\", \"Versand\": \"Versand möglich\"}.\n"
             f"{condition_prompt}\n"
             "- 'price': Ein realistischer, geschätzter Verkaufspreis in Euro als ganze Zahl (Integer), orientiere dich eng an dem Medianpreis der Vergleichsangebote.\n\n"
             "Gib ausschließlich das JSON-Objekt zurück. Verwende kein Markdown-Formatting wie ```json."
@@ -319,21 +322,38 @@ def analyze_item_image(image_paths: List[str], user = None, user_condition: str 
         raw_description = str(data.get("description", "Keine Beschreibung verfügbar."))
         raw_description = apply_custom_footer(raw_description, user)
 
-        # Resolve category against the static catalog and validate its attributes
-        chosen_category = str(data.get("category", "Sonstiges"))
-        matched = kacat.find_category(chosen_category)
-        if matched:
-            chosen_category = matched["name"]
+        # Resolve the AI's category pick against the full Kleinanzeigen taxonomy.
+        # We store the unique breadcrumb in `category`; the Draft model derives the
+        # exact tree path from it for the autofill engine.
         condition_value = str(data.get("condition", "Gut"))
-        clean_attributes = kacat.validate_attributes(
-            chosen_category, data.get("attributes", {}), condition=condition_value
-        )
+        raw_attributes = data.get("attributes", {}) or {}
+        ai_category = str(data.get("category", "")).strip()
+
+        node = katax.resolve(ai_category, candidates=katax.SELECTION_NODES)
+        if node and not node.get("leaf"):
+            # AI picked a 2nd-level category; descend into its "Art" leaf so the
+            # form auto-selects the precise type (e.g. Haushaltsgeräte -> Staubsauger).
+            art_value = None
+            if isinstance(raw_attributes, dict):
+                for k, v in raw_attributes.items():
+                    if str(k).strip().lower() == "art":
+                        art_value = v
+                        break
+            child = katax.leaf_under(node["path"], art_value) if art_value else None
+            if child:
+                node = child
+
+        chosen_category = node["breadcrumb"] if node else (ai_category or "Sonstiges")
+        chosen_path = node["path"] if node else None
+
+        clean_attributes = kacat.clean_generic_attributes(raw_attributes, condition=condition_value)
 
         # Validate keys and types, injecting comparison sources
         validated_data = {
             "title": str(data.get("title", f"Vintage {search_query}")),
             "description": raw_description,
             "category": chosen_category,
+            "category_path": chosen_path,
             "condition": condition_value,
             "price": float(raw_price),
             "sources": sources_str,
