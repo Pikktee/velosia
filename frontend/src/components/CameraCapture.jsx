@@ -582,7 +582,9 @@ const PhotoReview = ({ images, onRemove, onClose }) => {
     () => typeof window !== 'undefined' && window.matchMedia('(orientation: landscape)').matches
   );
   const [active, setActive] = useState(0);
-  const touchStartX = useRef(null);
+  const trackRef = useRef(null);
+  const slideRefs = useRef([]);
+  const rafRef = useRef(null);
 
   useEffect(() => {
     const mq = window.matchMedia('(orientation: landscape)');
@@ -599,17 +601,46 @@ const PhotoReview = ({ images, onRemove, onClose }) => {
   }, [images.length, active]);
 
   const count = images.length;
-  const goPrev = () => setActive((i) => Math.max(0, i - 1));
-  const goNext = () => setActive((i) => Math.min(count - 1, i + 1));
 
-  const handleTouchStart = (e) => { touchStartX.current = e.touches[0].clientX; };
-  const handleTouchEnd = (e) => {
-    if (touchStartX.current === null) return;
-    const delta = e.changedTouches[0].clientX - touchStartX.current;
-    if (delta < -45) goNext();
-    else if (delta > 45) goPrev();
-    touchStartX.current = null;
+  const scrollToIndex = (i, smooth = true) => {
+    const node = slideRefs.current[i];
+    if (node) {
+      node.scrollIntoView({ behavior: smooth ? 'smooth' : 'auto', inline: 'center', block: 'nearest' });
+    }
   };
+
+  const goPrev = () => scrollToIndex(Math.max(0, active - 1));
+  const goNext = () => scrollToIndex(Math.min(count - 1, active + 1));
+
+  // Derive the active (centered) slide from the native scroll position.
+  const handleScroll = () => {
+    if (rafRef.current) return;
+    rafRef.current = requestAnimationFrame(() => {
+      rafRef.current = null;
+      const el = trackRef.current;
+      if (!el) return;
+      const center = el.scrollLeft + el.clientWidth / 2;
+      let nearest = 0;
+      let nearestDist = Infinity;
+      slideRefs.current.forEach((node, i) => {
+        if (!node) return;
+        const nodeCenter = node.offsetLeft + node.offsetWidth / 2;
+        const dist = Math.abs(nodeCenter - center);
+        if (dist < nearestDist) { nearestDist = dist; nearest = i; }
+      });
+      setActive(nearest);
+    });
+  };
+
+  // Centre the active photo when the carousel first appears (landscape entry).
+  useEffect(() => {
+    if (isLandscape && count > 0) {
+      scrollToIndex(active, false);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isLandscape]);
+
+  useEffect(() => () => { if (rafRef.current) cancelAnimationFrame(rafRef.current); }, []);
 
   return (
     <div className="camera-review-overlay">
@@ -632,39 +663,33 @@ const PhotoReview = ({ images, onRemove, onClose }) => {
           <p>Keine Fotos mehr vorhanden.<br />Nimm neue Fotos auf.</p>
         </div>
       ) : isLandscape ? (
-        <div
-          className="camera-review-carousel"
-          onTouchStart={handleTouchStart}
-          onTouchEnd={handleTouchEnd}
-        >
-          {images.map((img, idx) => {
-            const offset = idx - active;
-            const isCurrent = offset === 0;
-            return (
-              <div
-                key={img.id}
-                className={`camera-review-slide ${isCurrent ? 'is-current' : ''}`}
-                style={{
-                  transform: `translateX(${offset * 62}%) scale(${isCurrent ? 1 : 0.78})`,
-                  opacity: Math.abs(offset) > 1 ? 0 : isCurrent ? 1 : 0.4,
-                  zIndex: 10 - Math.abs(offset),
-                  pointerEvents: Math.abs(offset) > 1 ? 'none' : 'auto'
-                }}
-                onClick={() => { if (!isCurrent) setActive(idx); }}
-              >
-                <img src={img.previewUrl} alt={`Foto ${idx + 1}`} />
-                {isCurrent && (
-                  <button
-                    className="camera-review-cell-delete"
-                    onClick={(e) => { e.stopPropagation(); onRemove(img.id); }}
-                    title="Foto entfernen"
-                  >
-                    <Trash2 size={16} />
-                  </button>
-                )}
-              </div>
-            );
-          })}
+        <div className="camera-review-carousel-wrap">
+          <div className="camera-review-track" ref={trackRef} onScroll={handleScroll}>
+            {images.map((img, idx) => {
+              const isCurrent = idx === active;
+              return (
+                <div
+                  key={img.id}
+                  ref={(el) => { slideRefs.current[idx] = el; }}
+                  className={`camera-review-slide ${isCurrent ? 'is-current' : ''}`}
+                  onClick={() => { if (!isCurrent) scrollToIndex(idx); }}
+                >
+                  <div className="camera-review-slide-inner">
+                    <img src={img.previewUrl} alt={`Foto ${idx + 1}`} />
+                    {isCurrent && (
+                      <button
+                        className="camera-review-cell-delete"
+                        onClick={(e) => { e.stopPropagation(); onRemove(img.id); }}
+                        title="Foto entfernen"
+                      >
+                        <Trash2 size={16} />
+                      </button>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
 
           {active > 0 && (
             <button className="camera-review-nav prev" onClick={goPrev} title="Vorheriges Foto">

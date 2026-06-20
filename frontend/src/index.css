@@ -3292,6 +3292,7 @@ select.form-control {
   -webkit-backdrop-filter: blur(8px);
   border: 1px solid rgba(255, 255, 255, 0.18);
   cursor: pointer;
+  white-space: nowrap;
   transition: background 0.2s ease, transform 0.15s ease;
 }
 
@@ -3349,8 +3350,9 @@ select.form-control {
   overflow-y: auto;
   display: grid;
   grid-template-columns: repeat(2, 1fr);
-  gap: 0.85rem;
-  padding: 1rem 1.25rem calc(20px + env(safe-area-inset-bottom, 0px)) 1.25rem;
+  column-gap: 1rem;
+  row-gap: 1.15rem;
+  padding: 1.1rem 1.25rem calc(24px + env(safe-area-inset-bottom, 0px)) 1.25rem;
   align-content: start;
 }
 
@@ -3361,38 +3363,60 @@ select.form-control {
   color: var(--text-secondary);
 }
 
-/* Landscape: swipeable carousel with peeking, dimmed neighbours */
-.camera-review-carousel {
+/* Landscape: native scroll-snap carousel — smooth momentum scrolling,
+   centered main photo, dimmed + scaled peeking neighbours, no card/box frame. */
+.camera-review-carousel-wrap {
   position: relative;
   flex: 1;
-  overflow: hidden;
+  min-height: 0;
+  display: flex;
+}
+
+.camera-review-track {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 5vw;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scroll-snap-type: x mandatory;
+  scroll-behavior: smooth;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-x: contain;
+  padding-inline: 50%;
+  scrollbar-width: none;
+}
+
+.camera-review-track::-webkit-scrollbar { display: none; }
+
+.camera-review-slide {
+  flex: 0 0 auto;
+  height: 82%;
   display: flex;
   align-items: center;
   justify-content: center;
-  touch-action: pan-y;
+  scroll-snap-align: center;
+  opacity: 0.35;
+  transform: scale(0.82);
+  transition: opacity 0.3s ease, transform 0.3s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
-.camera-review-slide {
-  position: absolute;
-  width: 58%;
-  max-width: 540px;
-  height: 80%;
-  border-radius: var(--radius-md);
-  overflow: hidden;
-  border: 1px solid var(--glass-border);
-  background: #0a0d13;
-  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.55);
-  transition: transform 0.33s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.33s ease;
-  cursor: pointer;
-}
+.camera-review-slide.is-current { opacity: 1; transform: scale(1); }
 
-.camera-review-slide.is-current { cursor: default; }
-
-.camera-review-slide img {
-  width: 100%;
+.camera-review-slide-inner {
+  position: relative;
   height: 100%;
+  display: flex;
+}
+
+.camera-review-slide-inner img {
+  height: 100%;
+  width: auto;
+  max-width: 84vw;
   object-fit: contain;
-  background: #0a0d13;
+  border-radius: var(--radius-md);
+  filter: drop-shadow(0 16px 40px rgba(0, 0, 0, 0.55));
+  display: block;
 }
 
 .camera-review-nav {
@@ -3419,11 +3443,12 @@ select.form-control {
 
 .camera-review-cell {
   position: relative;
-  aspect-ratio: 1 / 1;
-  border-radius: var(--radius-sm);
+  aspect-ratio: 3 / 4;
+  border-radius: var(--radius-md);
   overflow: hidden;
   border: 1px solid var(--glass-border);
   background: #11141d;
+  box-shadow: 0 8px 22px rgba(0, 0, 0, 0.4);
 }
 
 .camera-review-cell img {
