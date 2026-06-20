@@ -171,8 +171,8 @@
     return null;
   }
 
-  // Kleinanzeigen is a two-step flow: step 1 picks a category via a keyword
-  // suggestion box, step 2 is the real form. Vinted has a single form page.
+  // Kleinanzeigen is a two-step flow: step 1 picks a category from a hierarchical
+  // tree (hash-routed), step 2 is the real form. Vinted has a single form page.
   function detectPhase(platform) {
     var p = window.location.pathname || "";
     if (platform === "kleinanzeigen") {
@@ -293,59 +293,102 @@
   }
 
   // ----------------------------------------------------------------------------
-  // Kleinanzeigen category picker (step 1)
+  // Kleinanzeigen category picker (step 1: hierarchical category tree)
   // ----------------------------------------------------------------------------
+  //
+  // The category page (p-anzeige-aufgeben.html) is NOT a keyword search box — it
+  // is a hash-routed tree. Each category is encoded in the URL hash, e.g.
+  //   #?path=161/176/staubsauger&isParent=undefined
+  // Navigating to a valid (leaf) path enables the green "Weiter" button which
+  // proceeds to the schritt2 form with the category already filled in.
+  //
+  // The canonical path comes from the backend catalog via draft.category_path
+  // (looked up from the chosen category name). When it is missing we fall back to
+  // matching the visible link text; and if even that fails the listing simply
+  // stays on the category page for one manual tap — the rest of the form is then
+  // filled by the pending-autofill that survives the reload to schritt2.
 
-  function findCategoryKeywordInput() {
-    var el = document.querySelector("#pstad-keyword") ||
-             document.querySelector("#postad-keyword") ||
-             document.querySelector("input[name='keyword']") ||
-             document.querySelector("input[type='search']");
-    if (el && isInteractable(el)) return el;
-    var inputs = document.querySelectorAll("input[type='text'], input:not([type])");
-    for (var i = 0; i < inputs.length; i++) {
-      var p = (inputs[i].placeholder || "").toLowerCase();
-      if (p.indexOf("verkauf") !== -1 || p.indexOf("was ") !== -1 || p.indexOf("suchst") !== -1 ||
-          p.indexOf("bieten") !== -1 || p.indexOf("artikel") !== -1) {
-        if (isInteractable(inputs[i])) return inputs[i];
-      }
+  function getCategoryPath(draft) {
+    var p = draft.category_path || draft.categoryPath || draft.ka_path;
+    return (p && String(p).trim()) ? String(p).trim() : null;
+  }
+
+  // The primary step button on the category page ("Weiter"). It is disabled until
+  // a valid category is selected, so isInteractable() doubles as a readiness gate.
+  function findWeiterButton() {
+    var cands = document.querySelectorAll(
+      "button, a[role='button'], input[type='submit'], a[class*='utton'], a[class*='Button']"
+    );
+    for (var i = 0; i < cands.length; i++) {
+      if (!isInteractable(cands[i])) continue;
+      var t = norm(cands[i].innerText || cands[i].value || cands[i].textContent || "");
+      if (!t) continue;
+      if (t === "weiter" || (t.indexOf("weiter") !== -1 && t.length < 25)) return cands[i];
     }
     return null;
   }
 
-  async function autoSelectCategory(draft) {
-    var keyword = (draft.category && draft.category.trim()) ? draft.category.trim()
-                : (draft.title || "").trim();
-    if (!keyword) return false;
-
-    var input = null;
-    for (var t = 0; t < 20 && !input; t++) {
-      input = findCategoryKeywordInput();
-      if (!input) await sleep(400);
+  // Fuzzy text match against the visible category-tree links (fallback only).
+  function findCategoryLinkByText(name) {
+    var nn = norm(name);
+    if (!nn) return null;
+    var links = document.querySelectorAll(
+      "a.category-selection-list-item-link, .category-selection-list-item a, a[href*='path=']"
+    );
+    var fuzzy = null;
+    for (var i = 0; i < links.length; i++) {
+      if (!isInteractable(links[i])) continue;
+      var lt = norm(links[i].textContent || "");
+      if (!lt) continue;
+      if (lt === nn) return links[i];
+      if (!fuzzy && (lt.indexOf(nn) !== -1 || nn.indexOf(lt) !== -1)) fuzzy = links[i];
     }
-    if (!input) return false;
+    return fuzzy;
+  }
 
-    fillField(input, keyword);
-    input.dispatchEvent(new KeyboardEvent("keydown", { bubbles: true }));
-    input.dispatchEvent(new KeyboardEvent("keyup", { bubbles: true }));
-
-    var suggestionSelectors = [
-      "#pstad-keyword-suggestions li", "#postad-keyword-suggestions li",
-      "ul[role='listbox'] li[role='option']", "ul[role='listbox'] li",
-      "[class*='uggestion'] li", "[class*='uggestion'] a",
-      "li[role='option']", "a[href*='p-kategorie']"
-    ];
-    for (var k = 0; k < 8; k++) {
-      await sleep(800);
-      var item = null;
-      for (var s = 0; s < suggestionSelectors.length; s++) {
-        var found = document.querySelector(suggestionSelectors[s]);
-        if (found) { item = found; break; }
-      }
-      if (item) { item.click(); return true; }
+  // Poll for the (now enabled) "Weiter" button and click it to reach schritt2.
+  async function proceedFromCategoryPage() {
+    for (var i = 0; i < 14; i++) {
+      var btn = findWeiterButton();
+      if (btn) { try { btn.click(); return true; } catch (e) {} }
+      await sleep(500);
     }
-    // Could not auto-pick; the field stays prefilled for a single manual tap.
     return false;
+  }
+
+  async function autoSelectCategory(draft) {
+    var path = getCategoryPath(draft);
+
+    if (path) {
+      // Robust path: jump straight to the category via the hash route, then click
+      // "Weiter". A real click on the matching tree link (if rendered) is even more
+      // reliable than the bare hash change, so we try that as a reinforcement.
+      try { window.location.hash = "?path=" + path + "&isParent=undefined"; } catch (e) {}
+      await sleep(900);
+      var link = document.querySelector("a.category-selection-list-item-link[href*='path=" + path + "']") ||
+                 document.querySelector("a[href*='path=" + path + "']");
+      if (link) { try { link.click(); await sleep(700); } catch (e) {} }
+      return await proceedFromCategoryPage();
+    }
+
+    // Fallback: no known path — match the category name against the visible tree.
+    var name = (draft.category || "").trim();
+    if (!name) return false;
+    for (var t = 0; t < 4; t++) {
+      var hit = findCategoryLinkByText(name);
+      if (hit) {
+        var li = hit.closest ? hit.closest("li") : null;
+        var isLeaf = !!(li && li.className && li.className.indexOf("is-leaf") !== -1);
+        try { hit.click(); } catch (e) {}
+        await sleep(900);
+        if (isLeaf) return await proceedFromCategoryPage();
+        // Parent expanded — next round may surface the leaf (best effort).
+      } else {
+        await sleep(600);
+      }
+    }
+    // Maybe a leaf is selected already; try to proceed, else leave it manual.
+    return await proceedFromCategoryPage();
   }
 
   // ----------------------------------------------------------------------------

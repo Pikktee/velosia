@@ -17,6 +17,16 @@ To extend coverage, simply add more entries to CATEGORIES. Each attribute has:
              for both the AI and the client-side label matching)
   - type:    "select" (pick one of options) or "text" (free text)
   - options: allowed values for select fields (guides the AI)
+
+Optional per category:
+  - path:    the Kleinanzeigen category tree path (e.g. "161/176" for
+             Elektronik > Haushaltsgeräte). The category page is a hash-routed
+             tree (#?path=161/176&isParent=...), so when this path is known the
+             autofill engine jumps straight to the category and clicks "Weiter"
+             — fully automatic. When omitted, the engine falls back to matching
+             the visible link text, and ultimately to a single manual tap.
+             Harvest new paths from the `href` of `.category-selection-list-item-link`
+             elements on p-anzeige-aufgeben.html.
 """
 
 from typing import Dict, List, Optional
@@ -118,6 +128,7 @@ CATEGORIES: List[Dict] = [
     {
         "name": "Handys & Telefone",
         "keyword": "Handy Smartphone",
+        "path": "161/173",
         "attributes": [
             {"label": "Gerät", "type": "select", "options": [
                 "Apple iPhone", "Samsung", "Google", "Xiaomi", "Huawei",
@@ -129,6 +140,7 @@ CATEGORIES: List[Dict] = [
     {
         "name": "Tablets & Reader",
         "keyword": "Tablet",
+        "path": "161/285",
         "attributes": [
             {"label": "Marke", "type": "select", "options": [
                 "Apple iPad", "Samsung", "Amazon", "Lenovo", "Huawei", "Sonstige"]},
@@ -138,6 +150,7 @@ CATEGORIES: List[Dict] = [
     {
         "name": "Notebooks & Laptops",
         "keyword": "Notebook Laptop",
+        "path": "161/278",
         "attributes": [
             {"label": "Marke", "type": "select", "options": [
                 "Apple", "Lenovo", "HP", "Dell", "Asus", "Acer", "Microsoft", "Sonstige"]},
@@ -147,6 +160,7 @@ CATEGORIES: List[Dict] = [
     {
         "name": "Konsolen & Spiele",
         "keyword": "Konsole Spiele",
+        "path": "161/279",
         "attributes": [
             {"label": "Plattform", "type": "select", "options": [
                 "PlayStation", "Xbox", "Nintendo Switch", "Nintendo", "PC", "Sonstige"]},
@@ -182,6 +196,7 @@ CATEGORIES: List[Dict] = [
     {
         "name": "Haushaltsgeräte",
         "keyword": "Haushaltsgeräte",
+        "path": "161/176",
         "attributes": [
             {"label": "Art", "type": "select", "options": [
                 "Küchengeräte", "Waschmaschinen & Trockner", "Staubsauger",

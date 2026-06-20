@@ -58,6 +58,20 @@ class Draft(Base):
     # Relationships
     user = relationship("User", back_populates="drafts")
 
+    @property
+    def category_path(self) -> Optional[str]:
+        """Kleinanzeigen category tree path (e.g. "161/176") looked up from the
+        chosen category name. Lets the autofill engine jump straight to the
+        category. Returns None for categories not yet mapped in the catalog."""
+        if not self.category:
+            return None
+        try:
+            from data.kleinanzeigen_categories import find_category
+            cat = find_category(self.category)
+            return cat.get("path") if cat else None
+        except Exception:
+            return None
+
 class BugReport(Base):
     __tablename__ = "bug_reports"
 

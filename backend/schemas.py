@@ -70,6 +70,9 @@ class DraftResponse(DraftBase):
     id: int
     user_id: int
     image_path: Optional[str] = None
+    # Kleinanzeigen category tree path (e.g. "161/176"), derived from the chosen
+    # category. Used by the autofill engine to auto-select the category.
+    category_path: Optional[str] = None
     created_at: datetime
 
     class Config:
