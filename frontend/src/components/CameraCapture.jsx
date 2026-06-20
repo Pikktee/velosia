@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Camera, Upload, Image as ImageIcon, Images, Sparkles, X, RotateCw, AlertCircle, Rocket, Trash2, Wand2, Layers } from 'lucide-react';
+import { Camera, Upload, Image as ImageIcon, Images, Sparkles, X, RotateCw, AlertCircle, Rocket, Trash2, Wand2, Layers, ChevronLeft, ChevronRight } from 'lucide-react';
 
 const CameraCapture = ({
   selectedImages = [],
@@ -393,7 +393,7 @@ const CameraCapture = ({
         {selectedImages.length > 0 && (
           <button className="camera-review-chip" onClick={() => setShowReview(true)}>
             <Images size={15} />
-            <span>{selectedImages.length} {selectedImages.length === 1 ? 'Foto' : 'Fotos'} – alle ansehen</span>
+            <span>{selectedImages.length} {selectedImages.length === 1 ? 'Foto' : 'Fotos'}</span>
           </button>
         )}
 
@@ -533,48 +533,11 @@ const CameraCapture = ({
 
       {/* Full-screen review: see all captured photos and remove any of them */}
       {showReview && (
-        <div className="camera-review-overlay">
-          <div className="camera-review-header">
-            <h3>
-              <Images size={18} />
-              {selectedImages.length} {selectedImages.length === 1 ? 'Foto' : 'Fotos'}
-            </h3>
-            <button
-              className="camera-review-close"
-              onClick={() => setShowReview(false)}
-              title="Zurück zur Kamera"
-            >
-              <X size={20} />
-            </button>
-          </div>
-
-          {selectedImages.length === 0 ? (
-            <div className="camera-review-empty">
-              <ImageIcon size={40} style={{ opacity: 0.5 }} />
-              <p>Keine Fotos mehr vorhanden.<br />Nimm neue Fotos auf.</p>
-            </div>
-          ) : (
-            <div className="camera-review-grid">
-              {selectedImages.map((img, idx) => (
-                <div
-                  key={img.id}
-                  className="camera-review-cell"
-                  style={{ opacity: img.isCompressing ? 0.6 : 1 }}
-                >
-                  <img src={img.previewUrl} alt={`Foto ${idx + 1}`} />
-                  <span className="camera-review-cell-index">{idx + 1}</span>
-                  <button
-                    className="camera-review-cell-delete"
-                    onClick={() => removeImage(img.id)}
-                    title="Foto entfernen"
-                  >
-                    <Trash2 size={14} />
-                  </button>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
+        <PhotoReview
+          images={selectedImages}
+          onRemove={removeImage}
+          onClose={() => setShowReview(false)}
+        />
       )}
 
       {/* One-time turbo onboarding */}
@@ -606,6 +569,133 @@ const CameraCapture = ({
               <Rocket size={16} /> Los geht's!
             </button>
           </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+// Full-screen photo review. Portrait: 2-column grid. Landscape: swipeable carousel
+// (centered main photo, dimmed neighbors on each side).
+const PhotoReview = ({ images, onRemove, onClose }) => {
+  const [isLandscape, setIsLandscape] = useState(
+    () => typeof window !== 'undefined' && window.matchMedia('(orientation: landscape)').matches
+  );
+  const [active, setActive] = useState(0);
+  const touchStartX = useRef(null);
+
+  useEffect(() => {
+    const mq = window.matchMedia('(orientation: landscape)');
+    const handler = (e) => setIsLandscape(e.matches);
+    mq.addEventListener('change', handler);
+    return () => mq.removeEventListener('change', handler);
+  }, []);
+
+  // Keep active index valid as photos get removed
+  useEffect(() => {
+    if (active > images.length - 1) {
+      setActive(Math.max(0, images.length - 1));
+    }
+  }, [images.length, active]);
+
+  const count = images.length;
+  const goPrev = () => setActive((i) => Math.max(0, i - 1));
+  const goNext = () => setActive((i) => Math.min(count - 1, i + 1));
+
+  const handleTouchStart = (e) => { touchStartX.current = e.touches[0].clientX; };
+  const handleTouchEnd = (e) => {
+    if (touchStartX.current === null) return;
+    const delta = e.changedTouches[0].clientX - touchStartX.current;
+    if (delta < -45) goNext();
+    else if (delta > 45) goPrev();
+    touchStartX.current = null;
+  };
+
+  return (
+    <div className="camera-review-overlay">
+      <div className="camera-review-header">
+        <h3>
+          <Images size={18} />
+          {count} {count === 1 ? 'Foto' : 'Fotos'}
+          {isLandscape && count > 0 && (
+            <span className="camera-review-counter">{active + 1} / {count}</span>
+          )}
+        </h3>
+        <button className="camera-review-close" onClick={onClose} title="Zurück zur Kamera">
+          <X size={20} />
+        </button>
+      </div>
+
+      {count === 0 ? (
+        <div className="camera-review-empty">
+          <ImageIcon size={40} style={{ opacity: 0.5 }} />
+          <p>Keine Fotos mehr vorhanden.<br />Nimm neue Fotos auf.</p>
+        </div>
+      ) : isLandscape ? (
+        <div
+          className="camera-review-carousel"
+          onTouchStart={handleTouchStart}
+          onTouchEnd={handleTouchEnd}
+        >
+          {images.map((img, idx) => {
+            const offset = idx - active;
+            const isCurrent = offset === 0;
+            return (
+              <div
+                key={img.id}
+                className={`camera-review-slide ${isCurrent ? 'is-current' : ''}`}
+                style={{
+                  transform: `translateX(${offset * 62}%) scale(${isCurrent ? 1 : 0.78})`,
+                  opacity: Math.abs(offset) > 1 ? 0 : isCurrent ? 1 : 0.4,
+                  zIndex: 10 - Math.abs(offset),
+                  pointerEvents: Math.abs(offset) > 1 ? 'none' : 'auto'
+                }}
+                onClick={() => { if (!isCurrent) setActive(idx); }}
+              >
+                <img src={img.previewUrl} alt={`Foto ${idx + 1}`} />
+                {isCurrent && (
+                  <button
+                    className="camera-review-cell-delete"
+                    onClick={(e) => { e.stopPropagation(); onRemove(img.id); }}
+                    title="Foto entfernen"
+                  >
+                    <Trash2 size={16} />
+                  </button>
+                )}
+              </div>
+            );
+          })}
+
+          {active > 0 && (
+            <button className="camera-review-nav prev" onClick={goPrev} title="Vorheriges Foto">
+              <ChevronLeft size={24} />
+            </button>
+          )}
+          {active < count - 1 && (
+            <button className="camera-review-nav next" onClick={goNext} title="Nächstes Foto">
+              <ChevronRight size={24} />
+            </button>
+          )}
+        </div>
+      ) : (
+        <div className="camera-review-grid">
+          {images.map((img, idx) => (
+            <div
+              key={img.id}
+              className="camera-review-cell"
+              style={{ opacity: img.isCompressing ? 0.6 : 1 }}
+            >
+              <img src={img.previewUrl} alt={`Foto ${idx + 1}`} />
+              <span className="camera-review-cell-index">{idx + 1}</span>
+              <button
+                className="camera-review-cell-delete"
+                onClick={() => onRemove(img.id)}
+                title="Foto entfernen"
+              >
+                <Trash2 size={14} />
+              </button>
+            </div>
+          ))}
         </div>
       )}
     </div>

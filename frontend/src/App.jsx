@@ -236,7 +236,9 @@ export default function App() {
     setCapturedImages(turboImages); // restore any photos from a previously aborted turbo session
     setView('capture');             // mount the camera immediately, behind the launch overlay
     setRocketLaunch(true);
-    setTimeout(() => setRocketLaunch(false), 1500); // remove overlay once the backdrop has faded
+    // Backdrop fades by ~1.5s revealing the camera; keep the overlay a bit longer so the
+    // celebratory fireworks finish bursting over the now-visible camera (pointer-events: none).
+    setTimeout(() => setRocketLaunch(false), 2200);
   };
 
   // Close the camera. In turbo mode the captured photos are preserved (not revoked)
@@ -657,13 +659,36 @@ export default function App() {
         <div className="rocket-launch-overlay" aria-hidden="true">
           <div className="rocket-launch-backdrop" />
           <div className="rocket-vehicle">
-            <Rocket size={44} strokeWidth={2} />
             <div className="rocket-trail" />
+            <svg className="rocket-svg" width="56" height="94" viewBox="0 0 56 94" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <defs>
+                <linearGradient id="rk-body" x1="28" y1="4" x2="28" y2="62" gradientUnits="userSpaceOnUse">
+                  <stop stopColor="#ffffff" />
+                  <stop offset="1" stopColor="#c5cfdd" />
+                </linearGradient>
+                <linearGradient id="rk-flame" x1="28" y1="60" x2="28" y2="94" gradientUnits="userSpaceOnUse">
+                  <stop stopColor="#fde68a" />
+                  <stop offset="0.5" stopColor="#fb923c" />
+                  <stop offset="1" stopColor="#ec4899" />
+                </linearGradient>
+              </defs>
+              <path className="rk-flame" d="M20 60 H36 C36 75 31 85 28 94 C25 85 20 75 20 60 Z" fill="url(#rk-flame)" />
+              <path d="M18 46 L7 63 L18 58 Z" fill="#ec4899" />
+              <path d="M38 46 L49 63 L38 58 Z" fill="#ec4899" />
+              <path d="M28 4 C40 18 42 40 38 60 H18 C14 40 16 18 28 4 Z" fill="url(#rk-body)" stroke="#94a3b8" strokeWidth="1.5" />
+              <circle cx="28" cy="30" r="8" fill="#09b0b7" stroke="#0e7490" strokeWidth="2.5" />
+              <circle cx="30.5" cy="27.5" r="2.4" fill="#fff" fillOpacity="0.85" />
+            </svg>
           </div>
           <div className="firework fw-1" />
           <div className="firework fw-2" />
           <div className="firework fw-3" />
           <div className="firework fw-4" />
+          <div className="firework fw-5" />
+          <div className="firework fw-6" />
+          <div className="spark sp-1" />
+          <div className="spark sp-2" />
+          <div className="spark sp-3" />
         </div>
       )}
 
