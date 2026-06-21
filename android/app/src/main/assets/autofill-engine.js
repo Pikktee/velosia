@@ -495,6 +495,85 @@
   }
 
   // ----------------------------------------------------------------------------
+  // Vinted category picker (in-DOM dropdown, drilled level by level)
+  // ----------------------------------------------------------------------------
+  //
+  // Vinted's picker is an always-in-DOM dropdown:
+  //   [data-testid="catalog-select-dropdown-input"]    -> opens it
+  //   [data-testid="catalog-select-dropdown-content"]  -> the option list
+  // The top 1-2 levels render each option with [data-testid="catalog-icon-<ID>"];
+  // deeper levels render plain web_ui__Cell rows carrying only the category NAME.
+  // So we drill by catalog ID where available and fall back to the level's name
+  // (taken from the breadcrumb). The draft provides:
+  //   vinted_path      -> "1904/4/183/1839" (chain of catalog IDs to the leaf)
+  //   vinted_category  -> "Damen > Kleidung > Jeans > Boyfriend Jeans" (names)
+
+  function vintedPickerContainer() {
+    return document.querySelector("[data-testid='catalog-select-dropdown-content']");
+  }
+
+  function vintedClickable(el) {
+    return (el.closest && el.closest("[role='button'],button,li,a,div[tabindex]")) || el.parentElement || el;
+  }
+
+  function vintedFindRowByName(container, name) {
+    var target = norm(name);
+    if (!target) return null;
+    var nodes = container.querySelectorAll(
+      ".web_ui__Cell__title, .web_ui__Cell__heading, li.web_ui__Item__item, [role='button']"
+    );
+    for (var i = 0; i < nodes.length; i++) {
+      if (!isInteractable(nodes[i])) continue;
+      if (norm(nodes[i].textContent) === target) return nodes[i];
+    }
+    return null;
+  }
+
+  async function vintedClickLevel(id, name) {
+    for (var t = 0; t < 16; t++) {
+      var c = vintedPickerContainer();
+      if (c) {
+        var icon = id ? c.querySelector("[data-testid='catalog-icon-" + id + "']") : null;
+        if (icon && isInteractable(icon)) { vintedClickable(icon).click(); return true; }
+        var row = vintedFindRowByName(c, name);
+        if (row) { vintedClickable(row).click(); return true; }
+      }
+      await sleep(350);
+    }
+    return false;
+  }
+
+  async function selectVintedCategory(draft) {
+    var path = draft.vinted_path || draft.vintedPath;
+    if (!path) return false;
+    var ids = String(path).split("/").filter(Boolean);
+    if (ids.length === 0) return false;
+    var names = String(draft.vinted_category || draft.vintedCategory || "")
+      .split(">").map(function (s) { return s.trim(); });
+
+    // Open the picker.
+    var input = firstBySelectors(["[data-testid='catalog-select-dropdown-input']"]);
+    if (!input) return false;
+    for (var o = 0; o < 12 && !vintedPickerContainer(); o++) {
+      try {
+        input.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
+        input.click();
+        input.focus();
+      } catch (e) {}
+      await sleep(300);
+    }
+    if (!vintedPickerContainer()) return false;
+
+    // Drill each level (ID first, name fallback), waiting for the next to render.
+    for (var i = 0; i < ids.length; i++) {
+      var ok = await vintedClickLevel(ids[i], names[i] || "");
+      if (!ok) return false;
+      await sleep(500);
+    }
+    return true;
+  }
+
+  // ----------------------------------------------------------------------------
   // Submit handling
   // ----------------------------------------------------------------------------
 
@@ -650,10 +729,16 @@
                 .forEach(function (lbl) { filled.push(lbl); });
     }
 
-    // Vinted's category / brand / size / condition are modal pickers we cannot
-    // reliably drive — surface them as manual to-dos instead of failing silently.
+    // Vinted: drive the category picker automatically (drilled by catalog id /
+    // name). Brand / size / condition are separate pickers — still manual for now.
     if (platform === "vinted") {
-      manual.push("Kategorie, Marke, Größe, Zustand");
+      var vintedCatOk = false;
+      if (draft.vinted_path || draft.vintedPath) {
+        try { vintedCatOk = await selectVintedCategory(draft); } catch (e) { vintedCatOk = false; }
+      }
+      if (vintedCatOk) filled.push("Kategorie");
+      else manual.push("Kategorie");
+      manual.push("Marke, Größe, Zustand");
     } else if (!draft.category) {
       manual.push("Kategorie");
     }

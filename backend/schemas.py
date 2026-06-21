@@ -57,6 +57,7 @@ class DraftBase(BaseModel):
     price: Optional[float] = None
     sources: Optional[str] = None # JSON string: [{"title": "...", "price": 12.0, "url": "..."}]
     attributes: Optional[str] = None # JSON string: {"Größe": "M", "Marke": "Nike", ...}
+    vinted_category: Optional[str] = None # Vinted breadcrumb: "Damen > Kleidung > Jeans > Boyfriend Jeans"
     image_paths: Optional[str] = None
     is_turbo: Optional[bool] = False
 
@@ -73,6 +74,8 @@ class DraftResponse(DraftBase):
     # Kleinanzeigen category tree path (e.g. "161/176"), derived from the chosen
     # category. Used by the autofill engine to auto-select the category.
     category_path: Optional[str] = None
+    # Vinted catalog path (e.g. "1904/4/183/1839"), derived from vinted_category.
+    vinted_path: Optional[str] = None
     created_at: datetime
 
     class Config:

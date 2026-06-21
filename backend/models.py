@@ -51,6 +51,9 @@ class Draft(Base):
     sources = Column(String, nullable=True)
     # JSON string of Kleinanzeigen attribute fields: {"Größe": "M", "Marke": "Nike", ...}
     attributes = Column(String, nullable=True)
+    # Vinted category as a unique breadcrumb ("Damen > Kleidung > Jeans > Boyfriend Jeans").
+    # Vinted has its own taxonomy, separate from Kleinanzeigen's `category`.
+    vinted_category = Column(String, nullable=True)
     # True if this draft was auto-created in "Turbo" batch mode (multiple offers from one photo session)
     is_turbo = Column(Boolean, default=False, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
@@ -78,6 +81,19 @@ class Draft(Base):
             from data.kleinanzeigen_categories import find_category
             cat = find_category(self.category)
             return cat.get("path") if cat else None
+        except Exception:
+            return None
+
+    @property
+    def vinted_path(self) -> Optional[str]:
+        """Vinted catalog path (chain of catalog IDs, e.g. "1904/4/183/1839")
+        derived from the unique `vinted_category` breadcrumb. Drives the engine's
+        category picker (which drills level by level via catalog id / name)."""
+        if not self.vinted_category:
+            return None
+        try:
+            from data import vinted_taxonomy as vtax
+            return vtax.path_for_breadcrumb(self.vinted_category) or vtax.resolve_to_path(self.vinted_category)
         except Exception:
             return None
 

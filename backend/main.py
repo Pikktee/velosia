@@ -57,6 +57,14 @@ def run_migrations():
         db.rollback()
         print(f"Migration note: is_turbo column might already exist. ({e})", flush=True)
 
+    try:
+        db.execute(text("ALTER TABLE drafts ADD COLUMN vinted_category VARCHAR(300)"))
+        db.commit()
+        print("Successfully ran migrations: added vinted_category column to drafts.", flush=True)
+    except Exception as e:
+        db.rollback()
+        print(f"Migration note: vinted_category column might already exist. ({e})", flush=True)
+
     # User settings migrations
     for col_name, col_type in [
         ("ai_tone", "VARCHAR(50) DEFAULT 'locker'"),
@@ -81,7 +89,7 @@ def run_migrations():
 
 run_migrations()
 
-app = FastAPI(title="Vintamie API", version="2.4.3")
+app = FastAPI(title="Vintamie API", version="2.4.4")
 
 UPLOAD_DIR = "/data/uploads" if os.path.isdir("/data") else "uploads"
 os.makedirs(UPLOAD_DIR, exist_ok=True)
@@ -346,6 +354,7 @@ def upload_and_analyze(
         price=analysis["price"],
         sources=analysis.get("sources"), # Store JSON string of comparison listings
         attributes=analysis.get("attributes"), # Store JSON string of Kleinanzeigen attribute fields
+        vinted_category=analysis.get("vinted_category"), # Vinted breadcrumb (separate taxonomy)
         image_path=saved_paths[0], # Primary image for backward compatibility
         image_paths=json.dumps(saved_paths) # Store all images as a JSON list
     )
@@ -452,6 +461,7 @@ def upload_turbo(
             price=analysis["price"],
             sources=analysis.get("sources"),
             attributes=analysis.get("attributes"),
+            vinted_category=analysis.get("vinted_category"),
             image_path=group_saved[0],
             image_paths=json.dumps(group_saved),
             is_turbo=True

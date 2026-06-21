@@ -8,6 +8,21 @@ Vintamie automates listing items on Second-Hand platforms (Vinted and Kleinanzei
 
 ---
 
+## Autofill & Category Architecture (V2.4+)
+
+Autofilling Vinted/Kleinanzeigen forms is driven by a **single shared engine**, `shared/autofill-engine.js` (pure DOM JS, no platform APIs). It is the single source of truth and is **mirrored by `deploy.py`** into `extension/autofill-engine.js` and `android/app/src/main/assets/autofill-engine.js` — never edit those copies, edit `shared/` and let deploy sync them. Public API: `window.__vintamie.autofill(draft, options)`. The React-safe native value setter (prototype `value` setter + bubbling `input` event) is what makes Vinted (a React SPA) accept programmatic input. `auto_submit` (User setting) controls whether the engine also clicks publish; default false = user reviews and publishes manually.
+
+**Kleinanzeigen category selection is a hash-routed tree, NOT a keyword search.** A category is a link `<a class="category-selection-list-item-link" href="#?path=161/176/staubsauger">`. The engine sets `location.hash = "?path=...&isParent=undefined"` and clicks **"Weiter"** to reach `p-anzeige-aufgeben-schritt2.html` with the category pre-set (the 3rd tree level becomes the "Art" dropdown there).
+
+**Full category coverage (all 3018 leaf categories):**
+*   The complete live taxonomy was harvested once via a client-side BFS tree-walk (the tree is embedded in the page JS, so expanding nodes via the hash hits **no network** — safe, triggers no bot detection). Re-harvest only if Kleinanzeigen restructures its tree, using `backend/data/harvest_taxonomy_snippet.js`.
+*   Data lives in `backend/data/kleinanzeigen_taxonomy.json` (3168 nodes) and is served by `backend/data/kleinanzeigen_taxonomy.py` (search/resolve helpers + a ~362-line AI selection list with the huge car-model branch collapsed to level 2, ~4k tokens).
+*   `gemini_service` has the AI pick an **exact breadcrumb** (`"Elektronik > Haushaltsgeräte > Staubsauger"`); the server resolves it losslessly to the tree path (breadcrumbs are globally unique). If the AI picks a 2nd-level category, the server descends to the leaf via the `Art` attribute.
+*   `Draft.category` stores the breadcrumb; `Draft.category_path` is a **derived `@property`** (no DB column / migration) that maps it to the path, exposed in `DraftResponse` and consumed by the engine.
+*   The legacy curated `backend/data/kleinanzeigen_categories.py` is kept only for generic attribute cleaning + `CONDITION_TO_ZUSTAND`; category selection now goes through the full taxonomy.
+
+---
+
 ## Project Structure
 ```
 /Users/henrik/Dev/vintamie/

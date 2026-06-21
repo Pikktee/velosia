@@ -6,6 +6,7 @@ from dotenv import load_dotenv
 from services.price_comparison import search_marketplace_prices
 from data import kleinanzeigen_categories as kacat
 from data import kleinanzeigen_taxonomy as katax
+from data import vinted_taxonomy as vtax
 
 load_dotenv()
 
@@ -15,7 +16,53 @@ if GEMINI_API_KEY:
 
 GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
 
-from typing import List
+from typing import List, Optional
+
+def pick_vinted_category(title: str, description: str = "", search_query: str = "", model_name: str = None) -> Optional[str]:
+    """Resolve the best Vinted category (a unique breadcrumb) for an item via a
+    dedicated lightweight text call. Vinted has its own taxonomy, so this is
+    separate from the Kleinanzeigen category chosen in the main analysis.
+
+    Returns the breadcrumb (e.g. "Damen > Kleidung > Jeans > Boyfriend Jeans") or
+    None on ANY failure (missing key, quota, parse error, no match) so the caller
+    can simply leave Vinted's category to a manual tap without breaking the draft.
+    """
+    if not GEMINI_API_KEY:
+        return None
+    ctx = ". ".join([p for p in [search_query, title, description] if p and p.strip()]).strip()
+    if not ctx:
+        return None
+    try:
+        prompt = (
+            "Du ordnest einen Second-Hand-Artikel der passenden VINTED-Kategorie zu.\n"
+            f"Artikel: {ctx}\n\n"
+            "Wähle die EXAKT passende Kategorie aus der folgenden Liste. Jede Zeile ist ein "
+            "vollständiger Pfad (Hauptkategorie > ... > Unterkategorie). Antworte AUSSCHLIESSLICH "
+            "mit einer WORTWÖRTLICH kopierten Zeile aus der Liste, ohne weitere Worte:\n"
+            f"{vtax.selection_prompt()}"
+        )
+        models_to_try = []
+        for m in [model_name, GEMINI_MODEL, "gemini-2.5-flash", "gemini-2.0-flash"]:
+            if m and m not in models_to_try:
+                models_to_try.append(m)
+        resp = None
+        for mn in models_to_try:
+            try:
+                resp = genai.GenerativeModel(mn).generate_content(prompt)
+                break
+            except Exception as e:
+                print(f"Vintamie Vinted-Kategorie: Modell '{mn}' fehlgeschlagen: {e}", flush=True)
+        if not resp or not getattr(resp, "text", None):
+            return None
+        pick = resp.text.strip().strip('"').strip("'").splitlines()[0].strip()
+        node = vtax.resolve(pick)
+        if node:
+            print(f"Vintamie: Vinted-Kategorie -> {node['breadcrumb']}", flush=True)
+            return node["breadcrumb"]
+        return None
+    except Exception as e:
+        print(f"Vintamie: Vinted-Kategorie-Auflösung fehlgeschlagen: {e}", flush=True)
+        return None
 
 def get_tone_instruction(user) -> str:
     if not user:
@@ -348,12 +395,21 @@ def analyze_item_image(image_paths: List[str], user = None, user_condition: str 
 
         clean_attributes = kacat.clean_generic_attributes(raw_attributes, condition=condition_value)
 
+        title_value = str(data.get("title", f"Vintage {search_query}"))
+
+        # Vinted has its own taxonomy — resolve its category in a separate, graceful
+        # text call (returns None on failure so the draft is never blocked).
+        vinted_category = pick_vinted_category(
+            title_value, raw_description, search_query, working_model_name
+        )
+
         # Validate keys and types, injecting comparison sources
         validated_data = {
-            "title": str(data.get("title", f"Vintage {search_query}")),
+            "title": title_value,
             "description": raw_description,
             "category": chosen_category,
             "category_path": chosen_path,
+            "vinted_category": vinted_category,
             "condition": condition_value,
             "price": float(raw_price),
             "sources": sources_str,
@@ -472,6 +528,7 @@ def get_mock_analysis() -> dict:
         "title": "Nike Air Max 90 Weiß (Gr. 40)",
         "description": "Schöne Nike Air Max 90 Sneaker in weiß. Guter getragener Zustand, leichte Gebrauchsspuren, aber voll funktionsfähig und bereit für die zweite Runde!",
         "category": "Damenschuhe",
+        "vinted_category": "Damen > Schuhe > Sneaker",
         "condition": "Gut",
         "price": 30.0,
         "sources": json.dumps(fallback_sources),
