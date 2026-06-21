@@ -21,6 +21,12 @@ Autofilling Vinted/Kleinanzeigen forms is driven by a **single shared engine**, 
 *   `Draft.category` stores the breadcrumb; `Draft.category_path` is a **derived `@property`** (no DB column / migration) that maps it to the path, exposed in `DraftResponse` and consumed by the engine.
 *   The legacy curated `backend/data/kleinanzeigen_categories.py` is kept only for generic attribute cleaning + `CONDITION_TO_ZUSTAND`; category selection now goes through the full taxonomy.
 
+**Vinted categories (separate taxonomy):** Vinted has its own catalog tree, completely independent of Kleinanzeigen, so a draft carries **two** category paths.
+*   Vinted's full taxonomy (2917 nodes / 2498 leaves) was harvested once from the embedded RSC payload (`self.__next_f`) on `items/new` and baked into `backend/data/vinted_taxonomy.json` + `vinted_taxonomy.py`. Each node has a numeric catalog `id`; the path is the chain of ids (e.g. `1904/4/183/1839`).
+*   Vinted's picker is an in-DOM dropdown (`[data-testid="catalog-select-dropdown-content"]`) that drills one level per click. Levels 1–2 render options with `[data-testid="catalog-icon-<ID>"]`; deeper levels render plain `web_ui__Cell` rows carrying only the **name** (no id). The engine's `selectVintedCategory` opens the picker and drills each path level: catalog-id click where available, name match (from the breadcrumb) deeper. NB: the page's `first-category-<ID>` / `role="tab"` elements are the site's top NAV (browse links) — NOT the form picker.
+*   The AI resolves the Vinted category in a **separate, graceful text call** (`pick_vinted_category` in `gemini_service`) so quota/parse failures just leave it manual without breaking the draft (Kleinanzeigen still works).
+*   `Draft.vinted_category` (a real column, additive migration) stores the breadcrumb; `Draft.vinted_path` is a derived `@property` mapping it to the catalog-id path. Both `vinted_category` and `vinted_path` are exposed in `DraftResponse`. Brand/size/condition pickers are still left manual.
+
 ---
 
 ## Project Structure

@@ -36,7 +36,7 @@
   // and in the extension it is a persistent content script — never redefine.
   if (window.__vintamie && window.__vintamie.__loaded) return;
 
-  var VERSION = "1.0.0";
+  var VERSION = "2.4.5";
 
   // ----------------------------------------------------------------------------
   // Low level helpers
@@ -350,9 +350,10 @@
   async function proceedFromCategoryPage() {
     for (var i = 0; i < 14; i++) {
       var btn = findWeiterButton();
-      if (btn) { try { btn.click(); return true; } catch (e) {} }
+      if (btn) { try { console.log("Vintamie: 'Weiter' gefunden, klicke ->", btn.textContent); btn.click(); return true; } catch (e) {} }
       await sleep(500);
     }
+    console.warn("Vintamie: kein aktiver 'Weiter'-Button gefunden (Kategorie evtl. nicht gesetzt)");
     return false;
   }
 
@@ -769,11 +770,20 @@
     var autoSubmit = !!options.autoSubmit;
     var showUi = options.showOverlay !== false;
 
+    try {
+      console.log("Vintamie engine v" + VERSION + " autofill:", {
+        platform: platform, phase: phase, autoSubmit: autoSubmit,
+        category: draft && draft.category, category_path: draft && draft.category_path,
+        vinted_category: draft && draft.vinted_category, vinted_path: draft && draft.vinted_path
+      });
+    } catch (e) {}
+
     // Kleinanzeigen step 1: pick the category, then let the step-2 reload fill.
     if (platform === "kleinanzeigen" && phase === "category") {
       var result0 = { platform: platform, phase: phase, filled: [], manual: [], photos: 0, submitted: false };
       if (showUi) showOverlay(result0, autoSubmit);
-      await autoSelectCategory(draft);
+      var catOk = await autoSelectCategory(draft);
+      console.log("Vintamie: Kategorie-Auswahl (KA) ->", catOk ? "Weiter geklickt" : "fehlgeschlagen/manuell", "path=", draft && draft.category_path);
       return result0;
     }
 
