@@ -10,12 +10,18 @@ is what once got the IP banned).
 Status markers were calibrated against live pages (2026-06):
 
 Kleinanzeigen
-  * A deleted / non-existent ad does NOT 404 — it 302-redirects to the homepage.
-    So "gone" = the final URL no longer contains "/s-anzeige/".
-  * KA has no real "sold" state (ads are simply deleted). Active ads never carried
-    the word "reserviert", so that token (guarded by the /s-anzeige/ check) is a
-    usable reserved signal. The word "verkauft" DOES appear on active pages
-    (generic text) and must not be used.
+  * The status is NOT visible text — KA renders the yellow "Reserviert •" /
+    "Gelöscht •" veil purely client-side from an inline JS config object. The two
+    authoritative, login-free booleans live in that object and ARE present in the
+    static (curl-cffi) HTML:
+        showDeletedVeil: true  -> "geloescht"   (deleted)
+        showPausedVeil:  true  -> "reserviert"   (reserved / paused)
+        both false             -> "online"
+    A soft-deleted ad keeps returning HTTP 200 with "/s-anzeige/" intact and only
+    flips showDeletedVeil — so the redirect/404 heuristic alone misses it; the
+    booleans are the primary signal, the redirect/404 a fully-purged fallback.
+  * KA exposes no public "sold" state (no showSoldVeil / sold flag). The word
+    "verkauft" only appears as free description text and must never be matched.
 
 Vinted
   * Deleted item = clean 404.
@@ -44,26 +50,32 @@ from services import http_client
 # Kleinanzeigen
 # ---------------------------------------------------------------------------
 
+# Authoritative status flags from KA's inline JS config object (see module
+# docstring). These drive the client-side veil and are present in the static HTML.
+_KA_DELETED_VEIL = re.compile(r"showDeletedVeil\s*:\s*true", re.I)
+_KA_PAUSED_VEIL = re.compile(r"showPausedVeil\s*:\s*true", re.I)
+
+
 def _ka_status(resp):
     if resp is None:
         return UNBEKANNT
     final_url = str(getattr(resp, "url", "") or "")
     code = resp.status_code
 
-    # Hard not-found.
+    # Fully purged ad: KA 404s or bounces off the ad page back to home/search.
     if code in (404, 410):
         return GELOESCHT
-    # Redirected away from the ad (KA bounces deleted ads to the homepage / search).
     if final_url and "/s-anzeige/" not in final_url:
         return GELOESCHT
     if code != 200:
         return UNBEKANNT
 
-    low = (getattr(resp, "text", "") or "").lower()
-    if "ist nicht mehr verfügbar" in low or "anzeige wurde gelöscht" in low:
+    text = getattr(resp, "text", "") or ""
+    # Primary, authoritative signal — works even for soft-deleted ads that still
+    # return 200 with /s-anzeige/ intact.
+    if _KA_DELETED_VEIL.search(text):
         return GELOESCHT
-    # "reserviert" is absent on active ads -> reliable reserved signal here.
-    if "reserviert" in low:
+    if _KA_PAUSED_VEIL.search(text):
         return RESERVIERT
     return ONLINE
 
