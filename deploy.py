@@ -5,6 +5,7 @@ import os
 import re
 import subprocess
 import sys
+import zipfile
 
 def run_cmd(cmd, cwd=None):
     print(f"Running: {cmd}")
@@ -33,6 +34,41 @@ def sync_shared_engine():
         with open(dst, "w") as f:
             f.write(content)
         print(f"✔ Synced autofill engine -> {dst}")
+
+def build_extension_zip():
+    """Package the WebExtension into a single zip the landing page offers for
+    download. Written into frontend/public so Vite ships it as a static asset at
+    /vintamie-extension.zip — always matching the engine just synced above.
+    The archive is reproducible (fixed timestamps) so identical contents produce
+    identical bytes and don't churn git on every deploy."""
+    ext_dir = "extension"
+    out_path = "frontend/public/vintamie-extension.zip"
+    if not os.path.isdir(ext_dir):
+        print("⚠ extension/ not found — skipping extension zip.")
+        return
+    os.makedirs(os.path.dirname(out_path), exist_ok=True)
+    skip = {".DS_Store"}
+    entries = []
+    for root, _dirs, names in os.walk(ext_dir):
+        for n in names:
+            if n in skip:
+                continue
+            full = os.path.join(root, n)
+            # manifest.json sits at the archive root so the extracted folder loads
+            # directly via Chrome's "Load unpacked".
+            arc = os.path.relpath(full, ext_dir).replace(os.sep, "/")
+            entries.append((full, arc))
+    entries.sort(key=lambda e: e[1])
+    with zipfile.ZipFile(out_path, "w", zipfile.ZIP_DEFLATED) as z:
+        for full, arc in entries:
+            with open(full, "rb") as fh:
+                data = fh.read()
+            info = zipfile.ZipInfo(arc, date_time=(2024, 1, 1, 0, 0, 0))
+            info.compress_type = zipfile.ZIP_DEFLATED
+            info.external_attr = 0o644 << 16
+            z.writestr(info, data)
+    print(f"✔ Packaged extension ({len(entries)} files) -> {out_path}")
+
 
 def main():
     # 1. Get current version
@@ -143,6 +179,10 @@ def main():
 
     # 5c. Keep the shared autofill engine mirrored into extension + android assets
     sync_shared_engine()
+
+    # 5d. Package the extension for the landing-page download (after the sync, so
+    # the zip always carries the freshly-mirrored engine).
+    build_extension_zip()
 
     # 6. Git commit & push
     run_cmd("git add .")

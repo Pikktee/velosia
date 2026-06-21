@@ -1,10 +1,37 @@
 import React, { useState } from 'react';
-import { Download, Sparkles, Camera, FolderHeart, ArrowRight, Globe, X } from 'lucide-react';
+import { Download, Sparkles, Camera, FolderHeart, ArrowRight, Globe, X, Puzzle, Smartphone } from 'lucide-react';
 import { API_BASE_URL } from '../utils/api';
 
+// Small inline-code chip used inside the install guides.
+const Code = ({ children }) => (
+  <code style={{
+    background: 'rgba(255, 255, 255, 0.06)',
+    border: '1px solid var(--glass-border)',
+    borderRadius: '5px',
+    padding: '0.05rem 0.35rem',
+    fontSize: '0.8rem',
+    fontFamily: 'monospace',
+    color: 'var(--primary)',
+    whiteSpace: 'nowrap'
+  }}>{children}</code>
+);
+
+const guideOlStyle = { margin: '0 0 1.25rem 0', padding: '0 0 0 1.25rem', display: 'flex', flexDirection: 'column', gap: '0.7rem' };
+const guideLiStyle = { paddingLeft: '0.25rem', lineHeight: '1.5' };
+const guideHintStyle = { fontSize: '0.8rem', color: 'var(--text-muted)', borderLeft: '2px solid var(--glass-border)', paddingLeft: '0.75rem', margin: 0 };
+
+// Titles for the modal, keyed by the activeDoc value.
+const DOC_TITLES = {
+  impressum: 'Impressum',
+  datenschutz: 'Datenschutzerklärung',
+  'install-android': 'Android-App installieren',
+  'install-chrome': 'Chrome-Erweiterung installieren'
+};
+
 export default function LandingPage() {
-  const [activeDoc, setActiveDoc] = useState(null); // 'impressum', 'datenschutz', or null
+  const [activeDoc, setActiveDoc] = useState(null); // see DOC_TITLES keys, or null
   const apkDownloadUrl = `${API_BASE_URL}/api/app/latest-apk`;
+  const extensionDownloadUrl = '/vintamie-extension.zip'; // static asset served by the frontend
 
   const handleOpenWebApp = () => {
     window.location.hash = '#/login';
@@ -134,8 +161,43 @@ export default function LandingPage() {
             <span>App für Android laden</span>
           </a>
 
+          {/* Chrome Extension Download Button */}
+          <a
+            href={extensionDownloadUrl}
+            download
+            className="btn"
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '0.6rem',
+              padding: '0.8rem 1.5rem',
+              background: 'rgba(255, 255, 255, 0.02)',
+              border: '1px solid var(--glass-border)',
+              color: 'var(--text-primary)',
+              fontSize: '0.9rem',
+              fontWeight: '600',
+              textDecoration: 'none',
+              cursor: 'pointer',
+              width: '100%',
+              maxWidth: '290px',
+              transition: 'all 0.2s ease'
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.background = 'rgba(255, 255, 255, 0.05)';
+              e.currentTarget.style.borderColor = 'rgba(9, 176, 183, 0.25)';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.background = 'rgba(255, 255, 255, 0.02)';
+              e.currentTarget.style.borderColor = 'var(--glass-border)';
+            }}
+          >
+            <Puzzle size={15} />
+            <span>Chrome-Erweiterung laden</span>
+          </a>
+
           {/* Web App Button */}
-          <button 
+          <button
             onClick={handleOpenWebApp}
             className="btn"
             style={{
@@ -167,6 +229,33 @@ export default function LandingPage() {
             <span>Im Browser starten</span>
             <ArrowRight size={13} style={{ marginLeft: '0.15rem' }} />
           </button>
+
+          {/* Install guide links */}
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            flexWrap: 'wrap',
+            gap: '0.35rem 0.75rem',
+            marginTop: '0.4rem',
+            fontSize: '0.82rem',
+            color: 'var(--text-muted)'
+          }}>
+            <span>Installationshilfe:</span>
+            <button
+              onClick={() => setActiveDoc('install-android')}
+              style={{ display: 'inline-flex', alignItems: 'center', gap: '0.3rem', background: 'transparent', border: 'none', color: 'var(--primary)', cursor: 'pointer', textDecoration: 'underline', padding: '0.1rem', fontSize: 'inherit' }}
+            >
+              <Smartphone size={13} /> Android-App
+            </button>
+            <span style={{ opacity: 0.3 }}>&bull;</span>
+            <button
+              onClick={() => setActiveDoc('install-chrome')}
+              style={{ display: 'inline-flex', alignItems: 'center', gap: '0.3rem', background: 'transparent', border: 'none', color: 'var(--primary)', cursor: 'pointer', textDecoration: 'underline', padding: '0.1rem', fontSize: 'inherit' }}
+            >
+              <Puzzle size={13} /> Chrome-Erweiterung
+            </button>
+          </div>
         </div>
       </div>
 
@@ -334,7 +423,7 @@ export default function LandingPage() {
                 margin: 0,
                 color: 'var(--text-primary)'
               }}>
-                {activeDoc === 'impressum' ? 'Impressum' : 'Datenschutzerklärung'}
+                {DOC_TITLES[activeDoc] || ''}
               </h2>
               <button 
                 onClick={() => setActiveDoc(null)}
@@ -405,7 +494,7 @@ export default function LandingPage() {
                     Die durch die Seitenbetreiber erstellten Inhalte und Werke auf diesen Seiten unterliegen dem deutschen Urheberrecht. Die Vervielfältigung, Bearbeitung, Verbreitung und jede Art der Verwertung außerhalb der Grenzen des Urheberrechtes bedürfen der schriftlichen Zustimmung des jeweiligen Autors bzw. Erstellers.
                   </p>
                 </div>
-              ) : (
+              ) : activeDoc === 'datenschutz' ? (
                 <div>
                   <h3 style={{ fontSize: '1rem', color: '#fff', marginBottom: '0.5rem', fontFamily: 'var(--font-title)' }}>
                     1. Datenschutz auf einen Blick
@@ -438,7 +527,40 @@ export default function LandingPage() {
                     Du hast jederzeit das Recht auf unentgeltliche Auskunft über Herkunft, Empfänger und Zweck deiner gespeicherten personenbezogenen Daten. Du hast außerdem ein Recht auf Berichtigung, Sperrung oder Löschung dieser Daten. Du kannst dein Konto und alle damit verbundenen Angebote und Bilder jederzeit direkt in deinen Profileinstellungen löschen.
                   </p>
                 </div>
-              )}
+              ) : activeDoc === 'install-android' ? (
+                <div>
+                  <p style={{ marginBottom: '1.25rem' }}>
+                    So installierst du die Vintamie-App auf deinem Android-Smartphone. Da die App nicht über den Play Store läuft, installierst du sie direkt aus der Datei – das geht in wenigen Schritten:
+                  </p>
+                  <ol style={guideOlStyle}>
+                    <li style={guideLiStyle}>Tippe oben auf <strong>„App für Android laden"</strong>. Die Datei <Code>vintamie-latest.apk</Code> wird heruntergeladen.</li>
+                    <li style={guideLiStyle}>Öffne die heruntergeladene Datei – über die Download-Benachrichtigung oder in deiner <strong>Dateien-/Downloads</strong>-App.</li>
+                    <li style={guideLiStyle}>Beim ersten Mal fragt Android nach der Erlaubnis, Apps aus dieser Quelle zu installieren. Tippe auf <strong>„Einstellungen"</strong> und aktiviere <strong>„Aus dieser Quelle zulassen"</strong>.</li>
+                    <li style={guideLiStyle}>Gehe zurück und tippe auf <strong>„Installieren"</strong>, danach auf <strong>„Öffnen"</strong>.</li>
+                    <li style={guideLiStyle}>Registriere dich oder melde dich an – fertig. Neue Versionen meldet dir die App künftig automatisch.</li>
+                  </ol>
+                  <p style={guideHintStyle}>
+                    Der Schritt mit der Quellen-Erlaubnis ist bei Apps außerhalb des Play Stores normal und nur einmalig nötig.
+                  </p>
+                </div>
+              ) : activeDoc === 'install-chrome' ? (
+                <div>
+                  <p style={{ marginBottom: '1.25rem' }}>
+                    Die Erweiterung füllt am Desktop die Formulare von Vinted und Kleinanzeigen automatisch aus. Sie funktioniert in <strong>Chrome, Edge und Brave</strong>:
+                  </p>
+                  <ol style={guideOlStyle}>
+                    <li style={guideLiStyle}>Klicke oben auf <strong>„Chrome-Erweiterung laden"</strong>. Die Datei <Code>vintamie-extension.zip</Code> wird heruntergeladen.</li>
+                    <li style={guideLiStyle}><strong>Entpacke</strong> die ZIP-Datei in einen festen Ordner (Rechtsklick → „Alle extrahieren", unter macOS Doppelklick). Verschiebe den Ordner danach nicht mehr, sonst deaktiviert sich die Erweiterung.</li>
+                    <li style={guideLiStyle}>Öffne im Browser die Adresse <Code>chrome://extensions</Code> (in Edge: <Code>edge://extensions</Code>).</li>
+                    <li style={guideLiStyle}>Aktiviere oben rechts den <strong>„Entwicklermodus"</strong>.</li>
+                    <li style={guideLiStyle}>Klicke auf <strong>„Entpackte Erweiterung laden"</strong> und wähle den entpackten Ordner aus (der die Datei <Code>manifest.json</Code> enthält).</li>
+                    <li style={guideLiStyle}>Fertig – Vintamie erscheint in der Symbolleiste und füllt beim Einstellen die Felder automatisch aus.</li>
+                  </ol>
+                  <p style={guideHintStyle}>
+                    Tipp: Über das Puzzle-Symbol kannst du die Erweiterung anpinnen, damit du sie immer im Blick hast.
+                  </p>
+                </div>
+              ) : null}
             </div>
 
             {/* Modal Footer */}
