@@ -36,7 +36,7 @@
   // and in the extension it is a persistent content script — never redefine.
   if (window.__vintamie && window.__vintamie.__loaded) return;
 
-  var VERSION = "2.4.7";
+  var VERSION = "2.5.0";
 
   // ----------------------------------------------------------------------------
   // Low level helpers
@@ -811,6 +811,84 @@
   }
 
   // ----------------------------------------------------------------------------
+  // Published-listing capture — read the public listing id/URL after publishing
+  // (no login, no form crawl) and report it so the dashboard can track status.
+  // ----------------------------------------------------------------------------
+
+  // Map the *current* (or given) URL to {platform, listingId, listingUrl} if it
+  // is a published listing page, else null. Vinted item: /items/<id>-slug;
+  // Kleinanzeigen ad: /s-anzeige/<slug>/<id>-... (the "items/new" form and the KA
+  // form pages return null — they are not published listings).
+  function parseListingUrl(href) {
+    href = href || window.location.href;
+    var url;
+    try { url = new URL(href); } catch (e) { return null; }
+    var host = url.hostname || "";
+    var path = url.pathname || "";
+
+    if (host.indexOf("vinted") !== -1) {
+      if (/\/items\/new/.test(path)) return null;
+      var mv = path.match(/\/items\/(\d+)/);
+      if (mv) return { platform: "vinted", listingId: mv[1], listingUrl: url.origin + path };
+      return null;
+    }
+    if (host.indexOf("kleinanzeigen") !== -1) {
+      var mk = path.match(/\/s-anzeige\/[^/]+\/(\d+)/);
+      if (mk) return { platform: "kleinanzeigen", listingId: mk[1], listingUrl: url.origin + path };
+      var adId = url.searchParams.get("adId") || url.searchParams.get("adID") || url.searchParams.get("adid");
+      if (adId && /^\d+$/.test(adId)) return { platform: "kleinanzeigen", listingId: adId, listingUrl: null };
+      return null;
+    }
+    return null;
+  }
+
+  // POST the captured listing to the backend. options = {backendUrl, token,
+  // draftId, href?}. No-ops unless the page is a real listing and a draftId +
+  // backendUrl are known. Idempotent on the server, so it is safe to fire from
+  // multiple hosts (engine watcher + capture content script).
+  async function captureListing(options) {
+    options = options || {};
+    var info = parseListingUrl(options.href || window.location.href);
+    if (!info) return null;
+    var draftId = (options.draftId != null) ? options.draftId : options.draft_id;
+    if (draftId == null || !options.backendUrl) return null;
+    try {
+      var headers = { "Content-Type": "application/json" };
+      if (options.token) headers["Authorization"] = "Bearer " + options.token;
+      await fetch(options.backendUrl + "/api/listings/published", {
+        method: "POST",
+        headers: headers,
+        body: JSON.stringify({
+          draft_id: draftId,
+          platform: info.platform,
+          listing_id: info.listingId,
+          listing_url: info.listingUrl
+        }),
+        keepalive: true
+      });
+      return info;
+    } catch (e) { return null; }
+  }
+
+  // Vinted is a React SPA: publishing navigates from /items/new to /items/<id>
+  // WITHOUT a document reload, so a content script matched on the item page never
+  // runs. We instead keep watching the URL from the already-loaded engine and
+  // capture the id once it appears. Fire-and-forget (do not await).
+  async function watchVintedPublish(draft, options) {
+    if (!draft || draft.id == null || !options || !options.backendUrl) return;
+    var deadline = 10 * 60 * 1000; // give the user up to 10 min to review & publish
+    for (var elapsed = 0; elapsed < deadline; elapsed += 2500) {
+      await sleep(2500);
+      var info = parseListingUrl(window.location.href);
+      if (info && info.platform === "vinted") {
+        await captureListing({ backendUrl: options.backendUrl, token: options.token, draftId: draft.id });
+        console.log("Vintamie: Vinted-Angebot veröffentlicht erfasst ->", info.listingId);
+        return;
+      }
+    }
+  }
+
+  // ----------------------------------------------------------------------------
   // Public entry point
   // ----------------------------------------------------------------------------
 
@@ -859,6 +937,14 @@
 
     if (showUi) showOverlay(result, autoSubmit);
 
+    // Vinted publishes via SPA navigation (no reload) — start watching for the
+    // resulting /items/<id> URL so we can capture & track the listing. Works for
+    // both manual and auto-submit. Fire-and-forget. (Kleinanzeigen reloads to a
+    // fresh page, so its capture is handled by the capture content script.)
+    if (platform === "vinted" && phase === "form") {
+      try { watchVintedPublish(draft, options); } catch (e) {}
+    }
+
     if (autoSubmit) {
       // Give image upload + framework state a moment to settle before publishing.
       await sleep(7000);
@@ -874,6 +960,8 @@
     version: VERSION,
     autofill: autofill,
     detectPlatform: detectPlatform,
-    detectPhase: detectPhase
+    detectPhase: detectPhase,
+    parseListingUrl: parseListingUrl,
+    captureListing: captureListing
   };
 })();

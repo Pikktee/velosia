@@ -10,7 +10,7 @@ import Settings from './components/Settings';
 import LandingPage from './components/LandingPage';
 import BugReportModal from './components/BugReportModal';
 import IssueManagement from './components/IssueManagement';
-import { getDrafts, deleteDraft, isAuthenticated, setAuthToken, getMe, uploadAndAnalyze, uploadTurbo } from './utils/api';
+import { getDrafts, deleteDraft, isAuthenticated, setAuthToken, getMe, uploadAndAnalyze, uploadTurbo, refreshAllListings } from './utils/api';
 
 
 export default function App() {
@@ -181,6 +181,13 @@ export default function App() {
     } finally {
       setLoading(false);
     }
+  };
+
+  // Re-poll all published listings (Kleinanzeigen / Vinted) and refresh statuses.
+  const handleRefreshStatuses = async () => {
+    const data = await refreshAllListings();
+    setDrafts(data);
+    return data;
   };
 
   const handleLoginSuccess = (newToken) => {
@@ -540,6 +547,7 @@ export default function App() {
                 setView('detail');
               }}
               onDeleteDraft={handleDeleteDraft}
+              onRefreshStatuses={handleRefreshStatuses}
             />
           )}
 

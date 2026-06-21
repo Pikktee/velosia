@@ -76,10 +76,27 @@ class DraftResponse(DraftBase):
     category_path: Optional[str] = None
     # Vinted catalog path (e.g. "1904/4/183/1839"), derived from vinted_category.
     vinted_path: Optional[str] = None
+    # Published-listing tracking (filled once a listing goes live).
+    ka_listing_id: Optional[str] = None
+    ka_listing_url: Optional[str] = None
+    ka_status: Optional[str] = None
+    ka_status_at: Optional[datetime] = None
+    vinted_listing_id: Optional[str] = None
+    vinted_listing_url: Optional[str] = None
+    vinted_status: Optional[str] = None
+    vinted_status_at: Optional[datetime] = None
     created_at: datetime
 
     class Config:
         from_attributes = True
+
+
+# Listing capture — the engine reports the public id + URL after publishing.
+class ListingPublishedCreate(BaseModel):
+    draft_id: int
+    platform: str                 # "vinted" | "kleinanzeigen"
+    listing_id: Optional[str] = None
+    listing_url: Optional[str] = None
 
 class AnalysisResponse(BaseModel):
     title: str

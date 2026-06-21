@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useRef, useLayoutEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { ArrowLeft, Copy, Check, ExternalLink, Smartphone, Monitor, RefreshCw, AlertCircle, Trash2, Plus, Sparkles, Upload, FileText, Share2, Camera, TrendingUp } from 'lucide-react';
-import { updateDraft, getImageUrl, getAuthToken, uploadDraftImages, deleteDraftImage, regenerateDraftField } from '../utils/api';
+import { updateDraft, getImageUrl, getAuthToken, uploadDraftImages, deleteDraftImage, regenerateDraftField, refreshListingStatus } from '../utils/api';
+import { statusMeta, listingPlatforms } from '../utils/listingStatus';
 
 export default function DraftDetail({ draft, onBack, onUpdateSuccess }) {
   const [title, setTitle] = useState(draft.title || '');
@@ -19,6 +20,7 @@ export default function DraftDetail({ draft, onBack, onUpdateSuccess }) {
   
   const [regeneratingField, setRegeneratingField] = useState(null);
   const [uploadingImage, setUploadingImage] = useState(false);
+  const [refreshingStatus, setRefreshingStatus] = useState(false);
   const fileInputRef = useRef(null);
 
   // Parse multiple images
@@ -255,6 +257,20 @@ export default function DraftDetail({ draft, onBack, onUpdateSuccess }) {
     window.open(urls[platform], '_blank');
   };
 
+  const handleRefreshStatus = async () => {
+    if (refreshingStatus) return;
+    setRefreshingStatus(true);
+    try {
+      const updated = await refreshListingStatus(draft.id);
+      onUpdateSuccess(updated);
+    } catch (err) {
+      console.error(err);
+      alert(`Status konnte nicht aktualisiert werden: ${err.message}`);
+    } finally {
+      setRefreshingStatus(false);
+    }
+  };
+
   const handleAddImages = async (e) => {
     const files = Array.from(e.target.files);
     if (files.length === 0) return;
@@ -382,6 +398,78 @@ export default function DraftDetail({ draft, onBack, onUpdateSuccess }) {
             <Plus size={20} />
             <span style={{ fontSize: '0.65rem', fontWeight: '600' }}>Neu</span>
           </div>
+        </div>
+      </div>
+    );
+  };
+
+  const renderListingStatus = () => {
+    const platforms = listingPlatforms(draft);
+    if (platforms.length === 0) return null;
+
+    const fmt = (iso) => {
+      if (!iso) return null;
+      const d = new Date(iso);
+      return d.toLocaleString('de-DE', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+    };
+
+    return (
+      <div className="detail-section-unboxed">
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid var(--glass-border)', paddingBottom: '0.5rem', marginBottom: '1.25rem', width: '100%' }}>
+          <h3 className="detail-section-title" style={{ borderBottom: 'none', margin: 0, paddingBottom: 0 }}>
+            <TrendingUp size={18} style={{ color: 'var(--primary)' }} />
+            <span>Status</span>
+          </h3>
+          <button
+            className="status-refresh-btn"
+            onClick={handleRefreshStatus}
+            disabled={refreshingStatus}
+            title="Status aktualisieren"
+          >
+            <RefreshCw size={15} className={refreshingStatus ? 'spin' : ''} />
+            <span>{refreshingStatus ? 'Aktualisiere…' : 'Aktualisieren'}</span>
+          </button>
+        </div>
+
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', width: '100%' }}>
+          {platforms.map((p) => {
+            const meta = statusMeta(p.status);
+            return (
+              <div key={p.key} className="listing-status-row">
+                <div className="listing-status-row-left">
+                  <span className="listing-status-platform">{p.name}</span>
+                  <span
+                    className="listing-status-badge"
+                    style={{ color: meta.color, background: meta.bg, borderColor: meta.color }}
+                  >
+                    <span className="listing-status-dot" style={{ background: meta.color }} />
+                    {meta.label}
+                  </span>
+                  {p.at && <span className="listing-status-time">{fmt(p.at)}</span>}
+                </div>
+                <div className="listing-status-row-actions">
+                  {p.url && (
+                    <a
+                      href={p.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="btn-text-link"
+                      title="Anzeige öffnen"
+                    >
+                      Anzeige <ExternalLink size={12} />
+                    </a>
+                  )}
+                  <button
+                    className="btn-text-link"
+                    onClick={() => (isAndroidApp ? handlePostInApp(p.key) : openPlatformPage(p.key))}
+                    title="Neu einstellen"
+                  >
+                    Neu einstellen
+                  </button>
+                </div>
+              </div>
+            );
+          })}
         </div>
       </div>
     );
@@ -781,6 +869,7 @@ export default function DraftDetail({ draft, onBack, onUpdateSuccess }) {
           </div>
         ) : (
           <div className="fade-in" style={{ width: '100%' }}>
+            {renderListingStatus()}
             {renderPublishingAssist()}
           </div>
         )}

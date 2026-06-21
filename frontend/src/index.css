@@ -2858,6 +2858,100 @@ select.form-control {
   box-shadow: 0 0 10px rgba(9, 176, 183, 0.1);
 }
 
+/* --- Listing status tracking (badges, refresh button, re-list actions) --- */
+.spin {
+  animation: spin 0.8s linear infinite;
+}
+
+.status-refresh-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--primary);
+  background: rgba(9, 176, 183, 0.08);
+  border: 1px solid rgba(9, 176, 183, 0.22);
+  padding: 0.35rem 0.7rem;
+  border-radius: 99px;
+  cursor: pointer;
+  transition: background 0.2s ease, opacity 0.2s ease;
+  white-space: nowrap;
+}
+.status-refresh-btn:hover:not(:disabled) {
+  background: rgba(9, 176, 183, 0.16);
+}
+.status-refresh-btn:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.draft-list-item-badge.listing-status-badge,
+.listing-status-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  font-size: 0.7rem;
+  font-weight: 600;
+  padding: 0.15rem 0.5rem;
+  border-radius: 6px;
+  border: 1px solid transparent;
+}
+.listing-status-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 99px;
+  flex-shrink: 0;
+}
+
+.listing-status-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-sm);
+  padding: 0.7rem 0.85rem;
+}
+.listing-status-row-left {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+}
+.listing-status-platform {
+  font-weight: 700;
+  font-size: 0.9rem;
+  color: var(--text-primary);
+}
+.listing-status-time {
+  font-size: 0.7rem;
+  color: var(--text-muted);
+}
+.listing-status-row-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.9rem;
+}
+.btn-text-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  background: none;
+  border: none;
+  padding: 0;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--primary);
+  cursor: pointer;
+  text-decoration: none;
+}
+.btn-text-link:hover {
+  text-decoration: underline;
+}
+
 /* --- Vintamie Mobile Layout Optimizations --- */
 
 @media (max-width: 480px) {

@@ -1,8 +1,8 @@
-import requests
 from bs4 import BeautifulSoup
 import re
 import urllib.parse
 from typing import List, Dict, Any
+from services import http_client
 
 def search_marketplace_prices(keywords: str) -> Dict[str, Any]:
     """
@@ -12,20 +12,16 @@ def search_marketplace_prices(keywords: str) -> Dict[str, Any]:
     query_encoded = urllib.parse.quote_plus(keywords)
     # Search URL for Kleinanzeigen
     url = f"https://www.kleinanzeigen.de/s-{query_encoded}/k0"
-    
-    headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0.0.0 Safari/537.36",
-        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
-        "Accept-Language": "de,en-US;q=0.7,en;q=0.3",
-        "Referer": "https://www.kleinanzeigen.de/"
-    }
 
     try:
-        response = requests.get(url, headers=headers, timeout=10)
-        
-        # If Cloudflare blocks us (403), fallback to mock results to prevent crashing
-        if response.status_code != 200:
-            print(f"WARNING: Scraping Kleinanzeigen returned status code {response.status_code}. Using fallback mock price data.")
+        # curl-cffi with a real Chrome fingerprint — survives the Cloudflare
+        # challenge that used to silently drop us onto mock data.
+        response = http_client.fetch(url, timeout=12)
+
+        # If still blocked / unreachable, fall back to mock results.
+        if response is None or response.status_code != 200:
+            code = response.status_code if response is not None else "no-response"
+            print(f"WARNING: Scraping Kleinanzeigen returned {code}. Using fallback mock price data.")
             return get_fallback_listings(keywords)
 
         soup = BeautifulSoup(response.text, "html.parser")

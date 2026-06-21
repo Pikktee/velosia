@@ -31,6 +31,22 @@ Autofilling Vinted/Kleinanzeigen forms is driven by a **single shared engine**, 
 
 ---
 
+## Listing Tracking & Re-Listing (V2.5)
+
+After a listing goes live we capture its **public listing id/URL** and track its status (online / reserviert / verkauft / geloescht) right in the dashboard, plus a one-tap **"Neu einstellen"**.
+
+**Capture (no login, no form crawl).** The engine parses the *published* page URL — Vinted `/items/<id>-slug`, Kleinanzeigen `/s-anzeige/<slug>/<id>-…` — and POSTs `{draft_id, platform, listing_id, listing_url}` to `POST /api/listings/published`. Two capture paths because the platforms publish differently:
+*   **Vinted** is a React SPA: publishing navigates `/items/new` → `/items/<id>` *without* a document reload, so a content script matched on the item page never fires. The engine instead runs an in-context watcher (`watchVintedPublish`, started from `autofill()` for the form phase) that polls the URL and captures once the item id appears. Works for manual and auto-submit.
+*   **Kleinanzeigen** does a full navigation to the live ad, so a dedicated capture content script (`extension/capture.js`, matched on `/s-anzeige/*`, **not** mirrored from `shared/` — it's a standalone extension file) reads a short-lived `vintamie_pending_capture` marker (armed by `content.js` when autofill runs) and reports the id. `capture.js` is also matched on Vinted item pages as a full-reload fallback. Engine helpers `window.__vintamie.parseListingUrl` / `captureListing` are the shared single source for both; Android can call `captureListing` from the WebView shell after a KA publish (the one remaining native wire-up — Vinted already works via the watcher).
+
+**Status polling (server-side, curl-cffi).** Reading a *published public ad page* by id is distinct from crawling the form (which got us banned) and is low-volume (only the user's own active listings). `services/http_client.py` is the single outbound choke point — curl-cffi with `impersonate="chrome"` (real Chrome TLS/JA3) defeats Cloudflare/DataDome where plain `requests` got challenged; it also hardened the existing price scraper (which silently fell back to mock data on 403). `services/listing_status.py` maps a page to a status (calibrated against live pages):
+*   **Kleinanzeigen**: a deleted ad 302-redirects to the homepage (NOT a 404) → "gone" = final URL no longer contains `/s-anzeige/`. KA has no real "sold" state; `verkauft` appears as generic text and must not be matched. `reserviert` is absent on active ads → usable reserved signal.
+*   **Vinted**: deleted = clean 404; JSON-LD `"availability":"InStock|OutOfStock|SoldOut"` + embedded `is_reserved`/`is_closed` booleans give sold/reserved. Substring matching on raw HTML is unreliable (the page embeds the full translation catalog).
+
+`Draft` gains additive columns `ka_listing_id/url/status/status_at` + `vinted_listing_id/url/status/status_at` (migrated in `main.py`), exposed in `DraftResponse`. Endpoints: `POST /api/listings/{id}/refresh-status` (one draft), `POST /api/listings/refresh-all` (the dashboard's "Status aktualisieren" button). A throttled asyncio background loop (`_status_poll_loop` → `poll_all_active_listings`, every `STATUS_POLL_INTERVAL_MIN`=360 min, requests spaced by `STATUS_POLL_SPACING_S`=4 s, terminal statuses skipped) keeps things fresh without bursts. Frontend: status badges in `DraftList`, a Status section with per-platform badge + "Anzeige öffnen" + "Neu einstellen" in `DraftDetail` (shared meta in `frontend/src/utils/listingStatus.js`).
+
+---
+
 ## Project Structure
 ```
 /Users/henrik/Dev/vintamie/

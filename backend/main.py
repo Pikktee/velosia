@@ -7,6 +7,8 @@ import os
 import shutil
 import uuid
 import json
+import time
+import asyncio
 from datetime import datetime, timedelta
 from typing import List
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -67,6 +69,25 @@ def run_migrations():
         db.rollback()
         print(f"Migration note: vinted_category column might already exist. ({e})", flush=True)
 
+    # Published-listing tracking columns
+    for col_name, col_type in [
+        ("ka_listing_id", "VARCHAR(50)"),
+        ("ka_listing_url", "VARCHAR(500)"),
+        ("ka_status", "VARCHAR(20)"),
+        ("ka_status_at", "DATETIME"),
+        ("vinted_listing_id", "VARCHAR(50)"),
+        ("vinted_listing_url", "VARCHAR(500)"),
+        ("vinted_status", "VARCHAR(20)"),
+        ("vinted_status_at", "DATETIME"),
+    ]:
+        try:
+            db.execute(text(f"ALTER TABLE drafts ADD COLUMN {col_name} {col_type}"))
+            db.commit()
+            print(f"Successfully ran migrations: added {col_name} column to drafts.", flush=True)
+        except Exception as e:
+            db.rollback()
+            print(f"Migration note: {col_name} column might already exist. ({e})", flush=True)
+
     # User settings migrations
     for col_name, col_type in [
         ("ai_tone", "VARCHAR(50) DEFAULT 'locker'"),
@@ -91,7 +112,7 @@ def run_migrations():
 
 run_migrations()
 
-app = FastAPI(title="Vintamie API", version="2.4.7")
+app = FastAPI(title="Vintamie API", version="2.5.0")
 
 UPLOAD_DIR = "/data/uploads" if os.path.isdir("/data") else "uploads"
 os.makedirs(UPLOAD_DIR, exist_ok=True)
@@ -867,6 +888,150 @@ def telemetry_autofill(
         db.rollback()
         print(f"[telemetry] Speichern fehlgeschlagen: {e}", flush=True)
     return {"ok": True}
+
+
+# --- PUBLISHED-LISTING TRACKING (SECURED) ----------------------------------
+# The engine captures the public listing id + URL right after publishing (no
+# login). The backend then polls those public pages — via curl-cffi, low volume,
+# only the user's own active listings — to keep an online/reserviert/verkauft/
+# geloescht status in the dashboard. We deliberately read only the public listing
+# page, never the listing form (that crawl once got the IP banned).
+
+from services import listing_status
+
+# How often the background poller sweeps all active listings, and how long it
+# spaces individual requests apart, so a sweep never looks like a burst.
+_STATUS_POLL_INTERVAL_MIN = int(os.getenv("STATUS_POLL_INTERVAL_MIN", "360"))
+_STATUS_POLL_SPACING_S = float(os.getenv("STATUS_POLL_SPACING_S", "4"))
+
+
+def _apply_listing_capture(draft, platform, listing_id, listing_url):
+    """Store a freshly captured listing id/url and mark it online."""
+    now = datetime.utcnow()
+    if platform == "kleinanzeigen":
+        draft.ka_listing_id = listing_id or draft.ka_listing_id
+        draft.ka_listing_url = listing_url or draft.ka_listing_url
+        draft.ka_status = listing_status.ONLINE
+        draft.ka_status_at = now
+    elif platform == "vinted":
+        draft.vinted_listing_id = listing_id or draft.vinted_listing_id
+        draft.vinted_listing_url = listing_url or draft.vinted_listing_url
+        draft.vinted_status = listing_status.ONLINE
+        draft.vinted_status_at = now
+
+
+def _apply_status_updates(draft, updates):
+    for key, value in updates.items():
+        setattr(draft, key, value)
+
+
+@app.post("/api/listings/published", response_model=schemas.DraftResponse)
+def capture_published_listing(
+    payload: schemas.ListingPublishedCreate,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    """Called by the engine once a listing is live: records its public id/URL so
+    the dashboard can show & track it."""
+    draft = db.query(models.Draft).filter(
+        models.Draft.id == payload.draft_id,
+        models.Draft.user_id == current_user.id,
+    ).first()
+    if not draft:
+        raise HTTPException(status_code=404, detail="Angebot wurde nicht gefunden.")
+    if payload.platform not in ("kleinanzeigen", "vinted"):
+        raise HTTPException(status_code=400, detail="Unbekannte Plattform.")
+
+    _apply_listing_capture(draft, payload.platform, payload.listing_id, payload.listing_url)
+    db.commit()
+    db.refresh(draft)
+    return draft
+
+
+@app.post("/api/listings/{draft_id}/refresh-status", response_model=schemas.DraftResponse)
+def refresh_listing_status(
+    draft_id: int,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    """Re-poll one draft's published listings on demand."""
+    draft = db.query(models.Draft).filter(
+        models.Draft.id == draft_id,
+        models.Draft.user_id == current_user.id,
+    ).first()
+    if not draft:
+        raise HTTPException(status_code=404, detail="Angebot wurde nicht gefunden.")
+
+    updates = listing_status.refresh_draft_status(draft, datetime.utcnow())
+    if updates:
+        _apply_status_updates(draft, updates)
+        db.commit()
+        db.refresh(draft)
+    return draft
+
+
+@app.post("/api/listings/refresh-all", response_model=List[schemas.DraftResponse])
+def refresh_all_listings(
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    """Re-poll all of the user's active (non-terminal) published listings. Drives
+    the dashboard's 'Status aktualisieren' button."""
+    drafts = db.query(models.Draft).filter(
+        models.Draft.user_id == current_user.id,
+    ).order_by(models.Draft.created_at.desc()).all()
+
+    for draft in drafts:
+        has_listing = draft.ka_listing_url or draft.vinted_listing_url
+        if not has_listing:
+            continue
+        updates = listing_status.refresh_draft_status(draft, datetime.utcnow())
+        if updates:
+            _apply_status_updates(draft, updates)
+            db.commit()
+    return drafts
+
+
+def poll_all_active_listings():
+    """Background sweep: refresh every active listing across all users, spacing
+    requests out. Runs in a worker thread (curl-cffi is blocking)."""
+    from database import SessionLocal
+    db = SessionLocal()
+    try:
+        drafts = db.query(models.Draft).filter(
+            (models.Draft.ka_listing_url.isnot(None)) | (models.Draft.vinted_listing_url.isnot(None))
+        ).all()
+        checked = 0
+        for draft in drafts:
+            updates = listing_status.refresh_draft_status(draft, datetime.utcnow())
+            if updates:
+                _apply_status_updates(draft, updates)
+                db.commit()
+                checked += 1
+            time.sleep(_STATUS_POLL_SPACING_S)
+        if checked:
+            print(f"[status-poll] aktualisierte {checked} Angebote.", flush=True)
+    except Exception as e:
+        print(f"[status-poll] Sweep fehlgeschlagen: {e}", flush=True)
+    finally:
+        db.close()
+
+
+async def _status_poll_loop():
+    # Small initial delay so startup/migrations settle first.
+    await asyncio.sleep(90)
+    interval = max(30, _STATUS_POLL_INTERVAL_MIN) * 60
+    while True:
+        try:
+            await asyncio.to_thread(poll_all_active_listings)
+        except Exception as e:
+            print(f"[status-poll] Loop-Fehler: {e}", flush=True)
+        await asyncio.sleep(interval)
+
+
+@app.on_event("startup")
+async def _start_status_poller():
+    asyncio.create_task(_status_poll_loop())
 
 
 # --- BUG REPORT ENDPOINTS (SECURED) ---

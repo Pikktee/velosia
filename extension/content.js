@@ -333,6 +333,17 @@ async function autofillForm(draft, autoSubmit) {
     console.error("Vintamie: Autofill-Engine nicht geladen.");
     return;
   }
+  // Arm a capture marker: once the user publishes and lands on the public listing
+  // page, capture.js reports the listing id back so the dashboard can track it.
+  try {
+    const platform = window.__vintamie.detectPlatform();
+    if (platform && draft && draft.id != null) {
+      chrome.storage.local.set({
+        vintamie_pending_capture: { platform: platform, draftId: draft.id, ts: Date.now() }
+      });
+    }
+  } catch (e) {}
+
   const settings = window.vintamieUserSettings || {};
   const submit = (typeof autoSubmit === "boolean") ? autoSubmit : !!settings.auto_submit;
   // Token for the engine's anonymous autofill telemetry (auto health monitoring).

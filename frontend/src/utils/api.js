@@ -298,6 +298,33 @@ export const deleteDraftImage = async (id, imagePath) => {
   return response.json();
 };
 
+// --- LISTING STATUS TRACKING ---
+
+// Re-poll one draft's published listings (Kleinanzeigen / Vinted) and return the
+// updated draft with fresh ka_status / vinted_status.
+export const refreshListingStatus = async (id) => {
+  const response = await fetch(`${API_BASE_URL}/api/listings/${id}/refresh-status`, {
+    method: 'POST',
+    headers: getHeaders(),
+  });
+  if (!response.ok) {
+    throw new Error('Fehler beim Aktualisieren des Angebots-Status.');
+  }
+  return response.json();
+};
+
+// Re-poll all of the user's active listings at once. Returns the full draft list.
+export const refreshAllListings = async () => {
+  const response = await fetch(`${API_BASE_URL}/api/listings/refresh-all`, {
+    method: 'POST',
+    headers: getHeaders(),
+  });
+  if (!response.ok) {
+    throw new Error('Fehler beim Aktualisieren der Angebots-Status.');
+  }
+  return response.json();
+};
+
 export const regenerateDraftField = async (id, field) => {
   const response = await fetch(`${API_BASE_URL}/api/drafts/${id}/regenerate`, {
     method: 'POST',

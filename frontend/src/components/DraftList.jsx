@@ -1,9 +1,25 @@
 import React, { useRef, useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { Tag, Sparkles, Trash2, Calendar, ShoppingBag, Camera, FolderHeart, ChevronRight, Rocket } from 'lucide-react';
+import { Tag, Sparkles, Trash2, Calendar, ShoppingBag, Camera, FolderHeart, ChevronRight, Rocket, RefreshCw } from 'lucide-react';
 import { getImageUrl } from '../utils/api';
+import { statusMeta, hasListing, listingPlatforms } from '../utils/listingStatus';
 
-export default function DraftList({ drafts, isLoading, onSelectDraft, onDeleteDraft }) {
+export default function DraftList({ drafts, isLoading, onSelectDraft, onDeleteDraft, onRefreshStatuses }) {
+  const [refreshing, setRefreshing] = useState(false);
+  const anyListing = drafts.some(hasListing);
+
+  const handleRefresh = async () => {
+    if (refreshing || !onRefreshStatuses) return;
+    setRefreshing(true);
+    try {
+      await onRefreshStatuses();
+    } catch (err) {
+      console.error('Status-Aktualisierung fehlgeschlagen:', err);
+    } finally {
+      setRefreshing(false);
+    }
+  };
+
   const formatDate = (dateString) => {
     const d = new Date(dateString);
     return d.toLocaleDateString('de-DE', { 
@@ -131,6 +147,17 @@ export default function DraftList({ drafts, isLoading, onSelectDraft, onDeleteDr
         <h2 className="page-title">
           Deine Angebote <span className="drafts-count-badge">{drafts.length}</span>
         </h2>
+        {anyListing && onRefreshStatuses && (
+          <button
+            className="status-refresh-btn"
+            onClick={handleRefresh}
+            disabled={refreshing}
+            title="Status aller Angebote aktualisieren"
+          >
+            <RefreshCw size={15} className={refreshing ? 'spin' : ''} />
+            <span>{refreshing ? 'Aktualisiere…' : 'Status aktualisieren'}</span>
+          </button>
+        )}
       </div>
 
       <ul className="SwipeableList">
@@ -391,6 +418,20 @@ function DraftListItem({ draft, onSelect, onDelete }) {
                   <span>Turbo</span>
                 </span>
               )}
+              {listingPlatforms(draft).map((p) => {
+                const meta = statusMeta(p.status);
+                return (
+                  <span
+                    key={p.key}
+                    className="draft-list-item-badge listing-status-badge"
+                    style={{ color: meta.color, background: meta.bg, borderColor: meta.color }}
+                    title={`${p.name}: ${meta.label}`}
+                  >
+                    <span className="listing-status-dot" style={{ background: meta.color }} />
+                    <span>{meta.label}</span>
+                  </span>
+                );
+              })}
             </div>
           </div>
 

@@ -56,6 +56,20 @@ class Draft(Base):
     vinted_category = Column(String, nullable=True)
     # True if this draft was auto-created in "Turbo" batch mode (multiple offers from one photo session)
     is_turbo = Column(Boolean, default=False, nullable=True)
+
+    # --- Published-listing tracking (set after the listing goes live) ---------
+    # The engine captures the public listing id + URL right after publishing (no
+    # login); the backend then polls the public page to keep the status current.
+    # Status vocabulary: online | reserviert | verkauft | geloescht | unbekannt.
+    ka_listing_id = Column(String, nullable=True)
+    ka_listing_url = Column(String, nullable=True)
+    ka_status = Column(String, nullable=True)
+    ka_status_at = Column(DateTime, nullable=True)
+    vinted_listing_id = Column(String, nullable=True)
+    vinted_listing_url = Column(String, nullable=True)
+    vinted_status = Column(String, nullable=True)
+    vinted_status_at = Column(DateTime, nullable=True)
+
     created_at = Column(DateTime, default=datetime.utcnow)
 
     # Relationships
