@@ -22,7 +22,7 @@
   <rect x="6" y="6" width="1012" height="1012" rx="106" fill="none" stroke="rgba(255,255,255,0.06)" stroke-width="4" />
 
   <!-- Emblem: favicon motif (512x512) centred horizontally, upper area -->
-  <g transform="translate(256,96)">
+  <g transform="translate(256,156)">
     <circle cx="256" cy="256" r="210" stroke="url(#velosia-grad)" stroke-width="4" stroke-dasharray="12 8" opacity="0.15" />
     <g filter="url(#neon-glow)">
       <path d="M 256 195 V 160 C 256 130, 235 110, 256 85 C 275 60, 295 85, 275 105" stroke="url(#velosia-grad)" stroke-width="16" stroke-linecap="round" fill="none" />
@@ -36,7 +36,5 @@
   </g>
 
   <!-- Wordmark -->
-  <text x="512" y="780" text-anchor="middle" font-family="'Avenir Next','Helvetica Neue',Arial,sans-serif" font-weight="700" font-size="148" letter-spacing="12" fill="url(#velosia-text-grad)" filter="url(#neon-glow)">VELOSIA</text>
-  <!-- Subtitle -->
-  <text x="512" y="858" text-anchor="middle" font-family="'Avenir Next','Helvetica Neue',Arial,sans-serif" font-weight="500" font-size="37" letter-spacing="9" fill="#0ad0d8" opacity="0.85">SECOND-HAND LISTING APP</text>
+  <text x="512" y="852" text-anchor="middle" font-family="'Avenir Next','Helvetica Neue',Arial,sans-serif" font-weight="700" font-size="156" letter-spacing="12" fill="url(#velosia-text-grad)" filter="url(#neon-glow)">VELOSIA</text>
 </svg>
