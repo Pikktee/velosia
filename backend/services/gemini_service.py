@@ -117,6 +117,29 @@ def assemble_description(description: str, user) -> str:
         parts.append(footer)
     return "\n\n".join(parts)
 
+def description_framing_instruction(user) -> str:
+    """The fixed Einleitung/Abschluss are concatenated verbatim around the AI text
+    (assemble_description) — never rewritten by the model. So we only TELL the model
+    they already exist, so it writes a connecting middle and never duplicates a
+    greeting/closing. Returns a leading-space sentence to append to the description
+    prompt, or "" when neither intro nor footer is set."""
+    if not user:
+        return ""
+    intro = (getattr(user, "ai_intro", "") or "").strip()
+    footer = (getattr(user, "ai_custom_footer", "") or "").strip()
+    if not intro and not footer:
+        return ""
+    bits = []
+    if intro:
+        bits.append(f"Über deinem Text steht bereits – fest und wörtlich – die Einleitung: „{intro}“.")
+    if footer:
+        bits.append(f"Unter deinem Text steht bereits – fest und wörtlich – der Abschluss: „{footer}“.")
+    bits.append(
+        "Schreibe NUR den Text dazwischen, schließe inhaltlich nahtlos daran an und "
+        "wiederhole diese festen Teile nicht (keine eigene Begrüßung oder Schlussformel, die sie doppelt)."
+    )
+    return " " + " ".join(bits)
+
 def _get_models_to_try() -> List[str]:
     models_to_try = []
     if GEMINI_MODEL:
@@ -319,6 +342,7 @@ def analyze_item_image(image_paths: List[str], user = None, user_condition: str 
         sources_str = json.dumps(comparison["listings"])
         
         tone_instruction = get_tone_instruction(user)
+        framing_instruction = description_framing_instruction(user)
 
         selection_prompt = katax.selection_prompt()
         condition_prompt = "- 'condition': Eine Einschätzung des Zustands. Wähle exakt einen dieser Werte: 'Neu', 'Sehr gut', 'Gut', 'In Ordnung'."
@@ -342,7 +366,7 @@ def analyze_item_image(image_paths: List[str], user = None, user_condition: str 
             f"{selection_prompt}\n\n"
             "Erstelle eine strukturierte JSON-Antwort mit folgenden Feldern auf Deutsch:\n"
             "- 'title': Ein aussagekräftiger Titel (max. 80 Zeichen), optimiert für Vinted/Kleinanzeigen.\n"
-            f"- 'description': {tone_instruction} Nenne wichtige Details (wie Schnitt, Muster). Füge KEINE Hashtags hinzu.{details_instruction}\n"
+            f"- 'description': {tone_instruction} Nenne wichtige Details (wie Schnitt, Muster). Füge KEINE Hashtags hinzu.{details_instruction}{framing_instruction}\n"
             f"- 'category': Eine WORTWÖRTLICH kopierte Zeile aus der obigen Kategorie-Liste (z.B. 'Elektronik > Haushaltsgeräte > Staubsauger').\n"
             "- 'attributes': Ein JSON-Objekt mit passenden Zusatzfeldern für das Inserat. Übliche Felder sind "
             "'Art', 'Marke', 'Größe', 'Farbe', 'Material', 'Zustand' und 'Versand' ('Versand möglich' oder "
@@ -473,11 +497,13 @@ def regenerate_draft_field(image_paths: List[str], field: str, user = None) -> s
             )
         elif field == "description":
             tone_instruction = get_tone_instruction(user)
+            framing_instruction = description_framing_instruction(user)
             prompt = (
                 "Analysiere diese Fotos eines Artikels. Erzeuge eine neue Verkaufsbeschreibung auf Deutsch. "
                 f"Beachte dabei folgende Stilvorgabe: {tone_instruction} "
-                "Erwähne wichtige Details wie Zustand, Farbe und Besonderheiten. Füge KEINE Hashtags hinzu. "
-                "Gib AUSSCHLIESSLICH die Beschreibung zurück, ohne Einleitung, ohne zusätzliche Kommentare, ohne Markdown."
+                "Erwähne wichtige Details wie Zustand, Farbe und Besonderheiten. Füge KEINE Hashtags hinzu."
+                f"{framing_instruction} "
+                "Gib AUSSCHLIESSLICH die Beschreibung zurück, ohne Vorbemerkung, ohne zusätzliche Kommentare, ohne Markdown."
             )
         else:
             raise ValueError(f"Ungültiges Feld zur Regeneration: {field}")

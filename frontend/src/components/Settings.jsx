@@ -220,17 +220,13 @@ export default function Settings({ user, onLogout, onUpdateUser }) {
                   <span>Anzeigentext</span>
                 </h3>
 
-                <p style={{ fontSize: '0.78rem', color: 'var(--text-muted)', margin: '-0.5rem 0 0', lineHeight: 1.4 }}>
-                  Jede Beschreibung wird so zusammengesetzt: <strong style={{ color: 'var(--text-secondary)' }}>Einleitung</strong> → <strong style={{ color: 'var(--text-secondary)' }}>KI-Text</strong> → <strong style={{ color: 'var(--text-secondary)' }}>Abschluss</strong>.
-                </p>
-
                 {/* 1. Einleitung */}
                 <div className="form-group" style={{ marginBottom: 0 }}>
                   <label style={{ display: 'flex', alignItems: 'center' }}>
                     Einleitung
                     <span className="tooltip-container">
                       <HelpCircle size={14} />
-                      <span className="tooltip-text">Fester Text, der unverändert über jeder Beschreibung steht. Leer lassen, wenn nicht gewünscht.</span>
+                      <span className="tooltip-text">Fester Text, der unverändert über jeder Beschreibung steht. Die KI weiß davon und vermeidet Dopplungen. Leer lassen = die KI beginnt selbst passend.</span>
                     </span>
                   </label>
                   <textarea
@@ -279,13 +275,13 @@ export default function Settings({ user, onLogout, onUpdateUser }) {
                     Abschluss
                     <span className="tooltip-container">
                       <HelpCircle size={14} />
-                      <span className="tooltip-text">Fester Text, der unverändert unter jeder Beschreibung steht. z.B. Versand- oder Haftungshinweise.</span>
+                      <span className="tooltip-text">Fester Text, der unverändert unter jeder Beschreibung steht (z.B. Versand- oder Haftungshinweise). Die KI weiß davon und vermeidet Dopplungen. Leer lassen = die KI schließt selbst passend ab.</span>
                     </span>
                   </label>
                   <textarea
                     className="form-control"
                     style={{ minHeight: '64px' }}
-                    placeholder="z.B. Aus tierfreiem Nichtraucherhaushalt. Privatverkauf, keine Garantie."
+                    placeholder="z.B. Privatverkauf, keine Garantie."
                     value={aiCustomFooter}
                     onChange={(e) => setAiCustomFooter(e.target.value)}
                   />
