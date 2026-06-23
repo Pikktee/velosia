@@ -7,7 +7,6 @@ import { statusMeta, listingPlatforms } from '../utils/listingStatus';
 export default function DraftDetail({ draft, onBack, onUpdateSuccess }) {
   const [title, setTitle] = useState(draft.title || '');
   const [description, setDescription] = useState(draft.description || '');
-  const [category, setCategory] = useState(draft.category || 'Sonstiges');
   const [condition, setCondition] = useState(draft.condition || 'Gut');
   const [price, setPrice] = useState(draft.price || 0);
   
@@ -43,16 +42,6 @@ export default function DraftDetail({ draft, onBack, onUpdateSuccess }) {
   // Detect Android Webview container
   const isAndroidApp = typeof window.VintamieBridge !== 'undefined';
 
-  const categories = [
-    'Damenbekleidung',
-    'Herrenbekleidung',
-    'Kinder',
-    'Haus & Garten',
-    'Elektronik',
-    'Bücher & Medien',
-    'Sonstiges'
-  ];
-
   const conditions = [
     'Neu',
     'Sehr gut',
@@ -62,15 +51,14 @@ export default function DraftDetail({ draft, onBack, onUpdateSuccess }) {
 
   // Track if values differ from the last saved draft
   useEffect(() => {
-    const hasDiff = 
+    const hasDiff =
       title !== (draft.title || '') ||
       description !== (draft.description || '') ||
-      category !== (draft.category || 'Sonstiges') ||
       condition !== (draft.condition || 'Gut') ||
       (parseFloat(price) || 0) !== (parseFloat(draft.price) || 0);
-    
+
     setHasChanges(hasDiff);
-  }, [title, description, category, condition, price, draft]);
+  }, [title, description, condition, price, draft]);
 
   // Debounced auto-save effect
   useEffect(() => {
@@ -82,7 +70,6 @@ export default function DraftDetail({ draft, onBack, onUpdateSuccess }) {
         const updated = await updateDraft(draft.id, {
           title,
           description,
-          category,
           condition,
           price: parseFloat(price) || 0
         });
@@ -95,7 +82,7 @@ export default function DraftDetail({ draft, onBack, onUpdateSuccess }) {
     }, 1200); // 1.2s delay for a snappy but typing-friendly feel
 
     return () => clearTimeout(delayDebounceFn);
-  }, [title, description, category, condition, price, hasChanges]);
+  }, [title, description, condition, price, hasChanges]);
 
   // Responsive Layout detection hook
   const [activeTab, setActiveTab] = useState('edit'); // 'edit', 'publish'
@@ -745,37 +732,71 @@ export default function DraftDetail({ draft, onBack, onUpdateSuccess }) {
           />
         </div>
 
-        {/* Category & Condition Grid */}
-        <div className="form-grid-2col form-group" style={{ marginBottom: 0 }}>
-          <div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem', flexWrap: 'wrap', gap: '0.5rem' }}>
-              <label htmlFor="edit-category" style={{ marginBottom: 0 }}>Kategorie</label>
-            </div>
-            <select 
-              id="edit-category" 
-              className="form-control" 
-              value={category} 
-              onChange={(e) => setCategory(e.target.value)}
-            >
-              {categories.map((cat) => (
-                <option key={cat} value={cat}>{cat}</option>
-              ))}
-            </select>
+        {/* Category — read-only. The categories are resolved by the AI from the
+            full Kleinanzeigen and Vinted taxonomies (each its own breadcrumb, e.g.
+            "Elektronik > Haushaltsgeräte > Staubsauger") and drive the autofill.
+            We deliberately do NOT offer a coarse editable dropdown here: picking a
+            generic bucket would overwrite the precise AI breadcrumb and degrade the
+            auto-category selection. */}
+        <div className="form-group" style={{ marginBottom: 0 }}>
+          <label style={{ marginBottom: '0.5rem' }}>Kategorie (automatisch erkannt)</label>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+            {[
+              { key: 'ka', name: 'Kleinanzeigen', value: draft.category },
+              { key: 'vinted', name: 'Vinted', value: draft.vinted_category },
+            ].map(({ key, name, value }) => (
+              <div
+                key={key}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '0.6rem',
+                  padding: '0.6rem 0.75rem',
+                  background: 'var(--glass-bg)',
+                  border: '1px solid var(--glass-border)',
+                  borderRadius: '10px',
+                }}
+              >
+                <span
+                  style={{
+                    flexShrink: 0,
+                    fontSize: '0.68rem',
+                    fontWeight: 600,
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.03em',
+                    color: 'var(--text-muted)',
+                    minWidth: '96px',
+                  }}
+                >
+                  {name}
+                </span>
+                {value ? (
+                  <span style={{ fontSize: '0.85rem', color: 'var(--text-primary)', lineHeight: 1.35 }}>
+                    {value}
+                  </span>
+                ) : (
+                  <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)', fontStyle: 'italic' }}>
+                    wird beim Einstellen manuell gewählt
+                  </span>
+                )}
+              </div>
+            ))}
           </div>
-          
-          <div>
-            <label htmlFor="edit-condition" style={{ marginBottom: '0.5rem' }}>Zustand</label>
-            <select 
-              id="edit-condition" 
-              className="form-control" 
-              value={condition} 
-              onChange={(e) => setCondition(e.target.value)}
-            >
-              {conditions.map((cond) => (
-                <option key={cond} value={cond}>{cond}</option>
-              ))}
-            </select>
-          </div>
+        </div>
+
+        {/* Condition */}
+        <div className="form-group" style={{ marginBottom: 0 }}>
+          <label htmlFor="edit-condition" style={{ marginBottom: '0.5rem' }}>Zustand</label>
+          <select
+            id="edit-condition"
+            className="form-control"
+            value={condition}
+            onChange={(e) => setCondition(e.target.value)}
+          >
+            {conditions.map((cond) => (
+              <option key={cond} value={cond}>{cond}</option>
+            ))}
+          </select>
         </div>
 
         {/* Description */}
