@@ -3,7 +3,7 @@ import { Mail, Lock, Sparkles, AlertCircle, CheckCircle } from 'lucide-react';
 import { loginUser, registerUser, getAuthConfig, loginWithGoogle } from '../utils/api';
 
 export default function Login({ onLoginSuccess }) {
-  const isAndroidApp = typeof window.VintamieBridge !== 'undefined';
+  const isAndroidApp = typeof window.VelosiaBridge !== 'undefined';
   const [isRegister, setIsRegister] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -121,13 +121,13 @@ export default function Login({ onLoginSuccess }) {
           <div className="onboarding-logo-glow" style={{ margin: '0 auto' }}>
             <img 
               src="/favicon.svg" 
-              alt="Vintamie Logo" 
+              alt="Velosia Logo" 
               className="onboarding-logo-img"
             />
           </div>
           <div style={{ marginTop: '0.5rem' }}>
             <h2 style={{ fontSize: '1.8rem', fontFamily: 'var(--font-title)', fontWeight: '800', background: 'linear-gradient(135deg, var(--text-primary) 30%, var(--primary) 100%)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', letterSpacing: '-0.02em', marginBottom: '0.25rem' }}>
-              Vintamie
+              Velosia
             </h2>
             <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
               {isRegister ? 'Erstelle dein Verkäufer-Konto' : 'Melde dich an, um zu starten'}
@@ -214,7 +214,7 @@ export default function Login({ onLoginSuccess }) {
                   onClick={() => {
                     setLoading(true);
                     setError(null);
-                    window.VintamieBridge.loginWithGoogle(googleClientId);
+                    window.VelosiaBridge.loginWithGoogle(googleClientId);
                   }}
                   style={{
                     width: '100%',
@@ -301,7 +301,7 @@ export default function Login({ onLoginSuccess }) {
         {/* Form Toggle Switch */}
         <div style={{ textAlign: 'center', marginTop: '1.5rem', fontSize: '0.875rem' }}>
           <span style={{ color: 'var(--text-secondary)' }}>
-            {isRegister ? 'Bereits ein Konto?' : 'Neu bei Vintamie?'}
+            {isRegister ? 'Bereits ein Konto?' : 'Neu bei Velosia?'}
           </span>{' '}
           <button
             className="btn"

@@ -90,18 +90,18 @@ export default function DraftList({ drafts, isLoading, onSelectDraft, onDeleteDr
 
         <div className="onboarding-content-layout">
           <div className="onboarding-logo-glow">
-            <img src="/favicon.svg" alt="Vintamie Logo" className="onboarding-logo-img" />
+            <img src="/favicon.svg" alt="Velosia Logo" className="onboarding-logo-img" />
           </div>
           
           <div className="onboarding-info">
             <div className="onboarding-welcome-badge">
               <Sparkles size={14} />
-              <span>Willkommen bei Vintamie</span>
+              <span>Willkommen bei Velosia</span>
             </div>
             
             <h2 className="onboarding-title">Verwandle deine Sachen in bares Geld</h2>
             <p className="onboarding-subtitle">
-              Vintamie automatisiert das Erstellen deiner Anzeigen. Mach einfach ein Foto, um loszulegen!
+              Velosia automatisiert das Erstellen deiner Anzeigen. Mach einfach ein Foto, um loszulegen!
             </p>
             
             <p className="onboarding-cta-text landscape-cta">

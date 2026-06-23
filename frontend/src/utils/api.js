@@ -6,14 +6,14 @@ export const API_BASE_URL = import.meta.env.VITE_API_URL || (
 );
 
 // Retrieve saved token
-let authToken = localStorage.getItem('vintamie_token') || null;
+let authToken = localStorage.getItem('velosia_token') || null;
 
 export const setAuthToken = (token) => {
   authToken = token;
   if (token) {
-    localStorage.setItem('vintamie_token', token);
+    localStorage.setItem('velosia_token', token);
   } else {
-    localStorage.removeItem('vintamie_token');
+    localStorage.removeItem('velosia_token');
   }
 };
 

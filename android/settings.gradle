@@ -13,5 +13,5 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "Vintamie"
+rootProject.name = "Velosia"
 include ":app"

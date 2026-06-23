@@ -1,4 +1,4 @@
-let backendUrl = "https://api.vintamie.henrikheil.net"; // Default to production
+let backendUrl = "https://api.velosia.henrikheil.net"; // Default to production
 
 document.addEventListener("DOMContentLoaded", async () => {
   const statusBadge = document.getElementById("status");
@@ -12,22 +12,22 @@ document.addEventListener("DOMContentLoaded", async () => {
   const dashboardBtn = document.getElementById("btn-open-dashboard");
 
   // Load backend URL and check storage for existing token
-  chrome.storage.local.get(["vintamie_token", "vintamie_user_email", "vintamie_backend_url"], async (result) => {
+  chrome.storage.local.get(["velosia_token", "velosia_user_email", "velosia_backend_url"], async (result) => {
     // Determine initially selected backend URL
-    if (result.vintamie_backend_url) {
-      backendUrl = result.vintamie_backend_url;
+    if (result.velosia_backend_url) {
+      backendUrl = result.velosia_backend_url;
       envSelect.value = backendUrl.includes("localhost") ? "local" : "production";
     } else {
-      backendUrl = "https://api.vintamie.henrikheil.net";
+      backendUrl = "https://api.velosia.henrikheil.net";
       envSelect.value = "production";
-      chrome.storage.local.set({ "vintamie_backend_url": backendUrl });
+      chrome.storage.local.set({ "velosia_backend_url": backendUrl });
     }
 
     updateDashboardLink();
 
-    const token = result.vintamie_token;
+    const token = result.velosia_token;
     if (token) {
-      validateToken(token, result.vintamie_user_email);
+      validateToken(token, result.velosia_user_email);
     } else {
       showLogin();
     }
@@ -36,16 +36,16 @@ document.addEventListener("DOMContentLoaded", async () => {
   // Handle environment change
   envSelect.addEventListener("change", () => {
     const selected = envSelect.value;
-    backendUrl = selected === "local" ? "http://localhost:8000" : "https://api.vintamie.henrikheil.net";
+    backendUrl = selected === "local" ? "http://localhost:8000" : "https://api.velosia.henrikheil.net";
     
     updateDashboardLink();
 
-    chrome.storage.local.set({ "vintamie_backend_url": backendUrl }, () => {
+    chrome.storage.local.set({ "velosia_backend_url": backendUrl }, () => {
       // Re-validate token under new environment
-      chrome.storage.local.get(["vintamie_token", "vintamie_user_email"], (result) => {
-        const token = result.vintamie_token;
+      chrome.storage.local.get(["velosia_token", "velosia_user_email"], (result) => {
+        const token = result.velosia_token;
         if (token) {
-          validateToken(token, result.vintamie_user_email);
+          validateToken(token, result.velosia_user_email);
         } else {
           showLogin();
         }
@@ -56,7 +56,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   // Update dashboard link dynamically
   function updateDashboardLink() {
     if (dashboardBtn) {
-      dashboardBtn.href = backendUrl.includes("localhost") ? "http://localhost:5173" : "https://vintamie.henrikheil.net";
+      dashboardBtn.href = backendUrl.includes("localhost") ? "http://localhost:5173" : "https://velosia.henrikheil.net";
     }
   }
 
@@ -110,8 +110,8 @@ document.addEventListener("DOMContentLoaded", async () => {
 
       // Save token in storage
       chrome.storage.local.set({ 
-        "vintamie_token": token,
-        "vintamie_user_email": email
+        "velosia_token": token,
+        "velosia_user_email": email
       }, () => {
         showConnected(email);
       });
@@ -124,7 +124,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 
   // Handle Logout
   logoutBtn.addEventListener("click", () => {
-    chrome.storage.local.remove(["vintamie_token", "vintamie_user_email"], () => {
+    chrome.storage.local.remove(["velosia_token", "velosia_user_email"], () => {
       showLogin();
     });
   });
@@ -159,8 +159,8 @@ async function loadDrafts() {
   const autoToggle = document.getElementById("auto-submit-toggle");
   if (!listEl) return;
 
-  chrome.storage.local.get("vintamie_token", async (data) => {
-    const token = data.vintamie_token;
+  chrome.storage.local.get("velosia_token", async (data) => {
+    const token = data.velosia_token;
     if (!token) return;
 
     try {
@@ -211,14 +211,14 @@ function renderDrafts(drafts) {
         <div style="font-size:11px; color:#09b0b7; font-weight:bold;">${draft.price != null ? Math.round(draft.price) + " €" : ""}</div>
       </div>
       <div style="display:flex; flex-direction:column; gap:4px; flex-shrink:0;">
-        <button data-id="${draft.id}" data-platform="vinted" class="vintamie-launch" style="background:#09b0b7; color:#000; border:none; border-radius:5px; font-size:10px; font-weight:bold; padding:4px 8px; cursor:pointer; white-space:nowrap;">Vinted</button>
-        <button data-id="${draft.id}" data-platform="kleinanzeigen" class="vintamie-launch" style="background:rgba(255,255,255,0.08); color:#f8fafc; border:1px solid rgba(255,255,255,0.12); border-radius:5px; font-size:10px; font-weight:bold; padding:4px 8px; cursor:pointer; white-space:nowrap;">Kleinanz.</button>
+        <button data-id="${draft.id}" data-platform="vinted" class="velosia-launch" style="background:#09b0b7; color:#000; border:none; border-radius:5px; font-size:10px; font-weight:bold; padding:4px 8px; cursor:pointer; white-space:nowrap;">Vinted</button>
+        <button data-id="${draft.id}" data-platform="kleinanzeigen" class="velosia-launch" style="background:rgba(255,255,255,0.08); color:#f8fafc; border:1px solid rgba(255,255,255,0.12); border-radius:5px; font-size:10px; font-weight:bold; padding:4px 8px; cursor:pointer; white-space:nowrap;">Kleinanz.</button>
       </div>
     `;
     listEl.appendChild(card);
   });
 
-  listEl.querySelectorAll(".vintamie-launch").forEach((btn) => {
+  listEl.querySelectorAll(".velosia-launch").forEach((btn) => {
     btn.addEventListener("click", () => {
       startAutofill(parseInt(btn.dataset.id, 10), btn.dataset.platform);
     });
@@ -231,7 +231,7 @@ function startAutofill(draftId, platform) {
   const autoToggle = document.getElementById("auto-submit-toggle");
   const autoSubmit = !!(autoToggle && autoToggle.checked);
   chrome.storage.local.set({
-    vintamie_pending_autofill: { draftId: draftId, platform: platform, autoSubmit: autoSubmit }
+    velosia_pending_autofill: { draftId: draftId, platform: platform, autoSubmit: autoSubmit }
   }, () => {
     const url = platform === "vinted"
       ? "https://www.vinted.de/items/new"

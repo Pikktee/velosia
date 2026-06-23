@@ -51,17 +51,17 @@ def pick_vinted_category(title: str, description: str = "", search_query: str = 
                 resp = genai.GenerativeModel(mn).generate_content(prompt)
                 break
             except Exception as e:
-                print(f"Vintamie Vinted-Kategorie: Modell '{mn}' fehlgeschlagen: {e}", flush=True)
+                print(f"Velosia Vinted-Kategorie: Modell '{mn}' fehlgeschlagen: {e}", flush=True)
         if not resp or not getattr(resp, "text", None):
             return None
         pick = resp.text.strip().strip('"').strip("'").splitlines()[0].strip()
         node = vtax.resolve(pick)
         if node:
-            print(f"Vintamie: Vinted-Kategorie -> {node['breadcrumb']}", flush=True)
+            print(f"Velosia: Vinted-Kategorie -> {node['breadcrumb']}", flush=True)
             return node["breadcrumb"]
         return None
     except Exception as e:
-        print(f"Vintamie: Vinted-Kategorie-Auflösung fehlgeschlagen: {e}", flush=True)
+        print(f"Velosia: Vinted-Kategorie-Auflösung fehlgeschlagen: {e}", flush=True)
         return None
 
 # Default style instructions per tone preset. Kept in sync with the identical map
@@ -240,7 +240,7 @@ def group_images_by_offer(image_paths: List[str]) -> List[List[int]]:
         last_error = None
         for model_name in _get_models_to_try():
             try:
-                print(f"Vintamie Turbo: Gruppiere {n} Fotos mit Modell '{model_name}'...")
+                print(f"Velosia Turbo: Gruppiere {n} Fotos mit Modell '{model_name}'...")
                 model = genai.GenerativeModel(model_name)
                 response = model.generate_content(
                     parts,
@@ -248,20 +248,20 @@ def group_images_by_offer(image_paths: List[str]) -> List[List[int]]:
                 )
                 break
             except Exception as e:
-                print(f"Vintamie Turbo: Modell '{model_name}' fehlgeschlagen bei Gruppierung: {e}")
+                print(f"Velosia Turbo: Modell '{model_name}' fehlgeschlagen bei Gruppierung: {e}")
                 last_error = e
 
         if not response:
-            print(f"Vintamie Turbo: Gruppierung fehlgeschlagen ({last_error}). Fallback: alle Fotos -> 1 Angebot.")
+            print(f"Velosia Turbo: Gruppierung fehlgeschlagen ({last_error}). Fallback: alle Fotos -> 1 Angebot.")
             return [list(range(n))]
 
         data = json.loads(response.text)
         groups = _validate_groups(data.get("groups", []), n)
-        print(f"Vintamie Turbo: {n} Fotos in {len(groups)} Angebot(e) gruppiert -> {groups}")
+        print(f"Velosia Turbo: {n} Fotos in {len(groups)} Angebot(e) gruppiert -> {groups}")
         return groups
 
     except Exception as e:
-        print(f"Vintamie Turbo: Unerwarteter Fehler bei Gruppierung ({e}). Fallback: alle Fotos -> 1 Angebot.")
+        print(f"Velosia Turbo: Unerwarteter Fehler bei Gruppierung ({e}). Fallback: alle Fotos -> 1 Angebot.")
         return [list(range(n))]
 
 
@@ -316,13 +316,13 @@ def analyze_item_image(image_paths: List[str], user = None, user_condition: str 
 
         for model_name in models_to_try:
             try:
-                print(f"Vintamie: Calling Gemini with model '{model_name}'...")
+                print(f"Velosia: Calling Gemini with model '{model_name}'...")
                 model = genai.GenerativeModel(model_name)
                 id_response = model.generate_content([*imgs, identify_prompt])
                 working_model_name = model_name
                 break
             except Exception as e:
-                print(f"Vintamie: Model '{model_name}' failed: {e}")
+                print(f"Velosia: Model '{model_name}' failed: {e}")
                 last_error = e
 
         if not id_response:
@@ -332,11 +332,11 @@ def analyze_item_image(image_paths: List[str], user = None, user_condition: str 
             raise Exception(f"Alle Gemini-Modelle zur Analyse fehlgeschlagen. Letzter Fehler: {err_msg}")
 
         search_query = id_response.text.strip().replace('"', '')
-        print(f"Vintamie: Identifizierter Suchbegriff -> '{search_query}' (via {working_model_name})")
+        print(f"Velosia: Identifizierter Suchbegriff -> '{search_query}' (via {working_model_name})")
 
         # --- STEP 2: Live Price Comparison ---
         comparison = search_marketplace_prices(search_query)
-        print(f"Vintamie: Preisvergleich abgeschlossen. Medianpreis: {comparison['median_price']} EUR, {len(comparison['listings'])} Angebote gefunden.")
+        print(f"Velosia: Preisvergleich abgeschlossen. Medianpreis: {comparison['median_price']} EUR, {len(comparison['listings'])} Angebote gefunden.")
 
         # --- STEP 3: Final Listing Generation ---
         sources_str = json.dumps(comparison["listings"])
@@ -354,7 +354,7 @@ def analyze_item_image(image_paths: List[str], user = None, user_condition: str 
             details_instruction = f"\nBerücksichtige unbedingt diese zusätzlichen Benutzer-Details beim Verfassen des Titels und der Beschreibung (wie Material, Schnitt, Mängel, Besonderheiten): '{user_details}'"
 
         final_prompt = (
-            "Du bist Vintamie, eine visionäre Verkaufs-Assistentin für Second-Hand-Plattformen wie Vinted und Kleinanzeigen.\n"
+            "Du bist Velosia, eine visionäre Verkaufs-Assistentin für Second-Hand-Plattformen wie Vinted und Kleinanzeigen.\n"
             "Analysiere die Fotos dieses Artikels und erstelle eine Verkaufsanzeige. Nutze als zusätzlichen Kontext "
             "diese echten Markt-Vergleichsdaten aus einer aktuellen Suche:\n"
             f"- Gefundener Medianpreis für ähnliche Artikel: {comparison['median_price']} EUR\n"
@@ -519,12 +519,12 @@ def regenerate_draft_field(image_paths: List[str], field: str, user = None) -> s
         last_error = None
         for model_name in models_to_try:
             try:
-                print(f"Vintamie: Regenerating field '{field}' with model '{model_name}'...")
+                print(f"Velosia: Regenerating field '{field}' with model '{model_name}'...")
                 model = genai.GenerativeModel(model_name)
                 response = model.generate_content([*imgs, prompt])
                 break
             except Exception as e:
-                print(f"Vintamie: Model '{model_name}' failed during regeneration: {e}")
+                print(f"Velosia: Model '{model_name}' failed during regeneration: {e}")
                 last_error = e
 
         if not response:

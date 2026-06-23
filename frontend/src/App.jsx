@@ -92,14 +92,14 @@ export default function App() {
   useEffect(() => {
     const isAuth = isAuthenticated();
     if (isAuth) {
-      setToken(localStorage.getItem('vintamie_token'));
+      setToken(localStorage.getItem('velosia_token'));
       fetchCurrentUser();
       fetchDrafts();
       if (window.location.hash === '#/' || window.location.hash === '#/login' || !window.location.hash) {
         window.location.hash = '#/app';
       }
     } else {
-      const isAndroidApp = typeof window.VintamieBridge !== 'undefined';
+      const isAndroidApp = typeof window.VelosiaBridge !== 'undefined';
       if (window.location.hash === '#/app') {
         window.location.hash = isAndroidApp ? '#/login' : '#/';
       } else if (!window.location.hash || window.location.hash === '#/') {
@@ -120,7 +120,7 @@ export default function App() {
         setView('issues');
       }
     } else {
-      const isAndroidApp = typeof window.VintamieBridge !== 'undefined';
+      const isAndroidApp = typeof window.VelosiaBridge !== 'undefined';
       if (isAndroidApp) {
         if (route !== '#/login') {
           window.location.hash = '#/login';
@@ -164,7 +164,7 @@ export default function App() {
     try {
       const u = await getMe();
       setUser(u);
-      localStorage.setItem('vintamie_user_email', u.email);
+      localStorage.setItem('velosia_user_email', u.email);
     } catch (err) {
       console.error(err);
       handleLogout();
@@ -205,7 +205,7 @@ export default function App() {
     setUser(null);
     setDrafts([]);
     setSelectedDraft(null);
-    localStorage.removeItem('vintamie_user_email');
+    localStorage.removeItem('velosia_user_email');
     setView('list');
     window.location.hash = '#/';
   };
@@ -397,7 +397,7 @@ export default function App() {
 
   // If not authenticated, render Landing Page or Login page
   if (!token) {
-    const isAndroid = typeof window.VintamieBridge !== 'undefined';
+    const isAndroid = typeof window.VelosiaBridge !== 'undefined';
     return (
       <div style={{ minHeight: '100dvh', background: 'var(--bg-gradient)', position: 'relative', overflowX: 'hidden' }}>
         {/* Landing Page Header */}
@@ -409,8 +409,8 @@ export default function App() {
             boxShadow: '0 4px 30px rgba(0, 0, 0, 0.2)'
           }}>
             <div className="header-brand" style={{ cursor: 'pointer' }} onClick={() => window.location.hash = '#/'}>
-              <img src="/favicon.svg" alt="Vintamie Logo" className="header-logo" />
-              <h1 className="header-title">vintamie</h1>
+              <img src="/favicon.svg" alt="Velosia Logo" className="header-logo" />
+              <h1 className="header-title">velosia</h1>
             </div>
             <div className="header-actions">
               {route === '#/login' ? (
@@ -468,8 +468,8 @@ export default function App() {
       {/* Top Header Brand Bar */}
       <header className="app-header">
         <div className="header-brand">
-          <img src="/favicon.svg" alt="Vintamie Logo" className="header-logo" />
-          <h1 className="header-title">vintamie</h1>
+          <img src="/favicon.svg" alt="Velosia Logo" className="header-logo" />
+          <h1 className="header-title">velosia</h1>
         </div>
         <div className="header-actions">
           {view === 'capture' && (

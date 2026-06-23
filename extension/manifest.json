@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "Vintamie Assistant",
+  "name": "Velosia Assistant",
   "version": "2.5.6",
-  "description": "F\u00fclle deine Vinted und Kleinanzeigen Inserate automatisch aus dem Vintamie-Dashboard aus.",
+  "description": "F\u00fclle deine Vinted und Kleinanzeigen Inserate automatisch aus dem Velosia-Dashboard aus.",
   "permissions": [
     "activeTab",
     "scripting",
@@ -11,8 +11,8 @@
   "host_permissions": [
     "http://localhost:8000/*",
     "http://localhost:5173/*",
-    "https://vintamie.henrikheil.net/*",
-    "https://api.vintamie.henrikheil.net/*",
+    "https://velosia.henrikheil.net/*",
+    "https://api.velosia.henrikheil.net/*",
     "https://*.vinted.de/*",
     "https://*.vinted.fr/*",
     "https://*.kleinanzeigen.de/*"
@@ -66,7 +66,7 @@
     {
       "matches": [
         "http://localhost:5173/*",
-        "https://vintamie.henrikheil.net/*"
+        "https://velosia.henrikheil.net/*"
       ],
       "js": [
         "content_sync.js"

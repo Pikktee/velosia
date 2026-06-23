@@ -1,4 +1,4 @@
-// Vintamie WebExtension Background Script
+// Velosia WebExtension Background Script
 chrome.runtime.onInstalled.addListener(() => {
-  console.log("Vintamie Assistant installiert!");
+  console.log("Velosia Assistant installiert!");
 });

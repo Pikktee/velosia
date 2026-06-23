@@ -1,6 +1,6 @@
-# Vintamie - AI-Powered Listing Automation
+# Velosia - AI-Powered Listing Automation
 
-Vintamie automates listing items on Second-Hand platforms (Vinted and Kleinanzeigen) by capturing photos, generating titles, descriptions, categories, and prices using Vision AI, and autofilling listing forms via a WebExtension or a native Android WebView Shell.
+Velosia automates listing items on Second-Hand platforms (Vinted and Kleinanzeigen) by capturing photos, generating titles, descriptions, categories, and prices using Vision AI, and autofilling listing forms via a WebExtension or a native Android WebView Shell.
 
 ## V2 Features (Multi-User & Price Scraper)
 *   **Multi-User Auth:** JWT-based user session authentication (registration, login, profile check) securing all API requests.
@@ -10,7 +10,7 @@ Vintamie automates listing items on Second-Hand platforms (Vinted and Kleinanzei
 
 ## Autofill & Category Architecture (V2.4+)
 
-Autofilling Vinted/Kleinanzeigen forms is driven by a **single shared engine**, `shared/autofill-engine.js` (pure DOM JS, no platform APIs). It is the single source of truth and is **mirrored by `deploy.py`** into `extension/autofill-engine.js` and `android/app/src/main/assets/autofill-engine.js` — never edit those copies, edit `shared/` and let deploy sync them. Public API: `window.__vintamie.autofill(draft, options)`. The React-safe native value setter (prototype `value` setter + bubbling `input` event) is what makes Vinted (a React SPA) accept programmatic input. `auto_submit` (User setting) controls whether the engine also clicks publish; default false = user reviews and publishes manually.
+Autofilling Vinted/Kleinanzeigen forms is driven by a **single shared engine**, `shared/autofill-engine.js` (pure DOM JS, no platform APIs). It is the single source of truth and is **mirrored by `deploy.py`** into `extension/autofill-engine.js` and `android/app/src/main/assets/autofill-engine.js` — never edit those copies, edit `shared/` and let deploy sync them. Public API: `window.__velosia.autofill(draft, options)`. The React-safe native value setter (prototype `value` setter + bubbling `input` event) is what makes Vinted (a React SPA) accept programmatic input. `auto_submit` (User setting) controls whether the engine also clicks publish; default false = user reviews and publishes manually.
 
 **Kleinanzeigen category selection is a hash-routed tree, NOT a keyword search.** A category is a link `<a class="category-selection-list-item-link" href="#?path=161/176/staubsauger">`. The engine sets `location.hash = "?path=...&isParent=undefined"` and clicks **"Weiter"** to reach `p-anzeige-aufgeben-schritt2.html` with the category pre-set (the 3rd tree level becomes the "Art" dropdown there).
 
@@ -37,7 +37,7 @@ After a listing goes live we capture its **public listing id/URL** and track its
 
 **Capture (no login, no form crawl).** The engine parses the *published* page URL — Vinted `/items/<id>-slug`, Kleinanzeigen `/s-anzeige/<slug>/<id>-…` — and POSTs `{draft_id, platform, listing_id, listing_url}` to `POST /api/listings/published`. Two capture paths because the platforms publish differently:
 *   **Vinted** is a React SPA: publishing navigates `/items/new` → `/items/<id>` *without* a document reload, so a content script matched on the item page never fires. The engine instead runs an in-context watcher (`watchVintedPublish`, started from `autofill()` for the form phase) that polls the URL and captures once the item id appears. Works for manual and auto-submit.
-*   **Kleinanzeigen** does a full navigation to the live ad, so a dedicated capture content script (`extension/capture.js`, matched on `/s-anzeige/*`, **not** mirrored from `shared/` — it's a standalone extension file) reads a short-lived `vintamie_pending_capture` marker (armed by `content.js` when autofill runs) and reports the id. `capture.js` is also matched on Vinted item pages as a full-reload fallback. Engine helpers `window.__vintamie.parseListingUrl` / `captureListing` are the shared single source for both; Android can call `captureListing` from the WebView shell after a KA publish (the one remaining native wire-up — Vinted already works via the watcher).
+*   **Kleinanzeigen** does a full navigation to the live ad, so a dedicated capture content script (`extension/capture.js`, matched on `/s-anzeige/*`, **not** mirrored from `shared/` — it's a standalone extension file) reads a short-lived `velosia_pending_capture` marker (armed by `content.js` when autofill runs) and reports the id. `capture.js` is also matched on Vinted item pages as a full-reload fallback. Engine helpers `window.__velosia.parseListingUrl` / `captureListing` are the shared single source for both; Android can call `captureListing` from the WebView shell after a KA publish (the one remaining native wire-up — Vinted already works via the watcher).
 
 **Status polling (server-side, curl-cffi).** Reading a *published public ad page* by id is distinct from crawling the form (which got us banned) and is low-volume (only the user's own active listings). `services/http_client.py` is the single outbound choke point — curl-cffi with `impersonate="chrome"` (real Chrome TLS/JA3) defeats Cloudflare/DataDome where plain `requests` got challenged; it also hardened the existing price scraper (which silently fell back to mock data on 403). `services/listing_status.py` maps a page to a status (calibrated against live pages):
 *   **Kleinanzeigen**: the status is **not visible text** — KA draws the yellow "Reserviert •" / "Gelöscht •" veil purely client-side from an inline JS config object whose two booleans are nonetheless present in the static (curl-cffi) HTML: `showDeletedVeil:true` → `geloescht`, `showPausedVeil:true` → `reserviert`, both false → `online` (`services/listing_status.py` regex-matches these). A **soft-deleted** ad keeps returning HTTP 200 with `/s-anzeige/` intact and only flips `showDeletedVeil`, so the booleans are primary and the 404 / redirect-off-`/s-anzeige/` heuristic is just the fully-purged fallback. KA exposes **no** public "sold" state (no `showSoldVeil`); the word `verkauft` only appears as free description text and must never be matched. (Calibrated 2026-06 against a live reserved ad + a live soft-deleted ad; an active ad has both veils false. The `s-vac-inc-get.json?adId=` XHR carries only `numVisits`, not status.)
@@ -98,7 +98,7 @@ After a listing goes live we capture its **public listing id/URL** and track its
 
 ## Production Deployment (Railway)
 
-Vintamie is deployed directly via the Railway CLI, bypassing the GitHub connection state mismatch. 
+Velosia is deployed directly via the Railway CLI, bypassing the GitHub connection state mismatch. 
 
 ### One-Click Deployment Command
 To release a new version, update version numbers in all configuration files, push changes to GitHub, and trigger the Railway builds, run:
@@ -118,13 +118,13 @@ To release a new version, update version numbers in all configuration files, pus
         *   `SECRET_KEY`: Random JWT signing secret
         *   `GEMINI_API_KEY`: Google Gemini API Key
         *   `ACCESS_TOKEN_EXPIRE_MINUTES`: `1440`
-    *   **Custom Domain:** `api.vintamie.henrikheil.net` (Port `8080`)
+    *   **Custom Domain:** `api.velosia.henrikheil.net` (Port `8080`)
 
 2.  **Frontend Service:**
     *   **Start Command:** `npm run start` (serves the static production build using Vite preview)
     *   **Environment Variables:**
-        *   `VITE_API_URL`: `https://api.vintamie.henrikheil.net`
-    *   **Custom Domain:** `vintamie.henrikheil.net` (Port `8080`)
+        *   `VITE_API_URL`: `https://api.velosia.henrikheil.net`
+    *   **Custom Domain:** `velosia.henrikheil.net` (Port `8080`)
 
 ---
 

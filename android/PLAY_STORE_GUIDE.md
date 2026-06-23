@@ -1,6 +1,6 @@
-# Vintamie – Google Play Store Publishing Guide (Interner Test)
+# Velosia – Google Play Store Publishing Guide (Interner Test)
 
-Dieses Dokument beschreibt die Schritte, um die Vintamie Android-App über den
+Dieses Dokument beschreibt die Schritte, um die Velosia Android-App über den
 **internen Testkanal** der Google Play Console bereitzustellen. Tester treten per
 Link bei, installieren aus dem Play Store und bekommen Updates danach **vollautomatisch**
 im Hintergrund – Installieren und Aktualisieren wird für sie so einfach wie bei jeder
@@ -32,12 +32,12 @@ werden vom Play-Build nicht mehr aufgerufen (vestigial – können später entfe
 
 ## 1. Sicherheits-Richtlinien (Wichtig!)
 
-Die Schlüsseldatei (`vintamie-release.jks`) und Passwörter dürfen **niemals** ins Git.
+Die Schlüsseldatei (`velosia-release.jks`) und Passwörter dürfen **niemals** ins Git.
 In der `.gitignore` sind bereits gesperrt: `*.jks`, `*.aab`, `*.apk`,
 `android/keystore.properties`. `keystore.properties.example` ist die einzige
 einscheckbare Vorlage.
 
-Sichere `vintamie-release.jks` + Passwörter separat (Passwort-Manager). **Verlierst du
+Sichere `velosia-release.jks` + Passwörter separat (Passwort-Manager). **Verlierst du
 diesen Key, kannst du die App nie wieder aktualisieren** (Play-Apps müssen mit demselben
 Upload-Key signiert bleiben – außer du nutzt Play App Signing, siehe Schritt 6, dann ist
 nur der Upload-Key betroffen und über Google rotierbar).
@@ -52,8 +52,8 @@ ein solcher Build darf **nicht** zu Play hochgeladen werden.
 
 1. Keystore erzeugen (im Ordner `android/`):
    ```bash
-   keytool -genkeypair -v -keystore vintamie-release.jks \
-     -keyalg RSA -keysize 2048 -validity 9125 -alias vintamie
+   keytool -genkeypair -v -keystore velosia-release.jks \
+     -keyalg RSA -keysize 2048 -validity 9125 -alias velosia
    ```
    (Passwörter vergeben, Namen eintragen, Rest optional.)
 2. Vorlage kopieren und ausfüllen:
@@ -63,13 +63,13 @@ ein solcher Build darf **nicht** zu Play hochgeladen werden.
    ```
    `keystore.properties`:
    ```properties
-   storeFile=../vintamie-release.jks
+   storeFile=../velosia-release.jks
    storePassword=…
-   keyAlias=vintamie
+   keyAlias=velosia
    keyPassword=…
    ```
    `storeFile` ist relativ zum Modul `android/app/` – liegt die `.jks` in `android/`,
-   ist der Pfad `../vintamie-release.jks`.
+   ist der Pfad `../velosia-release.jks`.
 
 ---
 
@@ -97,9 +97,9 @@ Versionen sind bereits im Projekt gesetzt:
 ## 4. App in der Play Console anlegen
 
 1. In der Play Console oben rechts **App erstellen**.
-2. App-Name: `Vintamie`, Standard-Sprache: `Deutsch`, Typ: `App`, `Kostenlos`.
+2. App-Name: `Velosia`, Standard-Sprache: `Deutsch`, Typ: `App`, `Kostenlos`.
 3. Richtlinien akzeptieren → **App erstellen**.
-4. Package-Name beim ersten Upload: `com.vintamie.app` (fix, nicht mehr änderbar).
+4. Package-Name beim ersten Upload: `com.velosia.app` (fix, nicht mehr änderbar).
 
 ---
 
@@ -173,7 +173,7 @@ Builds).
 
 ## Checkliste vor dem ersten Upload
 
-- [ ] `vintamie-release.jks` erzeugt, `android/keystore.properties` ausgefüllt
+- [ ] `velosia-release.jks` erzeugt, `android/keystore.properties` ausgefüllt
 - [ ] `targetSdk 35` + AGP 8.6+/Gradle 8.7+ (Schritt 3), Build grün
 - [ ] `./gradlew bundleRelease` erzeugt ein **release-signiertes** Bundle (nicht Debug)
 - [ ] App in der Console angelegt, Data Safety + Datenschutz-URL + Rating gesetzt

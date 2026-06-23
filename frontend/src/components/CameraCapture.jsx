@@ -16,11 +16,11 @@ const CameraCapture = ({
   const [flash, setFlash] = useState(false);
   const [showReview, setShowReview] = useState(false);
   const [showOnboarding, setShowOnboarding] = useState(
-    () => turbo && !localStorage.getItem('vintamie_turbo_onboarded')
+    () => turbo && !localStorage.getItem('velosia_turbo_onboarded')
   );
 
   const dismissOnboarding = () => {
-    try { localStorage.setItem('vintamie_turbo_onboarded', '1'); } catch (e) { /* ignore */ }
+    try { localStorage.setItem('velosia_turbo_onboarded', '1'); } catch (e) { /* ignore */ }
     setShowOnboarding(false);
   };
 
@@ -541,7 +541,7 @@ const CameraCapture = ({
               <Rocket size={30} strokeWidth={2} />
             </div>
             <h2>Turbo-Modus</h2>
-            <p>Erfasse viele Artikel in einem Rutsch – Vintamie erledigt den Rest.</p>
+            <p>Erfasse viele Artikel in einem Rutsch – Velosia erledigt den Rest.</p>
 
             <div className="turbo-onboarding-steps">
               <div className="turbo-onboarding-step">

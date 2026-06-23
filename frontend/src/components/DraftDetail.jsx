@@ -40,7 +40,7 @@ export default function DraftDetail({ draft, onBack, onUpdateSuccess }) {
   // activeImage state removed since we now use a grid of thumbnails and a modal detail view
 
   // Detect Android Webview container
-  const isAndroidApp = typeof window.VintamieBridge !== 'undefined';
+  const isAndroidApp = typeof window.VelosiaBridge !== 'undefined';
 
   const conditions = [
     'Neu',
@@ -232,7 +232,7 @@ export default function DraftDetail({ draft, onBack, onUpdateSuccess }) {
 
   const handlePostInApp = (platform) => {
     if (isAndroidApp) {
-      window.VintamieBridge.postToPlatform(draft.id, platform, getAuthToken());
+      window.VelosiaBridge.postToPlatform(draft.id, platform, getAuthToken());
     }
   };
 
@@ -495,7 +495,7 @@ export default function DraftDetail({ draft, onBack, onUpdateSuccess }) {
             <div style={{ display: 'flex', gap: '0.5rem', background: 'rgba(255,255,255,0.02)', padding: '0.75rem', borderRadius: 'var(--radius-sm)', fontSize: '0.825rem', border: '1px solid var(--glass-border)', color: 'var(--text-secondary)' }}>
               <Monitor size={16} style={{ color: 'var(--primary)', flexShrink: 0, marginTop: '0.15rem' }} />
               <div>
-                <strong>Tipp:</strong> Nutze die Vintamie Desktop-Extension, um alle Daten automatisch mit einem Klick auszufüllen.
+                <strong>Tipp:</strong> Nutze die Velosia Desktop-Extension, um alle Daten automatisch mit einem Klick auszufüllen.
               </div>
             </div>
 

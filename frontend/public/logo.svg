@@ -1,0 +1,42 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" fill="none">
+  <defs>
+    <linearGradient id="velosia-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#09b0b7" />
+      <stop offset="100%" stop-color="#ec4899" />
+    </linearGradient>
+    <linearGradient id="velosia-text-grad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#0ad0d8" />
+      <stop offset="100%" stop-color="#ec4899" />
+    </linearGradient>
+    <filter id="neon-glow" x="-40%" y="-40%" width="180%" height="180%">
+      <feGaussianBlur stdDeviation="8" result="blur" />
+      <feMerge>
+        <feMergeNode in="blur" />
+        <feMergeNode in="SourceGraphic" />
+      </feMerge>
+    </filter>
+  </defs>
+
+  <!-- Dark glassmorphic background -->
+  <rect width="1024" height="1024" rx="112" fill="#07090d" />
+  <rect x="6" y="6" width="1012" height="1012" rx="106" fill="none" stroke="rgba(255,255,255,0.06)" stroke-width="4" />
+
+  <!-- Emblem: favicon motif (512x512) centred horizontally, upper area -->
+  <g transform="translate(256,96)">
+    <circle cx="256" cy="256" r="210" stroke="url(#velosia-grad)" stroke-width="4" stroke-dasharray="12 8" opacity="0.15" />
+    <g filter="url(#neon-glow)">
+      <path d="M 256 195 V 160 C 256 130, 235 110, 256 85 C 275 60, 295 85, 275 105" stroke="url(#velosia-grad)" stroke-width="16" stroke-linecap="round" fill="none" />
+      <path d="M 110 220 L 256 390 L 402 220 C 412 210, 405 195, 390 195 L 122 195 C 107 195, 100 210, 110 220 Z" fill="#07090d" stroke="url(#velosia-grad)" stroke-width="16" stroke-linejoin="round" />
+      <circle cx="256" cy="275" r="55" stroke="url(#velosia-grad)" stroke-width="12" fill="#07090d" />
+      <circle cx="256" cy="275" r="22" fill="url(#velosia-grad)" />
+      <circle cx="264" cy="267" r="6" fill="#fff" opacity="0.8" />
+      <path d="M 400 100 c 0 12 -8 20 -20 20 c 12 0 20 8 20 20 c 0 -12 8 -20 20 -20 c -12 0 -20 -8 -20 -20 z" fill="#ec4899" />
+      <path d="M 100 320 c 0 8 -5 12 -12 12 c 7 0 12 5 12 12 c 0 -7 5 -12 12 -12 c -7 0 -12 -5 -12 -12 z" fill="#09b0b7" />
+    </g>
+  </g>
+
+  <!-- Wordmark -->
+  <text x="512" y="780" text-anchor="middle" font-family="'Avenir Next','Helvetica Neue',Arial,sans-serif" font-weight="700" font-size="148" letter-spacing="12" fill="url(#velosia-text-grad)" filter="url(#neon-glow)">VELOSIA</text>
+  <!-- Subtitle -->
+  <text x="512" y="858" text-anchor="middle" font-family="'Avenir Next','Helvetica Neue',Arial,sans-serif" font-weight="500" font-size="37" letter-spacing="9" fill="#0ad0d8" opacity="0.85">SECOND-HAND LISTING APP</text>
+</svg>

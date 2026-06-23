@@ -64,7 +64,7 @@
   const data = [...seen.values()].sort((a, b) => a.path.localeCompare(b.path));
   window.__kaTaxJSON = JSON.stringify(data, null, 0);
   window.__kaTax = data;
-  try { localStorage.setItem('vintamie_ka_tax', window.__kaTaxJSON); } catch (e) {}
+  try { localStorage.setItem('velosia_ka_tax', window.__kaTaxJSON); } catch (e) {}
   try { copy(window.__kaTaxJSON); } catch (e) {}
   try { window.location.hash = ''; } catch (e) {}
   console.log('Fertig:', data.length, 'Kategorien,', data.filter((d) => d.leaf).length, 'Blätter. Jetzt Schritt B ausführen.');
@@ -74,7 +74,7 @@
 // ===== Schritt B: synchroner Download (als SEPARATEN Befehl ausführen) =====
 /*
 (() => {
-  const json = window.__kaTaxJSON || localStorage.getItem('vintamie_ka_tax');
+  const json = window.__kaTaxJSON || localStorage.getItem('velosia_ka_tax');
   if (!json) return 'Erst Schritt A ausführen.';
   const blob = new Blob([json], { type: 'application/json' });
   const url = URL.createObjectURL(blob);

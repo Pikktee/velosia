@@ -38,11 +38,11 @@ def sync_shared_engine():
 def build_extension_zip():
     """Package the WebExtension into a single zip the landing page offers for
     download. Written into frontend/public so Vite ships it as a static asset at
-    /vintamie-extension.zip — always matching the engine just synced above.
+    /velosia-extension.zip — always matching the engine just synced above.
     The archive is reproducible (fixed timestamps) so identical contents produce
     identical bytes and don't churn git on every deploy."""
     ext_dir = "extension"
-    out_path = "frontend/public/vintamie-extension.zip"
+    out_path = "frontend/public/velosia-extension.zip"
     if not os.path.isdir(ext_dir):
         print("⚠ extension/ not found — skipping extension zip.")
         return
@@ -91,7 +91,7 @@ def main():
         next_version = current_version + ".1"
 
     # Set up argument parser
-    parser = argparse.ArgumentParser(description="Vintamie Deploy Tool")
+    parser = argparse.ArgumentParser(description="Velosia Deploy Tool")
     parser.add_argument("--local", action="store_true", help="Deploy directly from the local machine using Railway CLI")
     parser.add_argument("version", nargs="?", help="New version to deploy (e.g. 2.0.3)")
     parser.add_argument("message", nargs="?", help="Commit/release message")
@@ -204,7 +204,7 @@ def main():
         print("https://railway.app/project/42d17b5d-61c9-4921-a21f-582d9a4c1d8a")
     else:
         print("\n🎉 Code pushed to GitHub! GitHub Actions will now automatically build and deploy this release.")
-        print("Monitor the build on GitHub: https://github.com/Pikktee/vintamie/actions")
+        print("Monitor the build on GitHub: https://github.com/Pikktee/velosia/actions")
         print("Or check your Railway dashboard: https://railway.app/project/42d17b5d-61c9-4921-a21f-582d9a4c1d8a")
 
 if __name__ == "__main__":

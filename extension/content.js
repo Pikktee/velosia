@@ -1,16 +1,16 @@
-// Vintamie Form Autofiller Content Script
-console.log("Vintamie Content Script geladen!");
+// Velosia Form Autofiller Content Script
+console.log("Velosia Content Script geladen!");
 
 // State
 let drafts = [];
 let isOverlayOpen = false;
-let backendUrl = "https://api.vintamie.henrikheil.net"; // Default to production
+let backendUrl = "https://api.velosia.henrikheil.net"; // Default to production
 
 function openCameraOverlay() {
-  if (document.getElementById("vintamie-camera-iframe")) return;
+  if (document.getElementById("velosia-camera-iframe")) return;
 
   const iframe = document.createElement("iframe");
-  iframe.id = "vintamie-camera-iframe";
+  iframe.id = "velosia-camera-iframe";
   iframe.src = chrome.runtime.getURL("camera.html");
   iframe.setAttribute("allow", "camera");
   
@@ -29,7 +29,7 @@ function openCameraOverlay() {
 }
 
 function closeCameraOverlay() {
-  const iframe = document.getElementById("vintamie-camera-iframe");
+  const iframe = document.getElementById("velosia-camera-iframe");
   if (iframe) iframe.remove();
 }
 
@@ -37,18 +37,18 @@ function closeCameraOverlay() {
 window.addEventListener("message", (event) => {
   if (!event.data) return;
 
-  if (event.data.type === "VINTAMIE_DRAFT_CREATED") {
+  if (event.data.type === "VELOSIA_DRAFT_CREATED") {
     closeCameraOverlay();
     closeOverlay();
-    chrome.storage.local.get("vintamie_backend_url", (data) => {
-      if (data.vintamie_backend_url) {
-        backendUrl = data.vintamie_backend_url;
+    chrome.storage.local.get("velosia_backend_url", (data) => {
+      if (data.velosia_backend_url) {
+        backendUrl = data.velosia_backend_url;
       }
       if (event.data.draft) {
         autofillForm(event.data.draft);
       }
     });
-  } else if (event.data.type === "VINTAMIE_CLOSE_CAMERA") {
+  } else if (event.data.type === "VELOSIA_CLOSE_CAMERA") {
     closeCameraOverlay();
   }
 });
@@ -71,19 +71,19 @@ function fetchJson(url, token) {
 // Kleinanzeigen two-step flow this fires again after the step-2 reload.
 function checkPendingAutofill() {
   chrome.storage.local.get(
-    ["vintamie_pending_autofill", "vintamie_token", "vintamie_backend_url"],
+    ["velosia_pending_autofill", "velosia_token", "velosia_backend_url"],
     async (data) => {
-      const pending = data.vintamie_pending_autofill;
-      const token = data.vintamie_token;
+      const pending = data.velosia_pending_autofill;
+      const token = data.velosia_token;
       if (!pending || !token) return;
-      if (data.vintamie_backend_url) backendUrl = data.vintamie_backend_url;
+      if (data.velosia_backend_url) backendUrl = data.velosia_backend_url;
 
       const host = window.location.hostname;
       if (pending.platform === "vinted" && !host.includes("vinted")) return;
       if (pending.platform === "kleinanzeigen" && !host.includes("kleinanzeigen")) return;
 
       const settings = await fetchJson(`${backendUrl}/api/auth/me`, token);
-      if (settings) window.vintamieUserSettings = settings;
+      if (settings) window.velosiaUserSettings = settings;
 
       const draft = await fetchJson(`${backendUrl}/api/drafts/${pending.draftId}`, token);
       if (!draft) return;
@@ -96,21 +96,21 @@ function checkPendingAutofill() {
 
       // Only clear the queue once we are on the real form, so the Kleinanzeigen
       // category step (step 1) -> form (step 2) reload still finds the draft.
-      const phase = window.__vintamie.detectPhase(pending.platform);
+      const phase = window.__velosia.detectPhase(pending.platform);
       if (phase === "form") {
-        chrome.storage.local.remove("vintamie_pending_autofill");
+        chrome.storage.local.remove("velosia_pending_autofill");
       }
     }
   );
 }
 
-// Inject the Vintamie floating button on the page
+// Inject the Velosia floating button on the page
 function injectFloatingButton() {
-  if (document.getElementById("vintamie-floating-btn")) return;
+  if (document.getElementById("velosia-floating-btn")) return;
 
   const btn = document.createElement("div");
-  btn.id = "vintamie-floating-btn";
-  btn.innerHTML = "✨ Vintamie";
+  btn.id = "velosia-floating-btn";
+  btn.innerHTML = "✨ Velosia";
   
   // Style
   Object.assign(btn.style, {
@@ -157,7 +157,7 @@ async function toggleOverlay() {
 }
 
 function closeOverlay() {
-  const overlay = document.getElementById("vintamie-drawer");
+  const overlay = document.getElementById("velosia-drawer");
   if (overlay) overlay.remove();
   isOverlayOpen = false;
 }
@@ -167,7 +167,7 @@ async function openOverlay() {
   
   // Create drawer
   const drawer = document.createElement("div");
-  drawer.id = "vintamie-drawer";
+  drawer.id = "velosia-drawer";
   
   // Styling
   Object.assign(drawer.style, {
@@ -192,13 +192,13 @@ async function openOverlay() {
   // Header HTML
   let contentHtml = `
     <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid rgba(255,255,255,0.08); padding-bottom:12px; margin-bottom:16px;">
-      <span style="font-size:18px; font-weight:bold; background:linear-gradient(135deg, #09b0b7 0%, #ec4899 100%); -webkit-background-clip:text; -webkit-text-fill-color:transparent;">✨ Vintamie Angebote</span>
-      <button id="vintamie-close" style="background:transparent; border:none; color:#94a3b8; cursor:pointer; font-size:18px;">&times;</button>
+      <span style="font-size:18px; font-weight:bold; background:linear-gradient(135deg, #09b0b7 0%, #ec4899 100%); -webkit-background-clip:text; -webkit-text-fill-color:transparent;">✨ Velosia Angebote</span>
+      <button id="velosia-close" style="background:transparent; border:none; color:#94a3b8; cursor:pointer; font-size:18px;">&times;</button>
     </div>
-    <button id="vintamie-btn-camera" style="width:100%; padding:12px; background:linear-gradient(135deg, #09b0b7 0%, #ec4899 100%); border:none; border-radius:8px; color:#000000; font-weight:bold; font-size:13px; font-family:'Outfit', 'Inter', sans-serif; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:8px; margin-bottom:16px; box-shadow:0 4px 12px rgba(9, 176, 183, 0.2); transition:all 0.2s ease;">
+    <button id="velosia-btn-camera" style="width:100%; padding:12px; background:linear-gradient(135deg, #09b0b7 0%, #ec4899 100%); border:none; border-radius:8px; color:#000000; font-weight:bold; font-size:13px; font-family:'Outfit', 'Inter', sans-serif; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:8px; margin-bottom:16px; box-shadow:0 4px 12px rgba(9, 176, 183, 0.2); transition:all 0.2s ease;">
       📸 Neues Foto aufnehmen
     </button>
-    <div id="vintamie-list-container" style="flex-grow:1; overflow-y:auto; display:flex; flexDirection:column; gap:12px; padding-bottom:20px;">
+    <div id="velosia-list-container" style="flex-grow:1; overflow-y:auto; display:flex; flexDirection:column; gap:12px; padding-bottom:20px;">
       <p style="color:#94a3b8; font-size:13px;">Lade Angebote...</p>
     </div>
   `;
@@ -207,10 +207,10 @@ async function openOverlay() {
   document.body.appendChild(drawer);
 
   // Close event listener
-  document.getElementById("vintamie-close").addEventListener("click", closeOverlay);
+  document.getElementById("velosia-close").addEventListener("click", closeOverlay);
 
   // Camera event listener
-  const camBtn = document.getElementById("vintamie-btn-camera");
+  const camBtn = document.getElementById("velosia-btn-camera");
   camBtn.addEventListener("click", openCameraOverlay);
   camBtn.addEventListener("mouseenter", () => {
     camBtn.style.transform = "scale(1.02)";
@@ -220,16 +220,16 @@ async function openOverlay() {
   });
 
   // Fetch drafts from backend using token from extension storage
-  chrome.storage.local.get(["vintamie_token", "vintamie_backend_url"], async (data) => {
-    const token = data.vintamie_token;
-    if (data.vintamie_backend_url) {
-      backendUrl = data.vintamie_backend_url;
+  chrome.storage.local.get(["velosia_token", "velosia_backend_url"], async (data) => {
+    const token = data.velosia_token;
+    if (data.velosia_backend_url) {
+      backendUrl = data.velosia_backend_url;
     }
     
     if (!token) {
-      document.getElementById("vintamie-list-container").innerHTML = `
+      document.getElementById("velosia-list-container").innerHTML = `
         <div style="color:#f59e0b; font-size:13px; background:rgba(245,158,11,0.1); padding:10px; border-radius:6px; border:1px solid rgba(245,158,11,0.2); line-height: 1.4;">
-          Bitte melde dich zuerst über das Vintamie-Erweiterungssymbol in deiner Browser-Leiste an.
+          Bitte melde dich zuerst über das Velosia-Erweiterungssymbol in deiner Browser-Leiste an.
         </div>
       `;
       return;
@@ -250,7 +250,7 @@ async function openOverlay() {
       } catch (userErr) {
         console.warn("Konnte User-Einstellungen nicht laden:", userErr);
       }
-      window.vintamieUserSettings = userSettings;
+      window.velosiaUserSettings = userSettings;
 
       const response = await fetch(`${backendUrl}/api/drafts`, {
         headers: {
@@ -261,9 +261,9 @@ async function openOverlay() {
       drafts = await response.json();
       renderDraftsList();
     } catch (err) {
-      document.getElementById("vintamie-list-container").innerHTML = `
+      document.getElementById("velosia-list-container").innerHTML = `
         <div style="color:#fca5a5; font-size:13px; background:rgba(239,68,68,0.1); padding:10px; border-radius:6px; border:1px solid rgba(239,68,68,0.2); line-height: 1.4;">
-          Fehler beim Laden der Angebote. Bitte stelle sicher, dass der Vintamie Server läuft und deine Sitzung aktiv ist.
+          Fehler beim Laden der Angebote. Bitte stelle sicher, dass der Velosia Server läuft und deine Sitzung aktiv ist.
         </div>
       `;
     }
@@ -272,7 +272,7 @@ async function openOverlay() {
 
 // Render the list of drafts inside the drawer
 function renderDraftsList() {
-  const container = document.getElementById("vintamie-list-container");
+  const container = document.getElementById("velosia-list-container");
   if (!container) return;
 
   if (drafts.length === 0) {
@@ -324,34 +324,34 @@ function renderDraftsList() {
   });
 }
 
-// Perform Autofill by delegating to the shared Vintamie engine (autofill-engine.js,
+// Perform Autofill by delegating to the shared Velosia engine (autofill-engine.js,
 // loaded as a content script before this file). All the platform-specific field
 // logic, the React-safe value setter, the photo upload and the feedback overlay
 // live in the engine so the Android WebView shell can reuse the exact same code.
 async function autofillForm(draft, autoSubmit) {
-  if (!window.__vintamie || !window.__vintamie.autofill) {
-    console.error("Vintamie: Autofill-Engine nicht geladen.");
+  if (!window.__velosia || !window.__velosia.autofill) {
+    console.error("Velosia: Autofill-Engine nicht geladen.");
     return;
   }
   // Arm a capture marker: once the user publishes and lands on the public listing
   // page, capture.js reports the listing id back so the dashboard can track it.
   try {
-    const platform = window.__vintamie.detectPlatform();
+    const platform = window.__velosia.detectPlatform();
     if (platform && draft && draft.id != null) {
       chrome.storage.local.set({
-        vintamie_pending_capture: { platform: platform, draftId: draft.id, ts: Date.now() }
+        velosia_pending_capture: { platform: platform, draftId: draft.id, ts: Date.now() }
       });
     }
   } catch (e) {}
 
-  const settings = window.vintamieUserSettings || {};
+  const settings = window.velosiaUserSettings || {};
   const submit = (typeof autoSubmit === "boolean") ? autoSubmit : !!settings.auto_submit;
   // Token for the engine's anonymous autofill telemetry (auto health monitoring).
   const token = await new Promise((resolve) =>
-    chrome.storage.local.get(["vintamie_token"], (d) => resolve((d && d.vintamie_token) || ""))
+    chrome.storage.local.get(["velosia_token"], (d) => resolve((d && d.velosia_token) || ""))
   );
   try {
-    await window.__vintamie.autofill(draft, {
+    await window.__velosia.autofill(draft, {
       backendUrl: backendUrl,
       token: token,
       userZip: settings.default_zip || "",
@@ -361,7 +361,7 @@ async function autofillForm(draft, autoSubmit) {
       showOverlay: true
     });
   } catch (err) {
-    console.error("Vintamie: Autofill fehlgeschlagen:", err);
+    console.error("Velosia: Autofill fehlgeschlagen:", err);
   }
 }
 

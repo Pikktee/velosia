@@ -1,7 +1,7 @@
-// Vintamie listing-capture content script.
+// Velosia listing-capture content script.
 // -----------------------------------------------------------------------------
 // Runs on *published* listing pages (Kleinanzeigen ad pages and Vinted item pages
-// reached via a full page load). If the user just published a Vintamie draft — a
+// reached via a full page load). If the user just published a Velosia draft — a
 // short-lived "pending capture" marker is set when autofill runs — this reads the
 // public listing id from the URL and reports it to the backend so the dashboard
 // can show & track the listing's status (online / reserviert / verkauft /
@@ -36,16 +36,16 @@
   if (!info) return;
 
   chrome.storage.local.get(
-    ["vintamie_pending_capture", "vintamie_token", "vintamie_backend_url"],
+    ["velosia_pending_capture", "velosia_token", "velosia_backend_url"],
     function (data) {
-      var pc = data.vintamie_pending_capture;
-      var token = data.vintamie_token;
+      var pc = data.velosia_pending_capture;
+      var token = data.velosia_token;
       if (!pc || !token) return;
-      var backendUrl = data.vintamie_backend_url || "https://api.vintamie.henrikheil.net";
+      var backendUrl = data.velosia_backend_url || "https://api.velosia.henrikheil.net";
 
       // The marker must be fresh (just published) and match this platform.
       if (!pc.ts || (Date.now() - pc.ts) > 60 * 60 * 1000) {
-        chrome.storage.local.remove("vintamie_pending_capture");
+        chrome.storage.local.remove("velosia_pending_capture");
         return;
       }
       if (pc.platform && pc.platform !== info.platform) return;
@@ -62,7 +62,7 @@
         })
       })
         .then(function (r) {
-          if (r && r.ok) chrome.storage.local.remove("vintamie_pending_capture");
+          if (r && r.ok) chrome.storage.local.remove("velosia_pending_capture");
         })
         .catch(function () {});
     }
