@@ -18,6 +18,13 @@ import com.google.android.gms.auth.api.signin.GoogleSignIn
 import com.google.android.gms.auth.api.signin.GoogleSignInOptions
 import com.google.android.gms.common.api.ApiException
 import com.google.android.material.floatingactionbutton.ExtendedFloatingActionButton
+import com.google.android.material.snackbar.Snackbar
+import com.google.android.play.core.appupdate.AppUpdateManager
+import com.google.android.play.core.appupdate.AppUpdateManagerFactory
+import com.google.android.play.core.install.InstallStateUpdatedListener
+import com.google.android.play.core.install.model.AppUpdateType
+import com.google.android.play.core.install.model.InstallStatus
+import com.google.android.play.core.install.model.UpdateAvailability
 import okhttp3.*
 import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import okhttp3.RequestBody.Companion.toRequestBody
@@ -55,13 +62,15 @@ class MainActivity : AppCompatActivity() {
     private var engineJsCache: String? = null
 
     private val okHttpClient = OkHttpClient()
-    
-    private var isUpdateDialogShowing = false
-    private val updateCheckHandler = android.os.Handler(android.os.Looper.getMainLooper())
-    private val updateCheckRunnable = object : Runnable {
-        override fun run() {
-            checkForUpdates()
-            updateCheckHandler.postDelayed(this, 900000) // Check every 15 minutes
+
+    // Google Play In-App Updates. Replaces the former self-download/-install OTA
+    // mechanism: when distributed via Play, Play itself performs the download and
+    // install — we only detect availability and prompt the user (flexible flow).
+    private lateinit var appUpdateManager: AppUpdateManager
+    private val RC_APP_UPDATE = 9003
+    private val installStateListener = InstallStateUpdatedListener { state ->
+        if (state.installStatus() == InstallStatus.DOWNLOADED) {
+            showUpdateDownloadedPrompt()
         }
     }
 
@@ -199,8 +208,10 @@ class MainActivity : AppCompatActivity() {
         // Load the frontend dashboard
         webView.loadUrl(frontendUrl)
 
-        // Start periodic update checks
-        startPeriodicUpdateChecks()
+        // Ask Play whether a newer version is live (no-op on non-Play installs).
+        appUpdateManager = AppUpdateManagerFactory.create(this)
+        appUpdateManager.registerListener(installStateListener)
+        checkForUpdates()
     }
 
     // Javascript Interface definition
@@ -572,161 +583,57 @@ class MainActivity : AppCompatActivity() {
         Toast.makeText(this, "Erfolgreich mit Google angemeldet!", Toast.LENGTH_SHORT).show()
     }
 
+    // Ask the Play Store whether a newer version of the app is live. This only
+    // works for Play-installed builds — Play performs the actual download/install
+    // (flexible flow); on dev or sideloaded builds the request fails silently and
+    // nothing is shown to the user.
     private fun checkForUpdates() {
-        val request = Request.Builder()
-            .url("$backendUrl/api/app/version")
-            .build()
-
-        okHttpClient.newCall(request).enqueue(object : Callback {
-            override fun onFailure(call: Call, e: IOException) {
-                // Ignore silent failure so app works offline
-            }
-
-            override fun onResponse(call: Call, response: Response) {
-                response.use {
-                    if (!response.isSuccessful) return
-                    val bodyString = response.body?.string() ?: return
+        appUpdateManager.appUpdateInfo
+            .addOnSuccessListener { info ->
+                val updateAvailable = info.updateAvailability() == UpdateAvailability.UPDATE_AVAILABLE
+                if (updateAvailable && info.isUpdateTypeAllowed(AppUpdateType.FLEXIBLE)) {
                     try {
-                        val json = JSONObject(bodyString)
-                        val serverVersion = json.getString("version")
-                        
-                        val packageInfo = packageManager.getPackageInfo(packageName, 0)
-                        val localVersion = packageInfo.versionName
-
-                        if (isNewerVersion(localVersion, serverVersion)) {
-                            runOnUiThread {
-                                showUpdateDialog(serverVersion)
-                            }
-                        }
+                        appUpdateManager.startUpdateFlowForResult(
+                            info,
+                            AppUpdateType.FLEXIBLE,
+                            this,
+                            RC_APP_UPDATE
+                        )
                     } catch (e: Exception) {
-                        e.printStackTrace()
+                        // IntentSender failure — keep the current version silently.
                     }
                 }
             }
-        })
+            .addOnFailureListener {
+                // Non-Play install or Play services unavailable: no update hint.
+            }
     }
 
-    private fun isNewerVersion(local: String?, server: String): Boolean {
-        if (local == null) return true
-        val localParts = local.split(".")
-        val serverParts = server.split(".")
-        val length = maxOf(localParts.size, serverParts.size)
-        for (i in 0 until length) {
-            val localPart = if (i < localParts.size) localParts[i].toIntOrNull() ?: 0 else 0
-            val serverPart = if (i < serverParts.size) serverParts[i].toIntOrNull() ?: 0 else 0
-            if (serverPart > localPart) return true
-            if (localPart > serverPart) return false
-        }
-        return false
-    }
-
-    private fun showUpdateDialog(latestVersion: String) {
-        if (isUpdateDialogShowing) return
-        isUpdateDialogShowing = true
-
-        androidx.appcompat.app.AlertDialog.Builder(this)
-            .setTitle("Update verfügbar")
-            .setMessage("Eine neue App-Version ($latestVersion) ist verfügbar. Möchtest du sie jetzt herunterladen und installieren?")
-            .setPositiveButton("Installieren") { _, _ ->
-                isUpdateDialogShowing = false
-                downloadAndInstallApk()
-            }
-            .setNegativeButton("Später") { _, _ ->
-                isUpdateDialogShowing = false
-            }
-            .setOnCancelListener {
-                isUpdateDialogShowing = false
-            }
+    // A flexible update downloads in the background; once Play reports it ready we
+    // prompt the user to restart so Play can finish installing it.
+    private fun showUpdateDownloadedPrompt() {
+        Snackbar.make(webView, "Update heruntergeladen.", Snackbar.LENGTH_INDEFINITE)
+            .setAction("Neu starten") { appUpdateManager.completeUpdate() }
             .show()
-    }
-
-    private fun downloadAndInstallApk() {
-        // Show a progress dialog
-        val progressDialog = android.app.ProgressDialog(this).apply {
-            setTitle("Update wird heruntergeladen")
-            setMessage("Bitte warten...")
-            isIndeterminate = true
-            setCancelable(false)
-            show()
-        }
-
-        val request = Request.Builder()
-            .url("$backendUrl/api/app/latest-apk")
-            .build()
-
-        okHttpClient.newCall(request).enqueue(object : Callback {
-            override fun onFailure(call: Call, e: IOException) {
-                runOnUiThread {
-                    progressDialog.dismiss()
-                    Toast.makeText(this@MainActivity, "Download fehlgeschlagen: ${e.message}", Toast.LENGTH_LONG).show()
-                }
-            }
-
-            override fun onResponse(call: Call, response: Response) {
-                response.use {
-                    if (!response.isSuccessful) {
-                        runOnUiThread {
-                            progressDialog.dismiss()
-                            Toast.makeText(this@MainActivity, "Download fehlgeschlagen (Fehler ${response.code}).", Toast.LENGTH_LONG).show()
-                        }
-                        return
-                    }
-
-                    try {
-                        val apkFile = File(cacheDir, "vintamie-update.apk")
-                        val fos = FileOutputStream(apkFile)
-                        response.body?.byteStream()?.use { input ->
-                            input.copyTo(fos)
-                        }
-                        fos.close()
-
-                        runOnUiThread {
-                            progressDialog.dismiss()
-                            installApk(apkFile)
-                        }
-                    } catch (e: Exception) {
-                        runOnUiThread {
-                            progressDialog.dismiss()
-                            Toast.makeText(this@MainActivity, "Installationsfehler: ${e.message}", Toast.LENGTH_LONG).show()
-                        }
-                    }
-                }
-            }
-        })
-    }
-
-    private fun installApk(apkFile: File) {
-        val apkUri = FileProvider.getUriForFile(
-            this,
-            "com.vintamie.app.fileprovider",
-            apkFile
-        )
-
-        val installIntent = Intent(Intent.ACTION_VIEW).apply {
-            setDataAndType(apkUri, "application/vnd.android.package-archive")
-            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-        }
-
-        try {
-            startActivity(installIntent)
-        } catch (e: Exception) {
-            Toast.makeText(this, "Paket-Installer konnte nicht geöffnet werden: ${e.message}", Toast.LENGTH_LONG).show()
-        }
-    }
-
-    private fun startPeriodicUpdateChecks() {
-        updateCheckHandler.removeCallbacks(updateCheckRunnable)
-        updateCheckHandler.post(updateCheckRunnable)
     }
 
     override fun onResume() {
         super.onResume()
-        checkForUpdates()
+        // If a flexible update finished downloading while the app was backgrounded,
+        // re-surface the restart prompt.
+        if (::appUpdateManager.isInitialized) {
+            appUpdateManager.appUpdateInfo.addOnSuccessListener { info ->
+                if (info.installStatus() == InstallStatus.DOWNLOADED) {
+                    showUpdateDownloadedPrompt()
+                }
+            }
+        }
     }
 
     override fun onDestroy() {
-        updateCheckHandler.removeCallbacks(updateCheckRunnable)
+        if (::appUpdateManager.isInitialized) {
+            appUpdateManager.unregisterListener(installStateListener)
+        }
         super.onDestroy()
     }
 

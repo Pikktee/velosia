@@ -3,9 +3,20 @@ plugins {
     id 'org.jetbrains.kotlin.android'
 }
 
+// Release signing is loaded from android/keystore.properties (gitignored — see
+// PLAY_STORE_GUIDE.md). When the file is absent (fresh checkout / CI / dev) the
+// release build falls back to the debug key so local builds still succeed — but a
+// debug-signed bundle must NEVER be uploaded to Google Play.
+def keystorePropertiesFile = rootProject.file("keystore.properties")
+def keystoreProperties = new Properties()
+def hasReleaseKeystore = keystorePropertiesFile.exists()
+if (hasReleaseKeystore) {
+    keystoreProperties.load(new FileInputStream(keystorePropertiesFile))
+}
+
 android {
     namespace 'com.vintamie.app'
-    compileSdk 34
+    compileSdk 35
 
     signingConfigs {
         debug {
@@ -14,12 +25,20 @@ android {
             keyAlias "androiddebugkey"
             keyPassword "android"
         }
+        if (hasReleaseKeystore) {
+            release {
+                storeFile file(keystoreProperties['storeFile'])
+                storePassword keystoreProperties['storePassword']
+                keyAlias keystoreProperties['keyAlias']
+                keyPassword keystoreProperties['keyPassword']
+            }
+        }
     }
 
     defaultConfig {
         applicationId "com.vintamie.app"
         minSdk 26
-        targetSdk 34
+        targetSdk 35
         versionCode 113
         versionName "2.5.6"
 
@@ -31,7 +50,9 @@ android {
             signingConfig signingConfigs.debug
         }
         release {
-            signingConfig signingConfigs.debug
+            // Real upload key when keystore.properties is present; debug key only as
+            // a local fallback (never ship a debug-signed bundle to Play).
+            signingConfig hasReleaseKeystore ? signingConfigs.release : signingConfigs.debug
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
         }
@@ -56,7 +77,13 @@ dependencies {
     
     // Google Play Services Auth for native Google Login in WebView shell
     implementation 'com.google.android.gms:play-services-auth:20.7.0'
-    
+
+    // Google Play In-App Updates: detect when a newer version is live in the Play
+    // Store and prompt the user (flexible flow). No-ops on non-Play installs
+    // (dev/sideload), so it is safe to ship everywhere.
+    implementation 'com.google.android.play:app-update:2.1.0'
+    implementation 'com.google.android.play:app-update-ktx:2.1.0'
+
     testImplementation 'junit:junit:4.13.2'
     androidTestImplementation 'androidx.test.ext:junit:1.1.5'
     androidTestImplementation 'androidx.test.espresso:espresso-core:3.5.1'

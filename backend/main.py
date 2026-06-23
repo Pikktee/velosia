@@ -753,19 +753,6 @@ from fastapi import Header
 APK_DIR = "/data" if os.path.isdir("/data") else UPLOAD_DIR
 APK_FILENAME = "vintamie-latest.apk"
 
-@app.get("/api/app/version")
-def get_app_version():
-    version_path = os.path.join(APK_DIR, "apk-version.txt")
-    if os.path.exists(version_path):
-        try:
-            with open(version_path, "r") as f:
-                stored_version = f.read().strip()
-                if stored_version:
-                    return {"version": stored_version}
-        except Exception:
-            pass
-    return {"version": app.version}
-
 @app.get("/api/app/latest-apk")
 def download_latest_apk():
     apk_path = os.path.join(APK_DIR, APK_FILENAME)
