@@ -1,4 +1,4 @@
-package com.vintamie.app
+package com.velosia.app
 
 import android.Manifest
 import android.annotation.SuppressLint
@@ -43,8 +43,8 @@ class MainActivity : AppCompatActivity() {
     private val RC_FILE_CHOOSER = 9002
     private var fileUploadCallback: ValueCallback<Array<Uri>>? = null
     // Server addresses (default to production for physical devices)
-    private var frontendUrl = "https://vintamie.henrikheil.net"
-    private var backendUrl = "https://api.vintamie.henrikheil.net"
+    private var frontendUrl = "https://velosia.henrikheil.net"
+    private var backendUrl = "https://api.velosia.henrikheil.net"
 
     private var activeDraftJson: String? = null
     private var activeImageUri: Uri? = null
@@ -104,7 +104,7 @@ class MainActivity : AppCompatActivity() {
         settings.userAgentString = "Mozilla/5.0 (Linux; Android 13; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/116.0.0.0 Mobile Safari/537.36"
 
         // Register JS interface
-        webView.addJavascriptInterface(VintamieBridge(), "VintamieBridge")
+        webView.addJavascriptInterface(VelosiaBridge(), "VelosiaBridge")
 
         // Setup WebViewClient
         webView.webViewClient = object : WebViewClient() {
@@ -215,7 +215,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     // Javascript Interface definition
-    inner class VintamieBridge {
+    inner class VelosiaBridge {
         @JavascriptInterface
         fun postToPlatform(draftId: Int, platform: String, token: String) {
             runOnUiThread {
@@ -299,7 +299,7 @@ class MainActivity : AppCompatActivity() {
                     }
 
                     try {
-                        val cacheFile = File(cacheDir, "vintamie_upload.jpg")
+                        val cacheFile = File(cacheDir, "velosia_upload.jpg")
                         val fos = FileOutputStream(cacheFile)
                         fos.write(response.body?.bytes() ?: byteArrayOf())
                         fos.close()
@@ -307,7 +307,7 @@ class MainActivity : AppCompatActivity() {
                         // Get FileProvider URI
                         val fileUri = FileProvider.getUriForFile(
                             this@MainActivity,
-                            "com.vintamie.app.fileprovider",
+                            "com.velosia.app.fileprovider",
                             cacheFile
                         )
 
@@ -370,7 +370,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     // Close the external listing page: drop the active draft session and return
-    // to the Vintamie dashboard.
+    // to the Velosia dashboard.
     private fun closeListingView() {
         activeDraftJson = null
         activeImageUri = null
@@ -415,18 +415,18 @@ class MainActivity : AppCompatActivity() {
         // string interpolation, or a literal '$' in the JS would corrupt it / break
         // the build). Only the tiny caller below — which carries the draft, zip and
         // autoSubmit flag — uses interpolation. The caller runs in the engine's
-        // completion callback so window.__vintamie is guaranteed to exist.
+        // completion callback so window.__velosia is guaranteed to exist.
         val caller = """
             (function() {
                 try {
                     var draft = JSON.parse('$escapedJson');
-                    window.__vintamie.autofill(draft, {
+                    window.__velosia.autofill(draft, {
                         userZip: '$zip',
                         autoSubmit: $autoSubmit,
                         imageMode: 'native',
                         showOverlay: true
                     });
-                } catch (e) { console.error('Vintamie autofill failed', e); }
+                } catch (e) { console.error('Velosia autofill failed', e); }
             })();
         """.trimIndent()
 
@@ -574,8 +574,8 @@ class MainActivity : AppCompatActivity() {
     private fun injectJwtToken(jwtToken: String) {
         val js = """
             (function() {
-                localStorage.setItem('vintamie_token', '$jwtToken');
-                localStorage.setItem('vintamie_user_email', 'Google-Nutzer');
+                localStorage.setItem('velosia_token', '$jwtToken');
+                localStorage.setItem('velosia_user_email', 'Google-Nutzer');
                 window.location.reload();
             })();
         """.trimIndent()

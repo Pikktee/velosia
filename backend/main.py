@@ -114,7 +114,7 @@ def run_migrations():
 
 run_migrations()
 
-app = FastAPI(title="Vintamie API", version="2.5.6")
+app = FastAPI(title="Velosia API", version="2.5.6")
 
 UPLOAD_DIR = "/data/uploads" if os.path.isdir("/data") else "uploads"
 os.makedirs(UPLOAD_DIR, exist_ok=True)
@@ -465,7 +465,7 @@ def upload_turbo(
             try:
                 results[idx] = future.result()
             except Exception as e:
-                print(f"Vintamie Turbo: Analyse von Gruppe {idx} fehlgeschlagen: {e}", flush=True)
+                print(f"Velosia Turbo: Analyse von Gruppe {idx} fehlgeschlagen: {e}", flush=True)
                 errors.append(str(e))
 
     # 4. Persist one draft per successfully analyzed group
@@ -751,7 +751,7 @@ from fastapi import Header
 
 # Use persistent volume for APK storage in production (survives container redeploys)
 APK_DIR = "/data" if os.path.isdir("/data") else UPLOAD_DIR
-APK_FILENAME = "vintamie-latest.apk"
+APK_FILENAME = "velosia-latest.apk"
 
 @app.get("/api/app/latest-apk")
 def download_latest_apk():
@@ -761,7 +761,7 @@ def download_latest_apk():
     return FileResponse(
         apk_path, 
         media_type="application/vnd.android.package-archive", 
-        filename="vintamie-latest.apk"
+        filename="velosia-latest.apk"
     )
 
 @app.post("/api/app/upload-apk")
@@ -842,7 +842,7 @@ def check_autofill_anomaly(platform: str):
             db.commit()
             versions = ", ".join(sorted({e.engine_version or "?" for e in recent}))
             send_email(
-                f"⚠️ Vintamie Autofill: '{label}' bricht auf {platform}",
+                f"⚠️ Velosia Autofill: '{label}' bricht auf {platform}",
                 (
                     f"Das Feld/die Aktion '{label}' ist in {miss_rate:.0%} der letzten {len(vals)} "
                     f"Autofill-Versuche auf {platform} fehlgeschlagen.\n\n"

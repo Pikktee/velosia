@@ -11,7 +11,7 @@
   --primary-hover: #078e94;
   --primary-glow: rgba(9, 176, 183, 0.25);
   
-  --secondary: #ec4899; /* Vintamie Rose */
+  --secondary: #ec4899; /* Velosia Rose */
   --secondary-glow: rgba(236, 72, 153, 0.25);
   
   --text-primary: #f8fafc;
@@ -959,7 +959,7 @@ select.form-control {
   }
 }
 
-/* --- Vintamie Redesign Details View Styles --- */
+/* --- Velosia Redesign Details View Styles --- */
 
 /* Detail Mode Layout (Full Screen Tinder Style) */
 .app-shell.detail-mode .app-nav {
@@ -1811,7 +1811,7 @@ select.form-control {
   }
 }
 
-/* --- Vintamie Unboxed Premium UI --- */
+/* --- Velosia Unboxed Premium UI --- */
 
 /* Auth Container */
 .auth-container {
@@ -2599,7 +2599,7 @@ select.form-control {
   box-shadow: 0 0 8px var(--primary-glow);
 }
 
-/* --- Vintamie Offers List Card Styles --- */
+/* --- Velosia Offers List Card Styles --- */
 
 .SwipeableList {
   list-style: none;
@@ -2952,7 +2952,7 @@ select.form-control {
   text-decoration: underline;
 }
 
-/* --- Vintamie Mobile Layout Optimizations --- */
+/* --- Velosia Mobile Layout Optimizations --- */
 
 @media (max-width: 480px) {
   .draft-list-item-main {

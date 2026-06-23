@@ -51,7 +51,7 @@ export default function AnalysisLoader({ isFinished = false, turbo = false, onCo
       <div className="loader-ambient-glow-1" />
       <div className="loader-ambient-glow-2" />
 
-      {/* Animated Vintamie Logo */}
+      {/* Animated Velosia Logo */}
       <svg 
         xmlns="http://www.w3.org/2000/svg" 
         viewBox="0 0 512 512" 
@@ -96,7 +96,7 @@ export default function AnalysisLoader({ isFinished = false, turbo = false, onCo
       </svg>
 
       <h3 style={{ fontFamily: 'var(--font-title)', fontSize: '1.35rem', fontWeight: 700, color: 'var(--text-primary)', margin: 0 }}>
-        {turbo ? 'Turbo-Modus läuft...' : 'Vintamie arbeitet...'}
+        {turbo ? 'Turbo-Modus läuft...' : 'Velosia arbeitet...'}
       </h3>
       <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', marginTop: '0.25rem', marginBottom: 0 }}>
         {turbo

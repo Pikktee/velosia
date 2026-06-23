@@ -1,5 +1,5 @@
 /*
- * Vintamie Autofill Engine — shared single source of truth
+ * Velosia Autofill Engine — shared single source of truth
  * ---------------------------------------------------------
  * Pure DOM JavaScript (no chrome.* APIs, no platform globals) so the exact same
  * file can run in two very different hosts:
@@ -13,7 +13,7 @@
  * only touches the DOM of the target page (Vinted / Kleinanzeigen).
  *
  * Public API:
- *   window.__vintamie.autofill(draft, options) -> Promise<result>
+ *   window.__velosia.autofill(draft, options) -> Promise<result>
  *
  *   options = {
  *     platform:   "vinted" | "kleinanzeigen" | null  (null = auto-detect)
@@ -34,7 +34,7 @@
 
   // Re-injection guard. On Android the script may be injected on every page load,
   // and in the extension it is a persistent content script — never redefine.
-  if (window.__vintamie && window.__vintamie.__loaded) return;
+  if (window.__velosia && window.__velosia.__loaded) return;
 
   var VERSION = "2.5.0";
 
@@ -94,7 +94,7 @@
     setNativeValue(el, String(value));
     el.dispatchEvent(new Event("input", { bubbles: true }));
     el.dispatchEvent(new Event("change", { bubbles: true }));
-    try { el.setAttribute("data-vintamie-filled", "1"); } catch (e) {}
+    try { el.setAttribute("data-velosia-filled", "1"); } catch (e) {}
     return true;
   }
 
@@ -271,7 +271,7 @@
         var blob = await resp.blob();
         var type = blob.type || "image/jpeg";
         var ext = (type.split("/")[1] || "jpg").replace("jpeg", "jpg");
-        var file = new File([blob], "vintamie_" + (i + 1) + "." + ext, { type: type });
+        var file = new File([blob], "velosia_" + (i + 1) + "." + ext, { type: type });
         dt.items.add(file);
         count++;
       } catch (e) { /* skip individual image failures */ }
@@ -350,10 +350,10 @@
   async function proceedFromCategoryPage() {
     for (var i = 0; i < 14; i++) {
       var btn = findWeiterButton();
-      if (btn) { try { console.log("Vintamie: 'Weiter' gefunden, klicke ->", btn.textContent); btn.click(); return true; } catch (e) {} }
+      if (btn) { try { console.log("Velosia: 'Weiter' gefunden, klicke ->", btn.textContent); btn.click(); return true; } catch (e) {} }
       await sleep(500);
     }
-    console.warn("Vintamie: kein aktiver 'Weiter'-Button gefunden (Kategorie evtl. nicht gesetzt)");
+    console.warn("Velosia: kein aktiver 'Weiter'-Button gefunden (Kategorie evtl. nicht gesetzt)");
     return false;
   }
 
@@ -450,12 +450,12 @@
 
       // Try <select> dropdowns first.
       for (var i = 0; i < selects.length; i++) {
-        if (selects[i].__vintamieKnown) continue;
+        if (selects[i].__velosiaKnown) continue;
         if (labelTextFor(selects[i]).indexOf(label) === -1) continue;
         var opt = pickOption(selects[i], value);
         if (opt) {
           selects[i].value = opt.value;
-          selects[i].__vintamieKnown = true;
+          selects[i].__velosiaKnown = true;
           selects[i].dispatchEvent(new Event("change", { bubbles: true }));
           filledLabels.push(key);
           return;
@@ -463,10 +463,10 @@
       }
       // Then free-text inputs.
       for (var t = 0; t < texts.length; t++) {
-        if (texts[t].__vintamieKnown) continue;
+        if (texts[t].__velosiaKnown) continue;
         if (labelTextFor(texts[t]).indexOf(label) === -1) continue;
         fillField(texts[t], value);
-        texts[t].__vintamieKnown = true;
+        texts[t].__velosiaKnown = true;
         filledLabels.push(key);
         return;
       }
@@ -588,7 +588,7 @@
     // previous level still being on screen.
     for (var i = 0; i < ids.length; i++) {
       var ok = await vintedClickLevel(ids[i], names[i] || "");
-      console.log("Vintamie Vinted: Ebene " + i + " '" + (names[i] || "") + "' (id " + ids[i] + ") -> " + (ok ? "geklickt" : "NICHT gefunden"));
+      console.log("Velosia Vinted: Ebene " + i + " '" + (names[i] || "") + "' (id " + ids[i] + ") -> " + (ok ? "geklickt" : "NICHT gefunden"));
       if (!ok) return false;
       await sleep(450);
     }
@@ -599,7 +599,7 @@
       if (!vintedPickerContainer()) return true;
       await sleep(300);
     }
-    console.warn("Vintamie Vinted: Picker blieb offen — Blatt evtl. nicht ausgewählt");
+    console.warn("Velosia Vinted: Picker blieb offen — Blatt evtl. nicht ausgewählt");
     return false;
   }
 
@@ -655,11 +655,11 @@
 
   function showOverlay(result, autoSubmit) {
     try {
-      var existing = document.getElementById("vintamie-overlay");
+      var existing = document.getElementById("velosia-overlay");
       if (existing) existing.remove();
 
       var box = document.createElement("div");
-      box.id = "vintamie-overlay";
+      box.id = "velosia-overlay";
       box.style.cssText = [
         "position:fixed", "z-index:2147483647", "right:16px", "bottom:16px",
         "width:300px", "max-width:calc(100vw - 32px)", "background:#0e121a",
@@ -692,13 +692,13 @@
 
       box.innerHTML =
         '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">' +
-          '<span style="font-weight:700;background:linear-gradient(135deg,#09b0b7,#ec4899);-webkit-background-clip:text;-webkit-text-fill-color:transparent;">✨ Vintamie</span>' +
-          '<span id="vintamie-overlay-close" style="cursor:pointer;color:#94a3b8;font-size:18px;line-height:1;">&times;</span>' +
+          '<span style="font-weight:700;background:linear-gradient(135deg,#09b0b7,#ec4899);-webkit-background-clip:text;-webkit-text-fill-color:transparent;">✨ Velosia</span>' +
+          '<span id="velosia-overlay-close" style="cursor:pointer;color:#94a3b8;font-size:18px;line-height:1;">&times;</span>' +
         '</div>' +
         filledHtml + photoHtml + manualHtml + footer;
 
       document.body.appendChild(box);
-      var close = document.getElementById("vintamie-overlay-close");
+      var close = document.getElementById("velosia-overlay-close");
       if (close) close.addEventListener("click", function () { box.remove(); });
       if (result.phase !== "category" && !autoSubmit) {
         setTimeout(function () { if (box && box.parentNode) box.style.opacity = "0.96"; }, 50);
@@ -732,9 +732,9 @@
     if (draft.price !== undefined && draft.price !== null) {
       if (fillField(priceEl, String(Math.round(draft.price)))) filled.push("Preis");
     }
-    if (titleEl) titleEl.__vintamieKnown = true;
-    if (descEl) descEl.__vintamieKnown = true;
-    if (priceEl) priceEl.__vintamieKnown = true;
+    if (titleEl) titleEl.__velosiaKnown = true;
+    if (descEl) descEl.__velosiaKnown = true;
+    if (priceEl) priceEl.__velosiaKnown = true;
 
     if (platform === "kleinanzeigen") {
       selectKleinanzeigenOffer();
@@ -745,7 +745,7 @@
         ]);
         if (zipEl) {
           fillField(zipEl, options.userZip);
-          zipEl.__vintamieKnown = true;
+          zipEl.__velosiaKnown = true;
           zipEl.dispatchEvent(new Event("blur", { bubbles: true }));
           filled.push("PLZ");
         }
@@ -882,7 +882,7 @@
       var info = parseListingUrl(window.location.href);
       if (info && info.platform === "vinted") {
         await captureListing({ backendUrl: options.backendUrl, token: options.token, draftId: draft.id });
-        console.log("Vintamie: Vinted-Angebot veröffentlicht erfasst ->", info.listingId);
+        console.log("Velosia: Vinted-Angebot veröffentlicht erfasst ->", info.listingId);
         return;
       }
     }
@@ -903,7 +903,7 @@
     var showUi = options.showOverlay !== false;
 
     try {
-      console.log("Vintamie engine v" + VERSION + " autofill:", {
+      console.log("Velosia engine v" + VERSION + " autofill:", {
         platform: platform, phase: phase, autoSubmit: autoSubmit,
         category: draft && draft.category, category_path: draft && draft.category_path,
         vinted_category: draft && draft.vinted_category, vinted_path: draft && draft.vinted_path
@@ -915,7 +915,7 @@
       var result0 = { platform: platform, phase: phase, filled: [], manual: [], photos: 0, submitted: false };
       if (showUi) showOverlay(result0, autoSubmit);
       var catOk = await autoSelectCategory(draft);
-      console.log("Vintamie: Kategorie-Auswahl (KA) ->", catOk ? "Weiter geklickt" : "fehlgeschlagen/manuell", "path=", draft && draft.category_path);
+      console.log("Velosia: Kategorie-Auswahl (KA) ->", catOk ? "Weiter geklickt" : "fehlgeschlagen/manuell", "path=", draft && draft.category_path);
       sendTelemetry({ platform: platform, phase: phase, category_ok: !!catOk }, options);
       return result0;
     }
@@ -955,7 +955,7 @@
     return result;
   }
 
-  window.__vintamie = {
+  window.__velosia = {
     __loaded: true,
     version: VERSION,
     autofill: autofill,

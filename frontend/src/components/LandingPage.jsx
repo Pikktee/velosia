@@ -31,7 +31,7 @@ const DOC_TITLES = {
 export default function LandingPage() {
   const [activeDoc, setActiveDoc] = useState(null); // see DOC_TITLES keys, or null
   const apkDownloadUrl = `${API_BASE_URL}/api/app/latest-apk`;
-  const extensionDownloadUrl = '/vintamie-extension.zip'; // static asset served by the frontend
+  const extensionDownloadUrl = '/velosia-extension.zip'; // static asset served by the frontend
 
   const handleOpenWebApp = () => {
     window.location.hash = '#/login';
@@ -80,7 +80,7 @@ export default function LandingPage() {
         <div style={{ position: 'relative', zIndex: 1, display: 'inline-block', marginBottom: '1.25rem' }}>
           <img 
             src="/favicon.svg" 
-            alt="Vintamie Logo" 
+            alt="Velosia Logo" 
             style={{ 
               width: '80px', 
               height: '80px', 
@@ -120,7 +120,7 @@ export default function LandingPage() {
           zIndex: 1,
           padding: '0 0.75rem'
         }}>
-          Mache ein Foto deines Artikels. Vintamie erkennt automatisch Details, Zustand sowie Kategorie und schlägt dir den optimalen Preis vor. Danach kannst du deine Anzeige direkt bei Kleinanzeigen und Vinted einstellen.
+          Mache ein Foto deines Artikels. Velosia erkennt automatisch Details, Zustand sowie Kategorie und schlägt dir den optimalen Preis vor. Danach kannst du deine Anzeige direkt bei Kleinanzeigen und Vinted einstellen.
         </p>
 
         {/* CTA Buttons */}
@@ -530,10 +530,10 @@ export default function LandingPage() {
               ) : activeDoc === 'install-android' ? (
                 <div>
                   <p style={{ marginBottom: '1.25rem' }}>
-                    So installierst du die Vintamie-App auf deinem Android-Smartphone. Da die App nicht über den Play Store läuft, installierst du sie direkt aus der Datei – das geht in wenigen Schritten:
+                    So installierst du die Velosia-App auf deinem Android-Smartphone. Da die App nicht über den Play Store läuft, installierst du sie direkt aus der Datei – das geht in wenigen Schritten:
                   </p>
                   <ol style={guideOlStyle}>
-                    <li style={guideLiStyle}>Tippe oben auf <strong>„App für Android laden"</strong>. Die Datei <Code>vintamie-latest.apk</Code> wird heruntergeladen.</li>
+                    <li style={guideLiStyle}>Tippe oben auf <strong>„App für Android laden"</strong>. Die Datei <Code>velosia-latest.apk</Code> wird heruntergeladen.</li>
                     <li style={guideLiStyle}>Öffne die heruntergeladene Datei – über die Download-Benachrichtigung oder in deiner <strong>Dateien-/Downloads</strong>-App.</li>
                     <li style={guideLiStyle}>Beim ersten Mal fragt Android nach der Erlaubnis, Apps aus dieser Quelle zu installieren. Tippe auf <strong>„Einstellungen"</strong> und aktiviere <strong>„Aus dieser Quelle zulassen"</strong>.</li>
                     <li style={guideLiStyle}>Gehe zurück und tippe auf <strong>„Installieren"</strong>, danach auf <strong>„Öffnen"</strong>.</li>
@@ -549,12 +549,12 @@ export default function LandingPage() {
                     Die Erweiterung füllt am Desktop die Formulare von Vinted und Kleinanzeigen automatisch aus. Sie funktioniert in <strong>Chrome, Edge und Brave</strong>:
                   </p>
                   <ol style={guideOlStyle}>
-                    <li style={guideLiStyle}>Klicke oben auf <strong>„Chrome-Erweiterung laden"</strong>. Die Datei <Code>vintamie-extension.zip</Code> wird heruntergeladen.</li>
+                    <li style={guideLiStyle}>Klicke oben auf <strong>„Chrome-Erweiterung laden"</strong>. Die Datei <Code>velosia-extension.zip</Code> wird heruntergeladen.</li>
                     <li style={guideLiStyle}><strong>Entpacke</strong> die ZIP-Datei in einen festen Ordner (Rechtsklick → „Alle extrahieren", unter macOS Doppelklick). Verschiebe den Ordner danach nicht mehr, sonst deaktiviert sich die Erweiterung.</li>
                     <li style={guideLiStyle}>Öffne im Browser die Adresse <Code>chrome://extensions</Code> (in Edge: <Code>edge://extensions</Code>).</li>
                     <li style={guideLiStyle}>Aktiviere oben rechts den <strong>„Entwicklermodus"</strong>.</li>
                     <li style={guideLiStyle}>Klicke auf <strong>„Entpackte Erweiterung laden"</strong> und wähle den entpackten Ordner aus (der die Datei <Code>manifest.json</Code> enthält).</li>
-                    <li style={guideLiStyle}>Fertig – Vintamie erscheint in der Symbolleiste und füllt beim Einstellen die Felder automatisch aus.</li>
+                    <li style={guideLiStyle}>Fertig – Velosia erscheint in der Symbolleiste und füllt beim Einstellen die Felder automatisch aus.</li>
                   </ol>
                   <p style={guideHintStyle}>
                     Tipp: Über das Puzzle-Symbol kannst du die Erweiterung anpinnen, damit du sie immer im Blick hast.

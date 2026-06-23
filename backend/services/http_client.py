@@ -1,5 +1,5 @@
 """
-Shared outbound HTTP client for Vintamie's server-side reads of public
+Shared outbound HTTP client for Velosia's server-side reads of public
 Kleinanzeigen / Vinted pages (price comparison + listing status tracking).
 
 Uses curl-cffi with a real Chrome TLS/JA3 + HTTP2 fingerprint

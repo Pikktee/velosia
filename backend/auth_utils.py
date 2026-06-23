@@ -8,7 +8,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # JWT configuration
-SECRET_KEY = os.getenv("SECRET_KEY", "vintamie_default_secret_key_change_me_in_production")
+SECRET_KEY = os.getenv("SECRET_KEY", "velosia_default_secret_key_change_me_in_production")
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "1440")) # 1440 minutes = 24 hours
 

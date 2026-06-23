@@ -245,7 +245,7 @@ export default function Settings({ user, onLogout, onUpdateUser }) {
                       KI-Text
                       <span className="tooltip-container">
                         <HelpCircle size={14} />
-                        <span className="tooltip-text">Stil-/Tonfall-Anweisung für den von der KI geschriebenen Mittelteil. Wähle eine Vorlage oder formuliere frei — sobald du den Text änderst, springt die Vorlage auf „Individuell". Feste Regeln (keine Hashtags, Struktur) ergänzt Vintamie automatisch.</span>
+                        <span className="tooltip-text">Stil-/Tonfall-Anweisung für den von der KI geschriebenen Mittelteil. Wähle eine Vorlage oder formuliere frei — sobald du den Text änderst, springt die Vorlage auf „Individuell". Feste Regeln (keine Hashtags, Struktur) ergänzt Velosia automatisch.</span>
                       </span>
                     </label>
                     <select
@@ -356,7 +356,7 @@ export default function Settings({ user, onLogout, onUpdateUser }) {
                     Automatisch veröffentlichen
                     <span className="tooltip-container">
                       <HelpCircle size={14} />
-                      <span className="tooltip-text">Wenn aktiv, klickt Vintamie nach dem Ausfüllen selbst auf „Veröffentlichen". Standardmäßig prüfst du das Angebot zuerst und stellst es selbst online.</span>
+                      <span className="tooltip-text">Wenn aktiv, klickt Velosia nach dem Ausfüllen selbst auf „Veröffentlichen". Standardmäßig prüfst du das Angebot zuerst und stellst es selbst online.</span>
                     </span>
                   </label>
                   <button
@@ -493,7 +493,7 @@ export default function Settings({ user, onLogout, onUpdateUser }) {
         </form>
 
         <div style={{ marginTop: '2.5rem', textAlign: 'center', color: 'var(--text-muted)', fontSize: '0.75rem', letterSpacing: '0.05em', fontFamily: 'var(--font-body)' }}>
-          Vintamie App v{version}
+          Velosia App v{version}
         </div>
       </div>
     </div>

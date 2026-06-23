@@ -1,6 +1,6 @@
-// Vintamie Inline Camera Script
+// Velosia Inline Camera Script
 let stream = null;
-let backendUrl = "https://api.vintamie.henrikheil.net"; // Default to production
+let backendUrl = "https://api.velosia.henrikheil.net"; // Default to production
 let token = null;
 
 const video = document.getElementById("video");
@@ -16,14 +16,14 @@ const btnErrorClose = document.getElementById("btn-error-close");
 
 // Initialize configuration from extension storage
 async function init() {
-  chrome.storage.local.get(["vintamie_token", "vintamie_backend_url"], (result) => {
-    token = result.vintamie_token;
-    if (result.vintamie_backend_url) {
-      backendUrl = result.vintamie_backend_url;
+  chrome.storage.local.get(["velosia_token", "velosia_backend_url"], (result) => {
+    token = result.velosia_token;
+    if (result.velosia_backend_url) {
+      backendUrl = result.velosia_backend_url;
     }
     
     if (!token) {
-      showError("Bitte logge dich zuerst über das Vintamie-Erweiterungssymbol in der Browser-Leiste ein.");
+      showError("Bitte logge dich zuerst über das Velosia-Erweiterungssymbol in der Browser-Leiste ein.");
       // Disable shutter, but keep close active
       btnShutter.disabled = true;
       btnShutter.style.opacity = "0.5";
@@ -85,7 +85,7 @@ function capturePhoto() {
 
   canvas.toBlob((blob) => {
     if (blob) {
-      const file = new File([blob], "vintamie_capture.jpg", { type: "image/jpeg" });
+      const file = new File([blob], "velosia_capture.jpg", { type: "image/jpeg" });
       uploadAndAnalyze(file);
     }
   }, "image/jpeg", 0.9);
@@ -121,7 +121,7 @@ async function uploadAndAnalyze(file) {
     // Notify parent page that the draft is created
     stopCamera();
     window.parent.postMessage({
-      type: "VINTAMIE_DRAFT_CREATED",
+      type: "VELOSIA_DRAFT_CREATED",
       draft: draft
     }, "*");
 
@@ -151,7 +151,7 @@ function showError(message) {
 // Close Camera (User Cancel)
 function closeCamera() {
   stopCamera();
-  window.parent.postMessage({ type: "VINTAMIE_CLOSE_CAMERA" }, "*");
+  window.parent.postMessage({ type: "VELOSIA_CLOSE_CAMERA" }, "*");
 }
 
 // Listeners
