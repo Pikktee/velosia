@@ -3,6 +3,15 @@ plugins {
     id 'org.jetbrains.kotlin.android'
 }
 
+// Gradle Play Publisher is applied only when the service-account key is present
+// (local release machine). On CI / fresh checkouts the key is absent, the plugin
+// stays off, and the publish tasks simply don't exist — assembleDebug is unaffected.
+def playKeyFile = rootProject.file("play-deploy-key.json")
+def hasPlayKey = playKeyFile.exists()
+if (hasPlayKey) {
+    apply plugin: 'com.github.triplet.play'
+}
+
 // Release signing is loaded from android/keystore.properties (gitignored — see
 // PLAY_STORE_GUIDE.md). When the file is absent (fresh checkout / CI / dev) the
 // release build falls back to the debug key so local builds still succeed — but a
@@ -39,8 +48,8 @@ android {
         applicationId "com.velosia.app"
         minSdk 26
         targetSdk 35
-        versionCode 114
-        versionName "2.6.0"
+        versionCode 115
+        versionName "2.6.1"
 
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -87,4 +96,18 @@ dependencies {
     testImplementation 'junit:junit:4.13.2'
     androidTestImplementation 'androidx.test.ext:junit:1.1.5'
     androidTestImplementation 'androidx.test.espresso:espresso-core:3.5.1'
+}
+
+// Play Publisher upload target. Only configured when the key exists (see top of
+// file). `./gradlew :app:publishReleaseBundle` builds the signed AAB and pushes it
+// to the Internal Test track. versionCode is bumped by deploy.py before each run,
+// so every upload is strictly newer (Play rejects duplicate/lower codes).
+if (hasPlayKey) {
+    play {
+        serviceAccountCredentials.set(playKeyFile)
+        track.set("internal")
+        defaultToAppBundles.set(true)
+        // Roll the internal release out fully (no staged %); fine for a test track.
+        releaseStatus.set(com.github.triplet.gradle.androidpublisher.ReleaseStatus.COMPLETED)
+    }
 }

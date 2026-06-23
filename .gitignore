@@ -34,3 +34,6 @@ android/app/src/main/res/xml/file_paths.xml.user
 *.aab
 *.jks
 android/keystore.properties
+
+# Google Play Service-Account-Key (NIEMALS committen)
+android/play-deploy-key.json

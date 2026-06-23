@@ -7,13 +7,61 @@ import subprocess
 import sys
 import zipfile
 
-def run_cmd(cmd, cwd=None):
+def run_cmd(cmd, cwd=None, env=None, stream=False):
     print(f"Running: {cmd}")
-    res = subprocess.run(cmd, shell=True, cwd=cwd, capture_output=True, text=True)
+    full_env = {**os.environ, **env} if env else None
+    if stream:
+        # Long-running builds: let output through live instead of buffering.
+        res = subprocess.run(cmd, shell=True, cwd=cwd, env=full_env, text=True)
+        if res.returncode != 0:
+            print(f"Error: command failed with exit code {res.returncode}")
+            sys.exit(res.returncode)
+        return ""
+    res = subprocess.run(cmd, shell=True, cwd=cwd, env=full_env, capture_output=True, text=True)
     if res.returncode != 0:
         print(f"Error: {res.stderr}")
         sys.exit(res.returncode)
     return res.stdout.strip()
+
+
+# Android JDK: CLI Gradle builds use the JDK bundled with Android Studio (JBR 21).
+# Overridable via JAVA_HOME if you have another suitable JDK on PATH.
+ANDROID_STUDIO_JBR = (
+    "/Volumes/Daten/System/Programme/Android Studio.app/Contents/jbr/Contents/Home"
+)
+
+
+def publish_to_play():
+    """Build the signed release AAB and upload it to the Play *internal* track via
+    Gradle Play Publisher. Requires two gitignored secrets to be present:
+      - android/keystore.properties  (upload-key signing)
+      - android/play-deploy-key.json (Play service-account credentials)
+    The service account must have 'Releases for testing tracks' permission on the
+    app in the Play Console, and the Android Publisher API must be enabled.
+    versionCode was already bumped above, so the upload is strictly newer."""
+    keystore = "android/keystore.properties"
+    play_key = "android/play-deploy-key.json"
+    missing = [p for p in (keystore, play_key) if not os.path.exists(p)]
+    if missing:
+        print(f"⚠ Skipping Play upload — missing secret(s): {', '.join(missing)}")
+        return
+
+    java_home = os.environ.get("JAVA_HOME")
+    if not java_home or not os.path.exists(os.path.join(java_home, "bin", "java")):
+        if os.path.exists(os.path.join(ANDROID_STUDIO_JBR, "bin", "java")):
+            java_home = ANDROID_STUDIO_JBR
+        else:
+            print("⚠ Skipping Play upload — no usable JDK (set JAVA_HOME or install Android Studio).")
+            return
+
+    print("\n---> Building signed AAB and uploading to Play internal track...")
+    run_cmd(
+        "./gradlew :app:publishReleaseBundle --no-daemon",
+        cwd="android",
+        env={"JAVA_HOME": java_home},
+        stream=True,
+    )
+    print("✔ Uploaded AAB to Play Internal Test track.")
 
 def sync_shared_engine():
     """Mirror the single-source autofill engine (shared/autofill-engine.js) into
@@ -93,6 +141,7 @@ def main():
     # Set up argument parser
     parser = argparse.ArgumentParser(description="Velosia Deploy Tool")
     parser.add_argument("--local", action="store_true", help="Deploy directly from the local machine using Railway CLI")
+    parser.add_argument("--play", action="store_true", help="Also build the signed AAB and upload it to the Play internal test track")
     parser.add_argument("version", nargs="?", help="New version to deploy (e.g. 2.0.3)")
     parser.add_argument("message", nargs="?", help="Commit/release message")
     args = parser.parse_args()
@@ -189,6 +238,10 @@ def main():
     run_cmd(f'git commit -m "{commit_msg}"')
     run_cmd("git push")
     print("✔ Committed and pushed version changes to GitHub.")
+
+    # 6b. Optional: upload the signed AAB to the Play internal track (--play).
+    if args.play:
+        publish_to_play()
 
     # 7. Railway Deployments
     if args.local:
