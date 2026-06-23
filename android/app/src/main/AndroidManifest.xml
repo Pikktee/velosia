@@ -3,8 +3,10 @@
 
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.CAMERA" />
-    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="32" />
-    <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
+    <!-- Photo selection uses the WebView's system file picker (createIntent →
+         ACTION_GET_CONTENT), which returns a temporary read grant, and the camera
+         uses WebRTC under the CAMERA permission. No gallery/storage read permission
+         is required, so none is declared (satisfies Play's Photos & Videos policy). -->
 
     <uses-feature android:name="android.hardware.camera" android:required="false" />
 

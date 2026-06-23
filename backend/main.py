@@ -115,7 +115,7 @@ def run_migrations():
 
 run_migrations()
 
-app = FastAPI(title="Velosia API", version="2.6.6")
+app = FastAPI(title="Velosia API", version="2.6.7")
 
 UPLOAD_DIR = "/data/uploads" if os.path.isdir("/data") else "uploads"
 os.makedirs(UPLOAD_DIR, exist_ok=True)
