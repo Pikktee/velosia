@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Sparkles, Camera, FolderHeart, ArrowRight, Globe, X, Puzzle, Mail, Check, Rocket, FlaskConical, Loader2 } from 'lucide-react';
+import { Sparkles, Camera, FolderHeart, ArrowRight, Globe, X, Puzzle, Mail, Check, FlaskConical, Loader2 } from 'lucide-react';
 import { joinWaitlist } from '../utils/api';
 
 // Small inline-code chip used inside the install guides.
@@ -19,6 +19,39 @@ const Code = ({ children }) => (
 const guideOlStyle = { margin: '0 0 1.25rem 0', padding: '0 0 0 1.25rem', display: 'flex', flexDirection: 'column', gap: '0.7rem' };
 const guideLiStyle = { paddingLeft: '0.25rem', lineHeight: '1.5' };
 const guideHintStyle = { fontSize: '0.8rem', color: 'var(--text-muted)', borderLeft: '2px solid var(--glass-border)', paddingLeft: '0.75rem', margin: 0 };
+
+// Inline Google Play "play" triangle (4 brand colours) — no external image.
+const PlayIcon = ({ size = 24 }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden="true" style={{ flexShrink: 0 }}>
+    <polygon points="3,3 11.5,7.37 11.5,12 3,12" fill="#00C3FF" />
+    <polygon points="3,12 11.5,12 11.5,16.63 3,21" fill="#00E676" />
+    <polygon points="11.5,7.37 20.5,12 11.5,12" fill="#FFCE00" />
+    <polygon points="11.5,12 20.5,12 11.5,16.63" fill="#FF4B55" />
+  </svg>
+);
+
+// Official-looking Google Play badge. Says "Demnächst" because the app is still
+// in closed testing; clicking opens the tester explainer page.
+const GooglePlayBadge = ({ onClick }) => (
+  <button
+    onClick={onClick}
+    aria-label="Demnächst im Google Play Store – mehr erfahren"
+    style={{
+      display: 'inline-flex', alignItems: 'center', gap: '0.7rem',
+      padding: '0.5rem 1.1rem', borderRadius: '12px', cursor: 'pointer',
+      background: '#000', border: '1px solid rgba(255,255,255,0.2)', color: '#fff',
+      transition: 'transform 0.15s ease, border-color 0.2s ease'
+    }}
+    onMouseEnter={(e) => { e.currentTarget.style.transform = 'scale(1.03)'; e.currentTarget.style.borderColor = 'rgba(255,255,255,0.4)'; }}
+    onMouseLeave={(e) => { e.currentTarget.style.transform = 'scale(1)'; e.currentTarget.style.borderColor = 'rgba(255,255,255,0.2)'; }}
+  >
+    <PlayIcon size={26} />
+    <span style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', lineHeight: 1.15, textAlign: 'left' }}>
+      <span style={{ fontSize: '0.6rem', letterSpacing: '0.09em', textTransform: 'uppercase', opacity: 0.85 }}>Demnächst im</span>
+      <span style={{ fontSize: '1.1rem', fontWeight: '600', fontFamily: "'Product Sans','Avenir Next',sans-serif" }}>Google Play</span>
+    </span>
+  </button>
+);
 
 // Titles for the modal, keyed by the activeDoc value.
 const DOC_TITLES = {
@@ -152,22 +185,9 @@ export default function LandingPage() {
           width: '100%',
           padding: '0 1rem'
         }}>
-          {/* "Coming soon to Play Store" badge */}
-          <div style={{
-            display: 'inline-flex',
-            alignItems: 'center',
-            gap: '0.5rem',
-            padding: '0.4rem 0.9rem',
-            borderRadius: '999px',
-            background: 'rgba(9, 176, 183, 0.08)',
-            border: '1px solid rgba(9, 176, 183, 0.2)',
-            fontSize: '0.78rem',
-            fontWeight: '600',
-            color: 'var(--primary)',
-            marginBottom: '0.4rem'
-          }}>
-            <Rocket size={13} />
-            <span>Bald im Google Play Store</span>
+          {/* Google Play badge (coming soon → tester page) */}
+          <div style={{ marginBottom: '0.5rem' }}>
+            <GooglePlayBadge onClick={() => window.location.hash = '#/testen'} />
           </div>
 
           {/* Tester waitlist — primary CTA */}
@@ -246,107 +266,11 @@ export default function LandingPage() {
           {/* Tester link → process explainer subpage */}
           <button
             onClick={() => window.location.hash = '#/testen'}
-            style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem', background: 'transparent', border: 'none', color: 'var(--primary)', cursor: 'pointer', textDecoration: 'underline', padding: '0.2rem', fontSize: '0.82rem', marginTop: '0.1rem' }}
+            style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem', background: 'transparent', border: 'none', color: 'var(--primary)', cursor: 'pointer', textDecoration: 'underline', padding: '0.2rem', fontSize: '0.82rem', marginTop: '0.2rem' }}
           >
             <FlaskConical size={14} /> Schon eingeladen? So testest du Velosia
             <ArrowRight size={12} />
           </button>
-
-          {/* Desktop alternatives — de-emphasised */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', width: '100%', maxWidth: '340px', margin: '0.6rem 0 0.2rem' }}>
-            <div style={{ flex: 1, height: '1px', background: 'var(--glass-border)' }}></div>
-            <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>oder am Desktop</span>
-            <div style={{ flex: 1, height: '1px', background: 'var(--glass-border)' }}></div>
-          </div>
-
-          {/* Chrome Extension Download Button */}
-          <a
-            href={extensionDownloadUrl}
-            download
-            className="btn"
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              gap: '0.6rem',
-              padding: '0.75rem 1.5rem',
-              background: 'rgba(255, 255, 255, 0.02)',
-              border: '1px solid var(--glass-border)',
-              color: 'var(--text-primary)',
-              fontSize: '0.88rem',
-              fontWeight: '600',
-              textDecoration: 'none',
-              cursor: 'pointer',
-              width: '100%',
-              maxWidth: '290px',
-              transition: 'all 0.2s ease'
-            }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.background = 'rgba(255, 255, 255, 0.05)';
-              e.currentTarget.style.borderColor = 'rgba(9, 176, 183, 0.25)';
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.background = 'rgba(255, 255, 255, 0.02)';
-              e.currentTarget.style.borderColor = 'var(--glass-border)';
-            }}
-          >
-            <Puzzle size={15} />
-            <span>Chrome-Erweiterung laden</span>
-          </a>
-
-          {/* Web App Button */}
-          <button
-            onClick={handleOpenWebApp}
-            className="btn"
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              gap: '0.5rem',
-              padding: '0.75rem 1.5rem',
-              background: 'rgba(255, 255, 255, 0.02)',
-              border: '1px solid var(--glass-border)',
-              color: 'var(--text-primary)',
-              fontSize: '0.88rem',
-              fontWeight: '600',
-              cursor: 'pointer',
-              width: '100%',
-              maxWidth: '290px',
-              transition: 'all 0.2s ease'
-            }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.background = 'rgba(255, 255, 255, 0.05)';
-              e.currentTarget.style.borderColor = 'rgba(9, 176, 183, 0.25)';
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.background = 'rgba(255, 255, 255, 0.02)';
-              e.currentTarget.style.borderColor = 'var(--glass-border)';
-            }}
-          >
-            <Globe size={15} />
-            <span>Im Browser starten</span>
-            <ArrowRight size={13} style={{ marginLeft: '0.15rem' }} />
-          </button>
-
-          {/* Install guide link (Chrome only) */}
-          <div style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            flexWrap: 'wrap',
-            gap: '0.35rem 0.75rem',
-            marginTop: '0.3rem',
-            fontSize: '0.82rem',
-            color: 'var(--text-muted)'
-          }}>
-            <span>Installationshilfe:</span>
-            <button
-              onClick={() => setActiveDoc('install-chrome')}
-              style={{ display: 'inline-flex', alignItems: 'center', gap: '0.3rem', background: 'transparent', border: 'none', color: 'var(--primary)', cursor: 'pointer', textDecoration: 'underline', padding: '0.1rem', fontSize: 'inherit' }}
-            >
-              <Puzzle size={13} /> Chrome-Erweiterung
-            </button>
-          </div>
         </div>
       </div>
 
@@ -438,6 +362,55 @@ export default function LandingPage() {
               Übertrage deine Angebote mit unserer Erweiterung direkt in die Formulare von Vinted und Kleinanzeigen.
             </p>
           </div>
+        </div>
+      </div>
+
+      {/* Desktop options — grouped in one tidy card, out of the hero */}
+      <div style={{ width: '100%', padding: '0 1rem', marginTop: '3rem' }}>
+        <div className="glass-panel" style={{
+          padding: '1.6rem 1.4rem',
+          borderRadius: 'var(--radius-lg, 16px)',
+          textAlign: 'center'
+        }}>
+          <h3 style={{ fontSize: '1.05rem', fontFamily: 'var(--font-title)', fontWeight: '700', marginBottom: '0.4rem' }}>
+            Lieber am Desktop?
+          </h3>
+          <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', lineHeight: '1.5', maxWidth: '420px', margin: '0 auto 1.25rem auto' }}>
+            Nutze Velosia direkt im Browser oder hol dir die Chrome-Erweiterung, die die Formulare von Vinted und Kleinanzeigen automatisch ausfüllt.
+          </p>
+          <div style={{ display: 'flex', gap: '0.6rem', justifyContent: 'center', flexWrap: 'wrap' }}>
+            <a
+              href={extensionDownloadUrl}
+              download
+              className="btn"
+              style={{
+                display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem',
+                padding: '0.7rem 1.25rem', fontSize: '0.88rem', fontWeight: '600', textDecoration: 'none',
+                background: 'rgba(255, 255, 255, 0.02)', border: '1px solid var(--glass-border)',
+                color: 'var(--text-primary)', cursor: 'pointer'
+              }}
+            >
+              <Puzzle size={15} /> Chrome-Erweiterung
+            </a>
+            <button
+              onClick={handleOpenWebApp}
+              className="btn"
+              style={{
+                display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem',
+                padding: '0.7rem 1.25rem', fontSize: '0.88rem', fontWeight: '600',
+                background: 'rgba(255, 255, 255, 0.02)', border: '1px solid var(--glass-border)',
+                color: 'var(--text-primary)', cursor: 'pointer'
+              }}
+            >
+              <Globe size={15} /> Im Browser starten <ArrowRight size={13} />
+            </button>
+          </div>
+          <button
+            onClick={() => setActiveDoc('install-chrome')}
+            style={{ display: 'inline-flex', alignItems: 'center', gap: '0.3rem', background: 'transparent', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', textDecoration: 'underline', padding: '0.1rem', fontSize: '0.8rem', marginTop: '1rem' }}
+          >
+            Installationshilfe für die Erweiterung
+          </button>
         </div>
       </div>
 
