@@ -13,7 +13,12 @@ class User(Base):
     hashed_password = Column(String, nullable=False)
     google_id = Column(String, unique=True, index=True, nullable=True)
     ai_tone = Column(String, default="locker", nullable=True)
+    # Fixed Einleitung (intro) placed verbatim above every generated description.
+    ai_intro = Column(String, nullable=True)
+    # Active style/tone instruction for the AI-written middle section ("KI-Text").
+    # Stores the preset text or the user's edited version; used verbatim.
     ai_custom_tone = Column(String, nullable=True)
+    # Fixed Abschluss (footer) placed verbatim below every generated description.
     ai_custom_footer = Column(String, nullable=True)
     pricing_offset = Column(Float, default=0.0, nullable=True)
     default_zip = Column(String, nullable=True)

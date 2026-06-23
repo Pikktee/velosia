@@ -91,6 +91,7 @@ def run_migrations():
     # User settings migrations
     for col_name, col_type in [
         ("ai_tone", "VARCHAR(50) DEFAULT 'locker'"),
+        ("ai_intro", "VARCHAR(500)"),
         ("ai_custom_tone", "VARCHAR(500)"),
         ("ai_custom_footer", "VARCHAR(500)"),
         ("pricing_offset", "FLOAT DEFAULT 0.0"),
@@ -112,7 +113,7 @@ def run_migrations():
 
 run_migrations()
 
-app = FastAPI(title="Vintamie API", version="2.5.3")
+app = FastAPI(title="Vintamie API", version="2.5.4")
 
 UPLOAD_DIR = "/data/uploads" if os.path.isdir("/data") else "uploads"
 os.makedirs(UPLOAD_DIR, exist_ok=True)

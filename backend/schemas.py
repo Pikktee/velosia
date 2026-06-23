@@ -24,6 +24,7 @@ class UserResponse(UserBase):
     id: int
     created_at: datetime
     ai_tone: Optional[str] = "locker"
+    ai_intro: Optional[str] = None
     ai_custom_tone: Optional[str] = None
     ai_custom_footer: Optional[str] = None
     pricing_offset: Optional[float] = 0.0
@@ -39,6 +40,7 @@ class UserResponse(UserBase):
 
 class UserUpdate(BaseModel):
     ai_tone: Optional[str] = None
+    ai_intro: Optional[str] = None
     ai_custom_tone: Optional[str] = None
     ai_custom_footer: Optional[str] = None
     pricing_offset: Optional[float] = None

@@ -1,7 +1,34 @@
 import React, { useState, useEffect } from 'react';
-import { User, LogOut, Trash2, AlertTriangle, Save, HelpCircle, Check, Shield, Sparkles, Euro, MapPin, Sliders, Smile, Briefcase, Zap, PenTool } from 'lucide-react';
+import { User, LogOut, Trash2, AlertTriangle, Save, HelpCircle, Check, Shield, Sparkles, Euro, MapPin, Sliders, Zap } from 'lucide-react';
 import { deleteUserAccount, updateMe } from '../utils/api';
 import { version } from '../../package.json';
+
+// Default style instructions per tone preset. MUST stay in sync with TONE_PRESETS
+// in backend/services/gemini_service.py — the backend uses the same texts as its
+// fallback. The "KI-Text" box below seeds its editable textarea from these; once
+// the user edits the text it is stored verbatim and the preset label flips to
+// "Individuell".
+const TONE_PRESETS = {
+  locker: 'Schreibe eine freundliche, ehrliche, ansprechende und lockere Verkaufsbeschreibung (gerne mit passenden, dezenten Emojis).',
+  professionell: 'Schreibe eine sachliche, präzise und professionelle Verkaufsbeschreibung.',
+  direkt: 'Schreibe eine sehr direkte, kurze und schnörkellose Verkaufsbeschreibung ohne unnötige Floskeln.',
+};
+
+const TONE_OPTIONS = [
+  { value: 'locker', label: 'Locker' },
+  { value: 'professionell', label: 'Professionell' },
+  { value: 'direkt', label: 'Direkt' },
+  { value: 'custom', label: 'Individuell' },
+];
+
+// Map a tone-prompt text back to its preset key (or "custom" if it matches none).
+const presetKeyForText = (text) => {
+  const t = (text || '').trim();
+  for (const [key, value] of Object.entries(TONE_PRESETS)) {
+    if (value.trim() === t) return key;
+  }
+  return 'custom';
+};
 
 export default function Settings({ user, onLogout, onUpdateUser }) {
   const [showConfirm, setShowConfirm] = useState(false);
@@ -12,7 +39,8 @@ export default function Settings({ user, onLogout, onUpdateUser }) {
   
   // Local state for settings form
   const [aiTone, setAiTone] = useState('locker');
-  const [aiCustomTone, setAiCustomTone] = useState('');
+  const [aiIntro, setAiIntro] = useState('');
+  const [aiCustomTone, setAiCustomTone] = useState(TONE_PRESETS.locker);
   const [aiCustomFooter, setAiCustomFooter] = useState('');
   const [pricingOffset, setPricingOffset] = useState(0);
   const [defaultZip, setDefaultZip] = useState('');
@@ -22,8 +50,15 @@ export default function Settings({ user, onLogout, onUpdateUser }) {
   // Synchronize local state when user prop changes
   useEffect(() => {
     if (user) {
-      setAiTone(user.ai_tone || 'locker');
-      setAiCustomTone(user.ai_custom_tone || '');
+      // The KI-Text box always shows an instruction. Prefer the user's stored
+      // text; if empty (e.g. a user who picked a preset before the editable box
+      // existed), seed it from the preset matching their tone label.
+      const storedTone = user.ai_custom_tone || '';
+      const seededTone = storedTone || TONE_PRESETS[user.ai_tone] || TONE_PRESETS.locker;
+      setAiCustomTone(seededTone);
+      // Derive the dropdown label from the actual text so it stays truthful.
+      setAiTone(presetKeyForText(seededTone));
+      setAiIntro(user.ai_intro || '');
       setAiCustomFooter(user.ai_custom_footer || '');
       setPricingOffset(user.pricing_offset || 0);
       setDefaultZip(user.default_zip || '');
@@ -34,6 +69,22 @@ export default function Settings({ user, onLogout, onUpdateUser }) {
 
   if (!user) return null;
 
+  // Picking a template fills the box with its prompt text; picking "Individuell"
+  // keeps the current text so the user can edit from there.
+  const handleToneSelect = (value) => {
+    setAiTone(value);
+    if (value !== 'custom' && TONE_PRESETS[value]) {
+      setAiCustomTone(TONE_PRESETS[value]);
+    }
+  };
+
+  // Editing the prompt flips the dropdown to "Individuell" unless the text still
+  // exactly matches a preset.
+  const handleTonePromptChange = (text) => {
+    setAiCustomTone(text);
+    setAiTone(presetKeyForText(text));
+  };
+
   const handleSave = async (e) => {
     e.preventDefault();
     setSaving(true);
@@ -42,6 +93,7 @@ export default function Settings({ user, onLogout, onUpdateUser }) {
     try {
       const updatedUser = await updateMe({
         ai_tone: aiTone,
+        ai_intro: aiIntro,
         ai_custom_tone: aiCustomTone,
         ai_custom_footer: aiCustomFooter,
         pricing_offset: Number(pricingOffset),
@@ -160,77 +212,81 @@ export default function Settings({ user, onLogout, onUpdateUser }) {
                 </button>
               </div>
  
-              {/* Section: KI-Textgenerierung */}
+              {/* Section: Anzeigentext — the final description is assembled top to
+                  bottom as Einleitung + KI-Text + Abschluss (intro and footer are
+                  fixed verbatim text; only the KI-Text middle is AI-written). */}
               <div className="detail-section-unboxed" style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
                 <h3 className="detail-section-title" style={{ margin: 0 }}>
                   <Sparkles size={18} style={{ color: 'var(--primary)' }} />
-                  <span>KI-Textgestaltung</span>
+                  <span>Anzeigentext</span>
                 </h3>
-                
-                <div className="form-group" style={{ marginBottom: 0 }}>
-                  <label style={{ display: 'flex', alignItems: 'center', marginBottom: '0.5rem' }}>
-                    Tonfall
-                    <span className="tooltip-container">
-                      <HelpCircle size={14} />
-                      <span className="tooltip-text">Bestimmt, in welchem Sprachstil die KI deine Verkaufsbeschreibung formuliert.</span>
-                    </span>
-                  </label>
-                  
-                  {/* Premium visual tone options card grid */}
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '0.75rem', marginTop: '0.25rem' }}>
-                    {[
-                      { value: 'locker', label: 'Locker', desc: 'Mit Emojis & lockerem Ton', icon: <Smile size={18} /> },
-                      { value: 'professionell', label: 'Professionell', desc: 'Sachlich & kompetent', icon: <Briefcase size={18} /> },
-                      { value: 'direkt', label: 'Direkt', desc: 'Kurz & auf den Punkt', icon: <Zap size={18} /> },
-                      { value: 'custom', label: 'Individuell', desc: 'Eigene Stil-Anweisungen', icon: <PenTool size={18} /> }
-                    ].map((opt) => (
-                      <button
-                        key={opt.value}
-                        type="button"
-                        className={`tone-card-btn ${aiTone === opt.value ? 'active' : ''}`}
-                        onClick={() => setAiTone(opt.value)}
-                      >
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontWeight: '700', fontSize: '0.875rem', color: aiTone === opt.value ? 'var(--primary)' : 'var(--text-primary)' }}>
-                          {opt.icon}
-                          <span>{opt.label}</span>
-                        </div>
-                        <span style={{ fontSize: '0.725rem', color: 'var(--text-secondary)', lineHeight: '1.2' }}>{opt.desc}</span>
-                      </button>
-                    ))}
-                  </div>
-                </div>
 
-                {aiTone === 'custom' && (
-                  <div className="form-group fade-in" style={{ marginBottom: 0 }}>
-                    <label style={{ display: 'flex', alignItems: 'center' }}>
-                      Individuelle Stil-Anweisung
-                      <span className="tooltip-container">
-                        <HelpCircle size={14} />
-                        <span className="tooltip-text">Gib der KI Anweisungen für den Tonfall. Z.B. "Schreibe wie ein motivierter Sportler".</span>
-                      </span>
-                    </label>
-                    <textarea
-                      className="form-control"
-                      style={{ minHeight: '80px' }}
-                      placeholder="Schreibe die Beschreibung in folgendem Stil..."
-                      value={aiCustomTone}
-                      onChange={(e) => setAiCustomTone(e.target.value)}
-                    />
-                  </div>
-                )}
+                <p style={{ fontSize: '0.78rem', color: 'var(--text-muted)', margin: '-0.5rem 0 0', lineHeight: 1.4 }}>
+                  Jede Beschreibung wird so zusammengesetzt: <strong style={{ color: 'var(--text-secondary)' }}>Einleitung</strong> → <strong style={{ color: 'var(--text-secondary)' }}>KI-Text</strong> → <strong style={{ color: 'var(--text-secondary)' }}>Abschluss</strong>.
+                </p>
 
+                {/* 1. Einleitung */}
                 <div className="form-group" style={{ marginBottom: 0 }}>
                   <label style={{ display: 'flex', alignItems: 'center' }}>
-                    Standard-Textbaustein (Footer)
+                    Einleitung
                     <span className="tooltip-container">
                       <HelpCircle size={14} />
-                      <span className="tooltip-text">Dieser Text wird automatisch an jede Beschreibung angehängt.</span>
+                      <span className="tooltip-text">Fester Text, der unverändert über jeder Beschreibung steht. Leer lassen, wenn nicht gewünscht.</span>
                     </span>
                   </label>
-                  <input
-                    type="text"
+                  <textarea
                     className="form-control"
-                    placeholder="z.B. Aus tierfreiem Nichtraucherhaushalt."
+                    style={{ minHeight: '64px' }}
+                    placeholder="z.B. Hallo und willkommen bei meinen Anzeigen! 👋"
+                    value={aiIntro}
+                    onChange={(e) => setAiIntro(e.target.value)}
+                  />
+                </div>
+
+                {/* 2. KI-Text — tone/style instruction, always shown, with a template dropdown */}
+                <div className="form-group" style={{ marginBottom: 0 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem', gap: '0.5rem', flexWrap: 'wrap' }}>
+                    <label style={{ display: 'flex', alignItems: 'center', marginBottom: 0 }}>
+                      KI-Text
+                      <span className="tooltip-container">
+                        <HelpCircle size={14} />
+                        <span className="tooltip-text">Stil-/Tonfall-Anweisung für den von der KI geschriebenen Mittelteil. Wähle eine Vorlage oder formuliere frei — sobald du den Text änderst, springt die Vorlage auf „Individuell". Feste Regeln (keine Hashtags, Struktur) ergänzt Vintamie automatisch.</span>
+                      </span>
+                    </label>
+                    <select
+                      className="form-control"
+                      style={{ width: 'auto', minWidth: '150px', padding: '0.45rem 0.6rem', fontSize: '0.85rem', flexShrink: 0 }}
+                      value={aiTone}
+                      onChange={(e) => handleToneSelect(e.target.value)}
+                      aria-label="Tonfall-Vorlage"
+                    >
+                      {TONE_OPTIONS.map((opt) => (
+                        <option key={opt.value} value={opt.value}>{opt.label}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <textarea
+                    className="form-control"
+                    style={{ minHeight: '110px' }}
+                    placeholder="Stil-/Tonfall-Anweisung an die KI..."
+                    value={aiCustomTone}
+                    onChange={(e) => handleTonePromptChange(e.target.value)}
+                  />
+                </div>
+
+                {/* 3. Abschluss */}
+                <div className="form-group" style={{ marginBottom: 0 }}>
+                  <label style={{ display: 'flex', alignItems: 'center' }}>
+                    Abschluss
+                    <span className="tooltip-container">
+                      <HelpCircle size={14} />
+                      <span className="tooltip-text">Fester Text, der unverändert unter jeder Beschreibung steht. z.B. Versand- oder Haftungshinweise.</span>
+                    </span>
+                  </label>
+                  <textarea
+                    className="form-control"
+                    style={{ minHeight: '64px' }}
+                    placeholder="z.B. Aus tierfreiem Nichtraucherhaushalt. Privatverkauf, keine Garantie."
                     value={aiCustomFooter}
                     onChange={(e) => setAiCustomFooter(e.target.value)}
                   />

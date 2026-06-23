@@ -64,39 +64,58 @@ def pick_vinted_category(title: str, description: str = "", search_query: str = 
         print(f"Vintamie: Vinted-Kategorie-Auflösung fehlgeschlagen: {e}", flush=True)
         return None
 
+# Default style instructions per tone preset. Kept in sync with the identical map
+# in frontend/src/components/Settings.jsx — the "KI-Text" box there seeds its
+# editable textarea from these. The user can edit the text freely; the edited text
+# is stored verbatim in User.ai_custom_tone and used as-is, so this map only
+# provides the defaults and the backward-compat fallback.
+TONE_PRESETS = {
+    "locker": "Schreibe eine freundliche, ehrliche, ansprechende und lockere Verkaufsbeschreibung (gerne mit passenden, dezenten Emojis).",
+    "professionell": "Schreibe eine sachliche, präzise und professionelle Verkaufsbeschreibung.",
+    "direkt": "Schreibe eine sehr direkte, kurze und schnörkellose Verkaufsbeschreibung ohne unnötige Floskeln.",
+}
+_DEFAULT_TONE = TONE_PRESETS["locker"]
+
+
 def get_tone_instruction(user) -> str:
+    """Return the style instruction for the KI-Text middle section. The Settings UI
+    always stores the active instruction (preset text or freely edited) in
+    ai_custom_tone, so that is the primary source. ai_tone is just the UI label."""
     if not user:
-        return "Eine freundliche, ehrliche und ansprechende Verkaufsbeschreibung."
-    
-    tone = getattr(user, "ai_tone", "locker")
-    if tone == "locker":
-        return "Eine freundliche, ehrliche, ansprechende und lockere Verkaufsbeschreibung (gerne mit passenden, dezenten Emojis)."
-    elif tone == "professionell":
-        return "Eine sachliche, präzise und professionelle Verkaufsbeschreibung."
-    elif tone == "direkt":
-        return "Eine sehr direkte, kurze und schnörkellose Verkaufsbeschreibung ohne unnötige Floskeln."
-    elif tone == "custom":
-        custom_prompt = getattr(user, "ai_custom_tone", "") or ""
-        if custom_prompt:
-            return f"Eine Verkaufsbeschreibung, die genau folgenden Stil-/Tonfall-Vorgaben entspricht: {custom_prompt}"
-        return "Eine freundliche, ehrliche und ansprechende Verkaufsbeschreibung."
-    return "Eine freundliche, ehrliche und ansprechende Verkaufsbeschreibung."
+        return _DEFAULT_TONE
+    custom = (getattr(user, "ai_custom_tone", "") or "").strip()
+    if custom:
+        return custom
+    # Backward compat: users who picked a preset before the editable box existed
+    # have an empty ai_custom_tone — fall back to the preset text by label.
+    tone = getattr(user, "ai_tone", "locker") or "locker"
+    return TONE_PRESETS.get(tone, _DEFAULT_TONE)
 
 def strip_hashtags(text: str) -> str:
     import re
     # Remove any hashtags (lines starting with or ending with hashtags) at the end of the text
     return re.sub(r'(\s*#[a-zA-Z0-9_-]+\s*)+$', '', text).rstrip()
 
-def apply_custom_footer(description: str, user) -> str:
-    description = strip_hashtags(description)
-    if not user:
-        return description
-    footer = getattr(user, "ai_custom_footer", "") or ""
-    if not footer:
-        return description
-    if footer.strip() in description:
-        return description
-    return f"{description}\n\n{footer}"
+def assemble_description(description: str, user) -> str:
+    """Frame the AI-written body with the user's fixed Einleitung (intro) and
+    Abschluss (footer). Both are taken verbatim — never run through the AI — and
+    placed above / below the body. Hashtags are stripped from the body first;
+    empty parts are skipped and an intro/footer already present in the body is not
+    duplicated."""
+    body = strip_hashtags(description)
+    intro = ""
+    footer = ""
+    if user:
+        intro = (getattr(user, "ai_intro", "") or "").strip()
+        footer = (getattr(user, "ai_custom_footer", "") or "").strip()
+    parts = []
+    if intro and intro not in body:
+        parts.append(intro)
+    if body:
+        parts.append(body)
+    if footer and footer not in body:
+        parts.append(footer)
+    return "\n\n".join(parts)
 
 def _get_models_to_try() -> List[str]:
     models_to_try = []
@@ -367,7 +386,7 @@ def analyze_item_image(image_paths: List[str], user = None, user_condition: str 
 
         # Apply custom footer to description
         raw_description = str(data.get("description", "Keine Beschreibung verfügbar."))
-        raw_description = apply_custom_footer(raw_description, user)
+        raw_description = assemble_description(raw_description, user)
 
         # Resolve the AI's category pick against the full Kleinanzeigen taxonomy.
         # We store the unique breadcrumb in `category`; the Draft model derives the
@@ -500,7 +519,7 @@ def regenerate_draft_field(image_paths: List[str], field: str, user = None) -> s
             result = result[1:-1]
         
         if field == "description":
-            result = apply_custom_footer(result, user)
+            result = assemble_description(result, user)
             
         return result
 
