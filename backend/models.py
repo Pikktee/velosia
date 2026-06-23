@@ -23,7 +23,6 @@ class User(Base):
     pricing_offset = Column(Float, default=0.0, nullable=True)
     default_zip = Column(String, nullable=True)
     default_city = Column(String, nullable=True)
-    default_category = Column(String, nullable=True)
     default_shipping = Column(String, nullable=True)
     # When True, autofill on Vinted/Kleinanzeigen also clicks "publish" itself.
     # Default False so the user reviews the prefilled listing and publishes manually.

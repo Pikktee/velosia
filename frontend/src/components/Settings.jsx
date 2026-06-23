@@ -99,7 +99,6 @@ export default function Settings({ user, onLogout, onUpdateUser }) {
         pricing_offset: Number(pricingOffset),
         default_zip: defaultZip,
         default_city: '', // Ort ist überflüssig, PLZ reicht
-        default_category: '', // Standard-Kategorie entfernt (KI bestimmt diese immer)
         default_shipping: defaultShipping,
         auto_submit: autoSubmit
       });

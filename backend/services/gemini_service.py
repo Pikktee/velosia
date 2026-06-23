@@ -319,10 +319,6 @@ def analyze_item_image(image_paths: List[str], user = None, user_condition: str 
         sources_str = json.dumps(comparison["listings"])
         
         tone_instruction = get_tone_instruction(user)
-        category_pref = getattr(user, "default_category", "") or ""
-        category_instruction = ""
-        if category_pref and category_pref != "Keine Präferenz":
-            category_instruction = f" Bevorzuge dabei die Kategorie '{category_pref}', falls diese zum Artikel passt."
 
         selection_prompt = katax.selection_prompt()
         condition_prompt = "- 'condition': Eine Einschätzung des Zustands. Wähle exakt einen dieser Werte: 'Neu', 'Sehr gut', 'Gut', 'In Ordnung'."
@@ -347,7 +343,7 @@ def analyze_item_image(image_paths: List[str], user = None, user_condition: str 
             "Erstelle eine strukturierte JSON-Antwort mit folgenden Feldern auf Deutsch:\n"
             "- 'title': Ein aussagekräftiger Titel (max. 80 Zeichen), optimiert für Vinted/Kleinanzeigen.\n"
             f"- 'description': {tone_instruction} Nenne wichtige Details (wie Schnitt, Muster). Füge KEINE Hashtags hinzu.{details_instruction}\n"
-            f"- 'category': Eine WORTWÖRTLICH kopierte Zeile aus der obigen Kategorie-Liste (z.B. 'Elektronik > Haushaltsgeräte > Staubsauger').{category_instruction}\n"
+            f"- 'category': Eine WORTWÖRTLICH kopierte Zeile aus der obigen Kategorie-Liste (z.B. 'Elektronik > Haushaltsgeräte > Staubsauger').\n"
             "- 'attributes': Ein JSON-Objekt mit passenden Zusatzfeldern für das Inserat. Übliche Felder sind "
             "'Art', 'Marke', 'Größe', 'Farbe', 'Material', 'Zustand' und 'Versand' ('Versand möglich' oder "
             "'Nur Abholung'). Wähle nur Felder, die du sicher bestimmen kannst. "

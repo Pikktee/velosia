@@ -97,7 +97,8 @@ def run_migrations():
         ("pricing_offset", "FLOAT DEFAULT 0.0"),
         ("default_zip", "VARCHAR(20)"),
         ("default_city", "VARCHAR(100)"),
-        ("default_category", "VARCHAR(100)"),
+        # default_category was dropped (categories are AI-resolved); any existing
+        # physical column in older DBs is left in place, inert and unreferenced.
         ("default_shipping", "VARCHAR(200)"),
         ("auto_submit", "BOOLEAN DEFAULT 0")
     ]:
@@ -113,7 +114,7 @@ def run_migrations():
 
 run_migrations()
 
-app = FastAPI(title="Vintamie API", version="2.5.4")
+app = FastAPI(title="Vintamie API", version="2.5.5")
 
 UPLOAD_DIR = "/data/uploads" if os.path.isdir("/data") else "uploads"
 os.makedirs(UPLOAD_DIR, exist_ok=True)

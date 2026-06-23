@@ -30,7 +30,6 @@ class UserResponse(UserBase):
     pricing_offset: Optional[float] = 0.0
     default_zip: Optional[str] = None
     default_city: Optional[str] = None
-    default_category: Optional[str] = None
     default_shipping: Optional[str] = None
     auto_submit: Optional[bool] = False
     is_admin: Optional[bool] = False
@@ -46,7 +45,6 @@ class UserUpdate(BaseModel):
     pricing_offset: Optional[float] = None
     default_zip: Optional[str] = None
     default_city: Optional[str] = None
-    default_category: Optional[str] = None
     default_shipping: Optional[str] = None
     auto_submit: Optional[bool] = None
 

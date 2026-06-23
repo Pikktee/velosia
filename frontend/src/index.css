@@ -3013,37 +3013,6 @@ select.form-control {
   gap: 0.5rem;
 }
 
-/* Interactive Tone Selection Card */
-.tone-card-btn {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 0.4rem;
-  padding: 0.85rem 1rem;
-  background: rgba(0, 0, 0, 0.2);
-  border: 1px solid var(--glass-border);
-  border-radius: var(--radius-sm);
-  color: var(--text-secondary);
-  cursor: pointer;
-  text-align: left;
-  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-  min-height: 80px;
-  box-sizing: border-box;
-}
-
-.tone-card-btn:hover {
-  border-color: rgba(9, 176, 183, 0.35);
-  background: rgba(255, 255, 255, 0.02) !important;
-  transform: translateY(-1px);
-}
-
-.tone-card-btn.active {
-  background: rgba(9, 176, 183, 0.08) !important;
-  border: 1.5px solid var(--primary) !important;
-  color: var(--text-primary);
-  box-shadow: 0 0 12px var(--primary-glow);
-}
-
 @media (min-width: 769px) {
   /* Disable swipe layout scroll-snap and hide swipe action backgrounds on desktop */
   .SwipeableList-item.is-initialized .SwipeableList-track {
