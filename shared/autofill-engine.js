@@ -1835,20 +1835,47 @@
       } catch (e) {}
     }
 
-    // Pull an item id out of a parsed JSON response body, if it looks like an item.
+    // Vinted's create-item call (confirmed live): POST /api/v2/item_upload/items.
+    // Keep the plain /items endpoint as an alternative just in case.
+    function isCreateEndpoint(url) {
+      return /\/api\/v\d+\/item_upload\/items(\/|\?|$)/i.test(url || "") ||
+             /\/api\/v\d+\/items(\/|\?|$)/i.test(url || "");
+    }
+
+    // Pull the new item out of the create response. id alone is enough here (we only
+    // parse the known create endpoint, so a bare id is the listing id).
     function itemFromJson(data) {
       if (!data || typeof data !== "object") return null;
       var item = data.item || data;
-      if (item && item.id != null && (item.url || item.path || item.title != null)) return item;
+      if (item && item.id != null) return item;
       return null;
     }
 
-    // A POST/PUT to any /api/ path is a publish candidate. We diagnostic-log ALL of
-    // them (broad, so the real create endpoint shows up even if our item-name guess
-    // is wrong) but only parse+capture (narrow, item-shaped JSON) below.
+    // Report the response shape (keys only, no content) so we can confirm where the
+    // id lives if extraction ever misses. Temporary diagnostic.
+    function reportShape(url, data) {
+      try {
+        var keys = (data && typeof data === "object") ? Object.keys(data).slice(0, 40) : [];
+        var item = data && (data.item || data);
+        var itemKeys = (item && typeof item === "object") ? Object.keys(item).slice(0, 40) : [];
+        sendDebug({
+          event: "vinted_create_response", url: url, keys: keys, itemKeys: itemKeys,
+          itemId: (item && item.id != null) ? String(item.id) : null
+        }, options);
+      } catch (e) {}
+    }
+
+    // A POST/PUT to a Vinted /api/ path is a publish candidate. EXCLUDE our own
+    // backend calls (telemetry/listing capture) — otherwise the debug beacon's own
+    // POST is seen as a candidate and loops.
+    var backendUrl = options.backendUrl || "";
     var dbgCount = 0;
     function isCandidate(url, method) {
-      return /post|put/i.test(method || "") && /\/api\//i.test(url || "");
+      url = url || "";
+      if (!/post|put/i.test(method || "") || !/\/api\//i.test(url)) return false;
+      if (backendUrl && url.indexOf(backendUrl) !== -1) return false;
+      if (/\/api\/(telemetry|listings)\//i.test(url)) return false;
+      return true;
     }
     function noteCandidate(method, url) {
       if (captured || !isCandidate(url, method)) return;
@@ -1870,14 +1897,17 @@
           try {
             if (!captured && isCandidate(url, method)) {
               noteCandidate(method, url);
-              p.then(function (resp) {
-                try {
-                  resp.clone().json().then(function (data) {
-                    var item = itemFromJson(data);
-                    if (item) fire(item);
-                  }).catch(function () {});
-                } catch (e) {}
-              }).catch(function () {});
+              if (isCreateEndpoint(url)) {
+                p.then(function (resp) {
+                  try {
+                    resp.clone().json().then(function (data) {
+                      reportShape(url, data);
+                      var item = itemFromJson(data);
+                      if (item) fire(item);
+                    }).catch(function () {});
+                  } catch (e) {}
+                }).catch(function () {});
+              }
             }
           } catch (e) {}
           return p;
@@ -1902,13 +1932,16 @@
             var self = this;
             if (!captured && isCandidate(self.__velosiaUrl, self.__velosiaMethod)) {
               noteCandidate(self.__velosiaMethod, self.__velosiaUrl);
-              self.addEventListener("load", function () {
-                try {
-                  var data = JSON.parse(self.responseText);
-                  var item = itemFromJson(data);
-                  if (item) fire(item);
-                } catch (e) {}
-              });
+              if (isCreateEndpoint(self.__velosiaUrl)) {
+                self.addEventListener("load", function () {
+                  try {
+                    var data = JSON.parse(self.responseText);
+                    reportShape(self.__velosiaUrl, data);
+                    var item = itemFromJson(data);
+                    if (item) fire(item);
+                  } catch (e) {}
+                });
+              }
             }
           } catch (e) {}
           return origSend.apply(this, arguments);
