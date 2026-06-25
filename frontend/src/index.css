@@ -834,13 +834,13 @@ select.form-control {
     left: 0;
     top: 0;
     bottom: 0;
-    width: 72px;
+    width: calc(72px + env(safe-area-inset-left, 0px));
     height: 100vh;
     height: 100dvh;
     flex-direction: column;
     justify-content: center;
     gap: 1.5rem;
-    padding: 1rem 0;
+    padding: 1rem 0 1rem env(safe-area-inset-left, 0px);
     border-right: 1px solid var(--glass-border);
     border-top: none;
     box-shadow: 4px 0 20px rgba(0, 0, 0, 0.4);
@@ -865,7 +865,7 @@ select.form-control {
   /* Right-side main content */
   .app-shell:not(.camera-mode) .app-main {
     position: absolute;
-    left: 72px;
+    left: calc(72px + env(safe-area-inset-left, 0px));
     right: 0;
     top: 0;
     bottom: 0;
@@ -873,10 +873,12 @@ select.form-control {
     height: 100dvh;
   }
 
-  /* Re-adjust container spacing */
+  /* Re-adjust container spacing (header is hidden here, so the safe-area top
+     inset that normally lived in .app-header must be reclaimed by the content) */
   .app-shell:not(.camera-mode) .app-main .container {
-    padding-top: 1rem;
+    padding-top: calc(1rem + env(safe-area-inset-top, 0px));
     padding-bottom: 1.5rem !important;
+    padding-right: calc(1rem + env(safe-area-inset-right, 0px));
     max-width: 100%;
   }
 
