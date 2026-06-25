@@ -1719,6 +1719,21 @@
     } catch (e) { /* telemetry is best-effort, never block autofill */ }
   }
 
+  // Temporary, UNAUTHENTICATED diagnostic beacon (no listing content — only a short
+  // event tag + observed request method/url) so we can confirm publish detection in
+  // the Railway logs without adb. Unauthenticated on purpose: it must still report
+  // even if the auth token is missing (the very failure mode we are chasing).
+  function sendDebug(payload, options) {
+    try {
+      if (!options || !options.backendUrl) return;
+      payload.engine_version = VERSION;
+      fetch(options.backendUrl + "/api/telemetry/debug", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload), keepalive: true
+      }).catch(function () {});
+    } catch (e) {}
+  }
+
   // ----------------------------------------------------------------------------
   // Published-listing capture — read the public listing id/URL after publishing
   // (no login, no form crawl) and report it so the dashboard can track status.
@@ -1805,6 +1820,7 @@
       captured = true;
       var listingUrl = listingUrlFrom(item);
       console.log("Velosia: Vinted-Item erkannt -> id=" + item.id + " url=" + listingUrl);
+      sendDebug({ event: "vinted_item_captured", id: String(item.id), url: listingUrl }, options);
       // Backend capture (works on desktop too; idempotent server-side).
       captureListing({
         backendUrl: options.backendUrl, token: options.token,
@@ -1827,7 +1843,23 @@
       return null;
     }
 
-    // --- Patch fetch: inspect POST/PUT responses to Vinted's item endpoints. ---
+    // A POST/PUT to any /api/ path is a publish candidate. We diagnostic-log ALL of
+    // them (broad, so the real create endpoint shows up even if our item-name guess
+    // is wrong) but only parse+capture (narrow, item-shaped JSON) below.
+    var dbgCount = 0;
+    function isCandidate(url, method) {
+      return /post|put/i.test(method || "") && /\/api\//i.test(url || "");
+    }
+    function noteCandidate(method, url) {
+      if (captured || !isCandidate(url, method)) return;
+      console.log("Velosia: Vinted-Publish-Request beobachtet -> " + method + " " + url);
+      if (dbgCount < 30) {
+        dbgCount++;
+        sendDebug({ event: "vinted_publish_request", method: method, url: url }, options);
+      }
+    }
+
+    // --- Patch fetch: inspect POST/PUT responses to Vinted's API. ---
     try {
       var origFetch = window.fetch;
       if (origFetch && !origFetch.__velosiaPatched) {
@@ -1836,8 +1868,8 @@
           var method = (init && init.method) || (input && input.method) || "GET";
           var p = origFetch.apply(this, arguments);
           try {
-            if (!captured && /\/api\/v\d+\/item/i.test(url) && /post|put/i.test(method)) {
-              console.log("Velosia: Vinted-Publish-Request beobachtet -> " + method + " " + url);
+            if (!captured && isCandidate(url, method)) {
+              noteCandidate(method, url);
               p.then(function (resp) {
                 try {
                   resp.clone().json().then(function (data) {
@@ -1868,8 +1900,8 @@
         XHR.prototype.send = function () {
           try {
             var self = this;
-            if (!captured && /\/api\/v\d+\/item/i.test(self.__velosiaUrl || "") &&
-                /post|put/i.test(self.__velosiaMethod || "")) {
+            if (!captured && isCandidate(self.__velosiaUrl, self.__velosiaMethod)) {
+              noteCandidate(self.__velosiaMethod, self.__velosiaUrl);
               self.addEventListener("load", function () {
                 try {
                   var data = JSON.parse(self.responseText);

@@ -1,1 +1,1 @@
-Vinted-Veroeffentlichung zuverlaessig erkannt: Engine faengt die Item-Erstellungs-API-Antwort ab (fetch/XHR-Patch, navigationsunabhaengig) und meldet die neue Item-ID per Bridge an die App -> native Erfassung (okhttp+Token), Auto-Close der WebView und Erfolgsmeldung; URL-Polling + doUpdateVisitedHistory als Backstop
+Diagnose: Engine meldet beobachtete Vinted-Publish-Requests + erkannte Item-ID per unauth Debug-Beacon an /api/telemetry/debug (Railway-Logs); breitere POST/PUT-Erkennung an /api/ statt nur /item-Pfad

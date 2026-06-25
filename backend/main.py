@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Depends, HTTPException, File, UploadFile, status, Form, BackgroundTasks
+from fastapi import FastAPI, Depends, HTTPException, File, UploadFile, status, Form, BackgroundTasks, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
@@ -115,7 +115,7 @@ def run_migrations():
 
 run_migrations()
 
-app = FastAPI(title="Velosia API", version="Vinted-Veroeffentlichung zuverlaessig erkannt: Engine faengt die Item-Erstellungs-API-Antwort ab (fetch/XHR-Patch, navigationsunabhaengig) und meldet die neue Item-ID per Bridge an die App -> native Erfassung (okhttp+Token), Auto-Close der WebView und Erfolgsmeldung; URL-Polling + doUpdateVisitedHistory als Backstop")
+app = FastAPI(title="Velosia API", version="Diagnose: Engine meldet beobachtete Vinted-Publish-Requests + erkannte Item-ID per unauth Debug-Beacon an /api/telemetry/debug (Railway-Logs); breitere POST/PUT-Erkennung an /api/ statt nur /item-Pfad")
 
 UPLOAD_DIR = "/data/uploads" if os.path.isdir("/data") else "uploads"
 os.makedirs(UPLOAD_DIR, exist_ok=True)
@@ -868,6 +868,20 @@ def check_autofill_anomaly(platform: str):
         print(f"[telemetry] Anomalie-Check fehlgeschlagen: {e}", flush=True)
     finally:
         db.close()
+
+
+@app.post("/api/telemetry/debug", status_code=status.HTTP_202_ACCEPTED)
+async def telemetry_debug(request: Request):
+    """Temporary, UNAUTHENTICATED diagnostic sink: logs a small engine debug beacon
+    (event tag + observed request method/url — no listing content) to stdout so it is
+    visible in the Railway logs. Unauthenticated on purpose so it still reports even
+    when the auth token is missing (the failure mode being diagnosed). Best-effort."""
+    try:
+        payload = await request.json()
+    except Exception:
+        payload = {}
+    print(f"[debug-beacon] {payload}", flush=True)
+    return {"ok": True}
 
 
 @app.post("/api/telemetry/autofill", status_code=status.HTTP_202_ACCEPTED)
