@@ -667,6 +667,31 @@
     } catch (e) {}
   }
 
+  // Diagnostic: log every element whose visible text equals the level name, with the
+  // attributes that decide whether vintedRowMatch picks/excludes it. Reveals what the
+  // real mobile picker rows look like (anchor? href? role?) so we can target them.
+  function vintedDiag(name) {
+    try {
+      var target = norm(name);
+      var nodes = document.querySelectorAll("a, button, li, div, span, p, [role]");
+      var hits = [];
+      for (var i = 0; i < nodes.length && hits.length < 8; i++) {
+        var el = nodes[i];
+        if (norm(el.textContent || "") !== target) continue;
+        var a = el.closest("a[href]");
+        var inNav = el.closest("header, nav, footer, [role='navigation'], [role='tablist'], [role='tab'], [data-testid^='catalog-navigation']");
+        hits.push(el.tagName +
+          (el.getAttribute && el.getAttribute("role") ? "[role=" + el.getAttribute("role") + "]" : "") +
+          " href=" + (a ? a.getAttribute("href") : "-") +
+          " interact=" + isInteractable(el) +
+          " inNav=" + !!inNav +
+          " kids=" + el.getElementsByTagName("*").length +
+          " cls=" + ((el.className || "").toString().slice(0, 50)));
+      }
+      console.log("Velosia Vinted DIAG '" + name + "' [" + hits.length + "]: " + (hits.length ? hits.join("  ||  ") : "keine exakten Text-Treffer"));
+    } catch (e) {}
+  }
+
   async function selectVintedCategory(draft) {
     var ids = String(draft.vinted_path || draft.vintedPath || "").split("/").filter(Boolean);
     var names = String(draft.vinted_category || draft.vintedCategory || "")
@@ -702,6 +727,7 @@
     }
     var hasSearch = !!vintedCategorySearchInput();
     console.log("Velosia Vinted: Picker offen=" + !!vintedPickerContainer() + ", Suchfeld=" + hasSearch);
+    vintedDiag(names[0] || "");
 
     // Strategy A — drill level by level (catalog-id icon first, then robust name
     // match). This is the most deterministic: each level only shows its own children.
@@ -714,7 +740,7 @@
       if (!onForm()) { console.warn("Velosia Vinted: Formular verlassen (" + location.pathname + ") — Abbruch"); return false; }
       var ok = await vintedClickLevel(ids[i] || null, names[i] || "");
       console.log("Velosia Vinted: Ebene " + i + " '" + (names[i] || "") + "' (id " + (ids[i] || "-") + ") -> " + (ok ? "geklickt" : "NICHT gefunden"));
-      if (!ok) { drilled = false; break; }
+      if (!ok) { vintedDiag(names[i] || ""); drilled = false; break; }
       await sleep(450);
     }
     if (drilled) {
