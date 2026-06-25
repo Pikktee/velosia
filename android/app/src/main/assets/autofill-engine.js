@@ -742,6 +742,42 @@
     } catch (e) {}
   }
 
+  // Diagnostic: after drilling to the leaf, log the modal's buttons / selection state
+  // so we can see whether a confirm step ("Fertig"/"Auswählen") is needed to close it.
+  function vintedDiagModal() {
+    try {
+      var btns = document.querySelectorAll("button, [role='button']");
+      var out = [];
+      for (var i = 0; i < btns.length && out.length < 12; i++) {
+        var el = btns[i];
+        if (!isInteractable(el)) continue;
+        if (el.closest("a[href], header, nav, [role='navigation'], [role='tablist'], #velosia-overlay, #velosia-backdrop")) continue;
+        var t = norm(el.textContent || el.getAttribute("aria-label") || "");
+        if (!t || t.length > 30) continue;
+        out.push("'" + t.slice(0, 26) + "'");
+      }
+      var checked = document.querySelectorAll("input:checked, [aria-checked='true'], [aria-selected='true']").length;
+      console.log("Velosia Vinted DIAGMODAL buttons[" + out.length + "]: " + out.join(" ") + " | selected=" + checked);
+    } catch (e) {}
+  }
+
+  // A confirm/apply button that finalises the selection and closes the modal.
+  function vintedConfirmButton() {
+    var btns = document.querySelectorAll("button, [role='button']");
+    var words = ["fertig", "auswählen", "übernehmen", "speichern", "anwenden", "bestätigen", "hinzufügen", "select", "done", "apply", "confirm", "save"];
+    for (var i = 0; i < btns.length; i++) {
+      var el = btns[i];
+      if (!isInteractable(el)) continue;
+      if (el.closest("a[href], header, nav, [role='navigation'], [role='tablist'], #velosia-overlay, #velosia-backdrop")) continue;
+      var t = norm(el.textContent || "");
+      if (!t || t.length > 22) continue;
+      for (var j = 0; j < words.length; j++) {
+        if (t === words[j] || t.indexOf(words[j]) !== -1) return el;
+      }
+    }
+    return null;
+  }
+
   async function selectVintedCategory(draft) {
     var ids = String(draft.vinted_path || draft.vintedPath || "").split("/").filter(Boolean);
     var names = String(draft.vinted_category || draft.vintedCategory || "")
@@ -787,14 +823,31 @@
       await sleep(450);
     }
     if (drilled) {
-      for (var v = 0; v < 12; v++) {
+      // Leaf clicked — wait for the modal to close.
+      for (var v = 0; v < 16; v++) {
         if (!vintedPickerContainer()) { console.log("Velosia Vinted: per Durchklicken gewählt"); return true; }
         await sleep(300);
       }
+      // Modal lingered: diagnose it and try a confirm/apply button (some layouts
+      // need an explicit "Fertig"/"Auswählen" after picking the leaf).
+      vintedDiagModal();
+      var confirm = vintedConfirmButton();
+      console.log("Velosia Vinted: Bestätigen-Button=" + (confirm ? ("'" + norm(confirm.textContent || "").slice(0, 20) + "'") : "KEINER"));
+      if (confirm) {
+        try { vintedClickable(confirm).click(); } catch (e) {}
+        for (var c3 = 0; c3 < 12; c3++) {
+          if (!vintedPickerContainer()) { console.log("Velosia Vinted: nach Bestätigen gewählt"); return true; }
+          await sleep(300);
+        }
+      }
+      // Reached the leaf but the modal won't close. Do NOT run the search rescue here
+      // — it would disturb the already-drilled selection. Leave it for a manual touch.
+      console.warn("Velosia Vinted: Blatt geklickt, Modal blieb offen");
+      return false;
     }
 
-    // Strategy B (rescue) — mobile search box: type the leaf, click the matching
-    // result. Used when drilling stalled (e.g. a level rendered differently).
+    // Strategy B (rescue) — only when drilling FAILED at some level: mobile search
+    // box, type the leaf, click the matching result.
     var leaf = names.length ? names[names.length - 1] : "";
     var search = vintedCategorySearchInput();
     if (search && leaf) {
