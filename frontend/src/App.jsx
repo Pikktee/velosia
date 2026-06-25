@@ -21,7 +21,9 @@ export default function App() {
   const [view, setView] = useState('list'); // 'capture', 'list', 'detail', 'analyzing'
   const [drafts, setDrafts] = useState([]);
   const [selectedDraft, setSelectedDraft] = useState(null);
-  const [loading, setLoading] = useState(false);
+  // Start in loading state so the very first paint shows the skeleton list,
+  // not a flash of the empty-state onboarding screen before drafts arrive.
+  const [loading, setLoading] = useState(isAuthenticated());
   const [analysisError, setAnalysisError] = useState(null);
   const [isInputFocused, setIsInputFocused] = useState(false);
   const [route, setRoute] = useState(window.location.hash || '#/');
