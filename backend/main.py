@@ -115,7 +115,7 @@ def run_migrations():
 
 run_migrations()
 
-app = FastAPI(title="Velosia API", version="Diagnose: Engine meldet beobachtete Vinted-Publish-Requests + erkannte Item-ID per unauth Debug-Beacon an /api/telemetry/debug (Railway-Logs); breitere POST/PUT-Erkennung an /api/ statt nur /item-Pfad")
+app = FastAPI(title="Velosia API", version="2.6.42")
 
 UPLOAD_DIR = "/data/uploads" if os.path.isdir("/data") else "uploads"
 os.makedirs(UPLOAD_DIR, exist_ok=True)

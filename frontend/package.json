@@ -1,7 +1,7 @@
 {
   "name": "frontend",
   "private": true,
-  "version": "Diagnose: Engine meldet beobachtete Vinted-Publish-Requests + erkannte Item-ID per unauth Debug-Beacon an /api/telemetry/debug (Railway-Logs); breitere POST/PUT-Erkennung an /api/ statt nur /item-Pfad",
+  "version": "2.6.42",
   "type": "module",
   "scripts": {
     "dev": "vite",
