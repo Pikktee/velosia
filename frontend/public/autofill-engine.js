@@ -1038,18 +1038,16 @@
     return best;
   }
 
-  async function selectVintedCondition(draft) {
-    var cond = norm(draft.condition || "");
-    if (!cond) return false;
-    var candidates = VINTED_CONDITION_MAP[cond];
-    if (!candidates) { console.log("Velosia Vinted: Zustand '" + cond + "' ohne Vinted-Entsprechung — manuell"); return false; }
-
-    var opener = vintedDropdownOpener("zustand", [
-      "[data-testid='condition-select-dropdown-input']",
-      "[data-testid='condition-select-dropdown-chevron']",
-      "[data-testid='status-select-dropdown-input']"
-    ]);
-    if (!opener) { console.log("Velosia Vinted: Zustand-Feld nicht gefunden — manuell"); return false; }
+  // Generic Vinted form dropdown: open the field (by label/testid), then click the
+  // first CANDIDATE value whose option row is present, committing via the modal's
+  // "Fertig" save if the picker uses one. Used for Zustand / Größe / Farbe / Material.
+  // Best-effort and side-effect-safe: if the field or option is absent it just leaves
+  // the value blank (returns false) — we NEVER pick a wrong option.
+  async function selectVintedDropdownValue(fieldLabel, testidHints, candidates, logName) {
+    candidates = (candidates || []).filter(Boolean);
+    if (!candidates.length) return false;
+    var opener = vintedDropdownOpener(fieldLabel, testidHints);
+    if (!opener) { console.log("Velosia Vinted: " + logName + "-Feld nicht gefunden — manuell"); return false; }
 
     function findOptionRow() {
       var root = vintedPickerContainer() || document.body;
@@ -1074,7 +1072,7 @@
     }
     if (!picked) {
       vintedDiagOptions();
-      console.log("Velosia Vinted: Zustand-Option (" + candidates.join("/") + ") nicht gefunden");
+      console.log("Velosia Vinted: " + logName + "-Option (" + candidates.join("/") + ") nicht gefunden");
       return false;
     }
     try { vintedClickable(picked.row).click(); } catch (e) {}
@@ -1082,7 +1080,115 @@
     await sleep(250);
     var save = vintedSaveButton();
     if (save) { try { vintedClickable(save).click(); } catch (e) {} await sleep(300); }
-    console.log("Velosia Vinted: Zustand '" + picked.label + "' gesetzt");
+    console.log("Velosia Vinted: " + logName + " '" + picked.label + "' gesetzt");
+    return true;
+  }
+
+  async function selectVintedCondition(draft) {
+    var cond = norm(draft.condition || "");
+    if (!cond) return false;
+    var candidates = VINTED_CONDITION_MAP[cond];
+    if (!candidates) { console.log("Velosia Vinted: Zustand '" + cond + "' ohne Vinted-Entsprechung — manuell"); return false; }
+    return selectVintedDropdownValue("zustand", [
+      "[data-testid='condition-select-dropdown-input']",
+      "[data-testid='condition-select-dropdown-chevron']",
+      "[data-testid='status-select-dropdown-input']"
+    ], candidates, "Zustand");
+  }
+
+  // Read a single AI-extracted attribute value by its (normalised) field name, e.g.
+  // attrValue(draft, "größe"). Returns "" when the AI did not provide it (so the field
+  // is simply left blank rather than guessed).
+  function attrValue(draft, normName) {
+    var attrs = parseAttributes(draft);
+    var keys = Object.keys(attrs);
+    for (var i = 0; i < keys.length; i++) {
+      if (norm(keys[i]) === normName) {
+        var v = String(attrs[keys[i]] == null ? "" : attrs[keys[i]]).trim();
+        if (v) return v;
+      }
+    }
+    return "";
+  }
+
+  // ----------------------------------------------------------------------------
+  // Vinted brand picker — a SEARCH/autocomplete field, not a fixed dropdown.
+  // CRITICAL: we only commit a brand when an EXACT suggestion match appears. We never
+  // create a "custom brand" — a missing brand is far better than a wrong/invented one.
+  // ----------------------------------------------------------------------------
+
+  // The brand modal's search input (after the field is opened).
+  function vintedBrandSearchInput() {
+    var inputs = document.querySelectorAll("input[type='text'], input[type='search'], input:not([type])");
+    for (var i = 0; i < inputs.length; i++) {
+      var inp = inputs[i];
+      if (!isInteractable(inp)) continue;
+      if (inp.closest("#velosia-backdrop, #velosia-overlay")) continue;
+      var txt = norm(inp.placeholder || "") + " " + norm(inp.getAttribute("aria-label") || "");
+      if (txt.indexOf("marke") !== -1 || txt.indexOf("brand") !== -1) return inp;
+      if (inp.closest("[role='dialog'], [aria-modal='true']")) return inp;
+    }
+    return null;
+  }
+
+  // A suggestion row whose normalised text EXACTLY equals the brand. Equality alone
+  // already excludes "X als Marke hinzufügen" rows (they carry extra words). Never a
+  // link/nav element. Returns the shallowest exact match.
+  function vintedBrandExactRow(target) {
+    var root = vintedPickerContainer() || document.body;
+    var nodes = root.querySelectorAll("button, li, div, span, p, [role='button'], [role='option'], [role='menuitem']");
+    var best = null;
+    for (var i = 0; i < nodes.length; i++) {
+      var el = nodes[i];
+      if (!isInteractable(el)) continue;
+      if (el.closest("#velosia-backdrop, #velosia-overlay")) continue;
+      if (el.closest("a[href], header, nav, [role='navigation'], [role='tablist'], [role='tab']")) continue;
+      if (el.querySelector("input, textarea, a[href]")) continue;
+      if (norm(el.textContent || "") !== target) continue;
+      if (!best || el.getElementsByTagName("*").length < best.getElementsByTagName("*").length) best = el;
+    }
+    return best;
+  }
+
+  async function selectVintedBrand(draft) {
+    var brand = attrValue(draft, "marke");
+    if (!brand) return false;                       // AI gave no brand -> leave blank
+    var target = norm(brand);
+
+    var opener = vintedDropdownOpener("marke", [
+      "[data-testid='brand-select-dropdown-input']",
+      "[data-testid='brand-select-dropdown-chevron']",
+      "[data-testid='brand-select-dropdown']"
+    ]);
+    if (!opener) { console.log("Velosia Vinted: Marke-Feld nicht gefunden — manuell"); return false; }
+
+    var search = null;
+    for (var o = 0; o < 12 && !search; o++) {
+      try {
+        opener.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
+        opener.click();
+        if (opener.focus) opener.focus();
+      } catch (e) {}
+      await sleep(300);
+      search = vintedBrandSearchInput();
+    }
+    if (!search) { console.log("Velosia Vinted: Marken-Suchfeld nicht gefunden — manuell"); return false; }
+
+    vintedSetSearch(search, brand);
+    var clicked = false;
+    for (var s = 0; s < 16 && !clicked; s++) {
+      await sleep(300);
+      var row = vintedBrandExactRow(target);
+      if (row) { try { vintedClickable(row).click(); clicked = true; } catch (e) {} }
+    }
+    if (!clicked) {
+      console.log("Velosia Vinted: keine EXAKTE Marke '" + brand + "' in Vinteds Vorschlägen — bleibt LEER (keine Halluzination)");
+      return false;
+    }
+    await sleep(250);
+    var save = vintedSaveButton();
+    if (save) { try { vintedClickable(save).click(); } catch (e) {} await sleep(300); }
+    console.log("Velosia Vinted: Marke '" + brand + "' gesetzt (exakter Treffer)");
     return true;
   }
 
@@ -1441,9 +1547,47 @@
         try { condOk = await selectVintedCondition(draft); } catch (e) { condOk = false; }
       }
       if (condOk) filled.push("Zustand");
+      else if (draft.condition) manual.push("Zustand");
 
-      manual.push("Marke & Größe");
-      if (!condOk) manual.push("Zustand");
+      // Größe / Farbe / Material (fixed dropdowns) + Marke (search field). Every value
+      // comes from the AI attributes; a value the AI could NOT determine is simply
+      // skipped (left blank — never guessed). The brand is only set on an EXACT match.
+      setBackdrop("Details werden ausgefüllt …");
+      var sizeVal = attrValue(draft, "größe");
+      var colorVal = attrValue(draft, "farbe");
+      var materialVal = attrValue(draft, "material");
+      var brandVal = attrValue(draft, "marke");
+
+      var sizeOk = false, colorOk = false, materialOk = false, brandOk = false;
+      if (sizeVal) {
+        try { sizeOk = await selectVintedDropdownValue("größe",
+          ["[data-testid='size-select-dropdown-input']", "[data-testid='size-select-dropdown-chevron']"],
+          [sizeVal], "Größe"); } catch (e) {}
+      }
+      if (colorVal) {
+        try { colorOk = await selectVintedDropdownValue("farbe",
+          ["[data-testid='color-select-dropdown-input']", "[data-testid='color-select-dropdown-chevron']"],
+          [colorVal], "Farbe"); } catch (e) {}
+      }
+      if (materialVal) {
+        try { materialOk = await selectVintedDropdownValue("material",
+          ["[data-testid='material-select-dropdown-input']", "[data-testid='material-select-dropdown-chevron']"],
+          [materialVal], "Material"); } catch (e) {}
+      }
+      if (brandVal) {
+        try { brandOk = await selectVintedBrand(draft); } catch (e) {}
+      }
+
+      if (sizeOk) filled.push("Größe");
+      if (colorOk) filled.push("Farbe");
+      if (materialOk) filled.push("Material");
+      if (brandOk) filled.push("Marke");
+
+      // Only nag about the two key fashion fields, and only when they were NOT set.
+      // "(nicht erkannt)" tells the user it's blank because the AI couldn't read it
+      // off the photos (so they add it), vs. a picker that simply didn't match.
+      if (!brandOk) manual.push("Marke" + (brandVal ? "" : " (nicht auf Fotos erkannt)"));
+      if (!sizeOk) manual.push("Größe" + (sizeVal ? "" : " (nicht auf Fotos erkannt)"));
     } else if (!draft.category) {
       manual.push("Kategorie");
     }
