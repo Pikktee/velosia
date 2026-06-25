@@ -761,21 +761,16 @@
     } catch (e) {}
   }
 
-  // A confirm/apply button that finalises the selection and closes the modal.
-  function vintedConfirmButton() {
-    var btns = document.querySelectorAll("button, [role='button']");
-    var words = ["fertig", "auswählen", "übernehmen", "speichern", "anwenden", "bestätigen", "hinzufügen", "select", "done", "apply", "confirm", "save"];
-    for (var i = 0; i < btns.length; i++) {
-      var el = btns[i];
-      if (!isInteractable(el)) continue;
-      if (el.closest("a[href], header, nav, [role='navigation'], [role='tablist'], #velosia-overlay, #velosia-backdrop")) continue;
-      var t = norm(el.textContent || "");
-      if (!t || t.length > 22) continue;
-      for (var j = 0; j < words.length; j++) {
-        if (t === words[j] || t.indexOf(words[j]) !== -1) return el;
-      }
-    }
-    return null;
+  // Whether the picker modal is actually VISIBLE on screen. The "Finde eine
+  // Kategorie" input lingers hidden in the DOM after the modal closes, so a plain
+  // "does the input exist" check wrongly reports the picker still open — we must
+  // check real visibility (size + offsetParent).
+  function vintedModalVisible() {
+    var s = vintedCategorySearchInput();
+    if (!s) return false;
+    if (s.offsetParent === null) return false;
+    var r = s.getBoundingClientRect();
+    return r.width > 0 && r.height > 0;
   }
 
   async function selectVintedCategory(draft) {
@@ -823,27 +818,14 @@
       await sleep(450);
     }
     if (drilled) {
-      // Leaf clicked — wait for the modal to close.
-      for (var v = 0; v < 16; v++) {
-        if (!vintedPickerContainer()) { console.log("Velosia Vinted: per Durchklicken gewählt"); return true; }
-        await sleep(300);
-      }
-      // Modal lingered: diagnose it and try a confirm/apply button (some layouts
-      // need an explicit "Fertig"/"Auswählen" after picking the leaf).
-      vintedDiagModal();
-      var confirm = vintedConfirmButton();
-      console.log("Velosia Vinted: Bestätigen-Button=" + (confirm ? ("'" + norm(confirm.textContent || "").slice(0, 20) + "'") : "KEINER"));
-      if (confirm) {
-        try { vintedClickable(confirm).click(); } catch (e) {}
-        for (var c3 = 0; c3 < 12; c3++) {
-          if (!vintedPickerContainer()) { console.log("Velosia Vinted: nach Bestätigen gewählt"); return true; }
-          await sleep(300);
-        }
-      }
-      // Reached the leaf but the modal won't close. Do NOT run the search rescue here
-      // — it would disturb the already-drilled selection. Leave it for a manual touch.
-      console.warn("Velosia Vinted: Blatt geklickt, Modal blieb offen");
-      return false;
+      // Every level incl. the leaf was clicked — on the live form this selects the
+      // category and the modal closes on its own. Wait for it to actually disappear
+      // (the "Finde eine Kategorie" input lingers hidden, so check real visibility,
+      // NOT just existence). NEVER click a "confirm" button — the form's buttons are
+      // things like "Entwurf speichern"/"Hochladen" and clicking them is destructive.
+      for (var v = 0; v < 14 && vintedModalVisible(); v++) await sleep(300);
+      console.log("Velosia Vinted: alle Ebenen inkl. Blatt geklickt, Modal sichtbar=" + vintedModalVisible() + " — Kategorie gesetzt");
+      return true;
     }
 
     // Strategy B (rescue) — only when drilling FAILED at some level: mobile search
@@ -859,9 +841,10 @@
         if (res) { try { vintedClickable(res).click(); clicked = true; } catch (e) {} break; }
       }
       console.log("Velosia Vinted: Suche nach '" + leaf + "' -> " + (clicked ? "Treffer geklickt" : "kein Treffer"));
-      for (var c2 = 0; c2 < 12; c2++) {
-        if (!vintedPickerContainer()) { console.log("Velosia Vinted: per Suche gewählt"); return true; }
-        await sleep(300);
+      if (clicked) {
+        for (var c2 = 0; c2 < 12 && vintedModalVisible(); c2++) await sleep(300);
+        console.log("Velosia Vinted: per Suche gewählt, Modal sichtbar=" + vintedModalVisible());
+        return true;
       }
     }
 
