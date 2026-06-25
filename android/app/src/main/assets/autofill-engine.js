@@ -1062,8 +1062,13 @@
     add(value);
     var w = /w\s*(\d{2,3})/i.exec(value), l = /l\s*(\d{2,3})/i.exec(value);
     if (w && l) {
-      add("W" + w[1] + " L" + l[1]); add("W" + w[1] + "/L" + l[1]);
-      add(w[1] + "/" + l[1]); add(w[1] + " x " + l[1]); add(w[1]);
+      // Vinted's jeans size list is keyed on the WAIST only (e.g. "W36"), with no
+      // separate length option — so the waist spellings come FIRST, the combined and
+      // the bare number only as fallbacks.
+      add("W" + w[1]); add("W" + w[1] + " L" + l[1]); add("W" + w[1] + "/L" + l[1]);
+      add(w[1] + "/" + l[1]); add(w[1]);
+    } else if (w) {
+      add("W" + w[1]); add(w[1]);
     } else {
       var nums = String(value).match(/\d{2,3}/g);
       if (nums && nums.length) add(nums[0]);
@@ -1076,11 +1081,33 @@
   // "Fertig" save if the picker uses one. Used for Zustand / Größe / Farbe / Material.
   // Best-effort and side-effect-safe: if the field or option is absent it just leaves
   // the value blank (returns false) — we NEVER pick a wrong option.
+  // Dump the short, leaf-ish option labels currently visible in the open picker so we
+  // can see EXACTLY which values Vinted offers (e.g. the real jeans size list).
+  function vintedDiagPicker(tag) {
+    try {
+      var root = vintedPickerContainer() || document.body;
+      var nodes = root.querySelectorAll("button, li, [role='option'], [role='button'], [class*='Cell'], div, span");
+      var out = [], seen = {};
+      for (var i = 0; i < nodes.length && out.length < 18; i++) {
+        var el = nodes[i];
+        if (!isInteractable(el)) continue;
+        if (el.closest("a[href], header, nav, [role='tablist'], [role='tab'], #velosia-backdrop, #velosia-overlay")) continue;
+        if (el.querySelector("input, textarea")) continue;
+        if (el.getElementsByTagName("*").length > 3) continue;
+        var t = norm(el.textContent || "");
+        if (!t || t.length > 20 || seen[t]) continue;
+        seen[t] = 1; out.push("'" + t + "'");
+      }
+      console.log("Velosia Vinted DIAGPICKER " + tag + " [" + out.length + "]: " + out.join(" "));
+    } catch (e) {}
+  }
+
   async function selectVintedDropdownValue(fieldLabel, testidHints, candidates, logName, avoidWords) {
     candidates = (candidates || []).filter(Boolean);
     if (!candidates.length) return false;
     var opener = vintedDropdownOpener(fieldLabel, testidHints, avoidWords);
     if (!opener) { console.log("Velosia Vinted: " + logName + "-Feld nicht gefunden — manuell"); return false; }
+    var beforeText = norm(opener.textContent || opener.value || "");
 
     function findOptionRow() {
       var root = vintedPickerContainer() || document.body;
@@ -1091,7 +1118,7 @@
       return null;
     }
 
-    var picked = null;
+    var picked = null, dumped = false;
     for (var attempt = 0; attempt < 3 && !picked; attempt++) {
       try {
         opener.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
@@ -1100,21 +1127,34 @@
       } catch (e) {}
       for (var s = 0; s < 8 && !picked; s++) {
         await sleep(300);
+        if (!dumped && s === 2) { vintedDiagPicker(logName); dumped = true; }
         picked = findOptionRow();
       }
     }
     if (!picked) {
-      vintedDiagOptions();
+      vintedDiagPicker(logName);
       console.log("Velosia Vinted: " + logName + "-Option (" + candidates.join("/") + ") nicht gefunden");
       return false;
     }
+    var rowText = norm(picked.row.textContent || "").slice(0, 24);
     try { vintedClickable(picked.row).click(); } catch (e) {}
     // Some Vinted dropdowns commit on click; the modal variant needs the "Fertig" save.
     await sleep(250);
     var save = vintedSaveButton();
     if (save) { try { vintedClickable(save).click(); } catch (e) {} await sleep(300); }
-    console.log("Velosia Vinted: " + logName + " '" + picked.label + "' gesetzt");
-    return true;
+
+    // Verify honestly: re-read the collapsed field; it should now show the value
+    // instead of the bare label. If nothing changed, the click did NOT take — report
+    // the field as still open rather than falsely claiming success.
+    await sleep(150);
+    var after = vintedDropdownOpener(fieldLabel, testidHints, avoidWords);
+    var afterText = after ? norm(after.textContent || after.value || "") : beforeText;
+    var num = (norm(picked.label).match(/\d+/) || [""])[0];
+    var verified = (afterText !== beforeText) || (num && afterText.indexOf(num) !== -1) ||
+                   afterText.indexOf(norm(picked.label)) !== -1;
+    console.log("Velosia Vinted: " + logName + " Kandidat='" + picked.label + "' Zeile='" + rowText +
+      "' -> " + (verified ? "übernommen" : "Klick OHNE Übernahme (Feld unverändert)"));
+    return !!verified;
   }
 
   async function selectVintedCondition(draft) {
