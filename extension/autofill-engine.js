@@ -715,6 +715,18 @@
     return (el.closest && el.closest("button, li, [role='button'], [role='option'], [role='menuitem'], div[tabindex]")) || el;
   }
 
+  // Robust click for picker option rows whose React handler may sit on a label-wrapped
+  // hidden radio/checkbox rather than the visible row: prefer the input, and fire a
+  // full mousedown→mouseup→click sequence (some Vinted sheets ignore a bare .click()).
+  function vintedRobustClick(el) {
+    var input = (el.querySelector && el.querySelector("input[type='radio'], input[type='checkbox']")) || null;
+    var target = input || vintedClickable(el);
+    var opts = { bubbles: true, cancelable: true, view: window };
+    try { target.dispatchEvent(new MouseEvent("mousedown", opts)); } catch (e) {}
+    try { target.dispatchEvent(new MouseEvent("mouseup", opts)); } catch (e) {}
+    try { target.click(); } catch (e) { try { target.dispatchEvent(new MouseEvent("click", opts)); } catch (e2) {} }
+  }
+
   // Robust, layout-agnostic match for a category row by its visible label. Works for
   // the desktop web_ui rows AND the mobile React rows (often a plain <div> with an
   // onClick and NO role/tabindex). Returns the DEEPEST element whose normalized own
@@ -1107,21 +1119,25 @@
   // so we can identify the real "confirm" control for fields that need one (e.g. size).
   function vintedDiagCommit(logName, row) {
     try {
-      var modalOpen = !!(document.querySelector("[role='dialog'], [aria-modal='true']")) || vintedModalVisible();
-      var btns = document.querySelectorAll("button, [role='button']");
+      var sheet = document.querySelector("[role='dialog'], [aria-modal='true'], [class*='heet'], [class*='rawer']");
+      var scope = sheet || document;
+      var modalOpen = !!sheet || vintedModalVisible();
+      var btns = scope.querySelectorAll("button, [role='button'], [data-testid]");
       var blist = [];
-      for (var i = 0; i < btns.length && blist.length < 12; i++) {
+      for (var i = 0; i < btns.length && blist.length < 16; i++) {
         var b = btns[i];
         if (!isInteractable(b)) continue;
         if (b.closest("a[href], header, nav, [role='tablist'], [role='tab'], #velosia-backdrop, #velosia-overlay")) continue;
-        var bt = norm(b.textContent || b.getAttribute("aria-label") || "");
         var btid = b.getAttribute("data-testid") || "";
+        if (btid.indexOf("media-select-grid") !== -1 || btid.indexOf("search-bar") !== -1) continue;
+        var bt = norm(b.textContent || b.getAttribute("aria-label") || "");
         if ((!bt || bt.length > 22) && !btid) continue;
         blist.push("'" + bt.slice(0, 16) + "'" + (btid ? "#" + btid.slice(0, 30) : ""));
       }
       var anc = row.closest("[aria-checked], [aria-selected], input[type='radio'], input[type='checkbox']");
       var sel = anc ? (anc.tagName + "=" + (anc.getAttribute("aria-checked") || anc.getAttribute("aria-selected") || anc.checked)) : "-";
-      console.log("Velosia Vinted DIAGCOMMIT " + logName + ": modalOpen=" + modalOpen + " sel=" + sel + " btns=" + blist.join(" "));
+      console.log("Velosia Vinted DIAGCOMMIT " + logName + ": modalOpen=" + modalOpen +
+        " sheet=" + (sheet ? ("" + (sheet.className || "")).slice(0, 26) : "none") + " sel=" + sel + " btns=" + blist.join(" "));
     } catch (e) {}
   }
 
@@ -1160,10 +1176,11 @@
       return false;
     }
     var rowText = norm(picked.row.textContent || "").slice(0, 24);
-    try { vintedClickable(picked.row).click(); } catch (e) {}
+    if (verbose) { vintedDiagPicker(logName); vintedDiagCommit(logName + "-vor", picked.row); }
+    vintedRobustClick(picked.row);
     // Some Vinted dropdowns commit on click; the modal variant needs the "Fertig" save.
     await sleep(300);
-    if (verbose) vintedDiagCommit(logName, picked.row);
+    if (verbose) vintedDiagCommit(logName + "-nach", picked.row);
     var save = vintedSaveButton();
     if (save) { try { vintedClickable(save).click(); } catch (e) {} await sleep(300); }
 
