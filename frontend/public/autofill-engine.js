@@ -1102,7 +1102,30 @@
     } catch (e) {}
   }
 
-  async function selectVintedDropdownValue(fieldLabel, testidHints, candidates, logName, avoidWords) {
+  // After clicking an option, dump whether a sheet/modal is still open, which commit
+  // buttons it exposes (text + testid), and whether the clicked row reads as selected —
+  // so we can identify the real "confirm" control for fields that need one (e.g. size).
+  function vintedDiagCommit(logName, row) {
+    try {
+      var modalOpen = !!(document.querySelector("[role='dialog'], [aria-modal='true']")) || vintedModalVisible();
+      var btns = document.querySelectorAll("button, [role='button']");
+      var blist = [];
+      for (var i = 0; i < btns.length && blist.length < 12; i++) {
+        var b = btns[i];
+        if (!isInteractable(b)) continue;
+        if (b.closest("a[href], header, nav, [role='tablist'], [role='tab'], #velosia-backdrop, #velosia-overlay")) continue;
+        var bt = norm(b.textContent || b.getAttribute("aria-label") || "");
+        var btid = b.getAttribute("data-testid") || "";
+        if ((!bt || bt.length > 22) && !btid) continue;
+        blist.push("'" + bt.slice(0, 16) + "'" + (btid ? "#" + btid.slice(0, 30) : ""));
+      }
+      var anc = row.closest("[aria-checked], [aria-selected], input[type='radio'], input[type='checkbox']");
+      var sel = anc ? (anc.tagName + "=" + (anc.getAttribute("aria-checked") || anc.getAttribute("aria-selected") || anc.checked)) : "-";
+      console.log("Velosia Vinted DIAGCOMMIT " + logName + ": modalOpen=" + modalOpen + " sel=" + sel + " btns=" + blist.join(" "));
+    } catch (e) {}
+  }
+
+  async function selectVintedDropdownValue(fieldLabel, testidHints, candidates, logName, avoidWords, verbose) {
     candidates = (candidates || []).filter(Boolean);
     if (!candidates.length) return false;
     var opener = vintedDropdownOpener(fieldLabel, testidHints, avoidWords);
@@ -1139,7 +1162,8 @@
     var rowText = norm(picked.row.textContent || "").slice(0, 24);
     try { vintedClickable(picked.row).click(); } catch (e) {}
     // Some Vinted dropdowns commit on click; the modal variant needs the "Fertig" save.
-    await sleep(250);
+    await sleep(300);
+    if (verbose) vintedDiagCommit(logName, picked.row);
     var save = vintedSaveButton();
     if (save) { try { vintedClickable(save).click(); } catch (e) {} await sleep(300); }
 
@@ -1638,7 +1662,7 @@
         try { sizeOk = await selectVintedDropdownValue("größe",
           ["[data-testid='size-select-dropdown-input']", "[data-testid='size-select-dropdown-chevron']"],
           vintedSizeCandidates(sizeVal), "Größe",
-          ["versand", "paket", "pushen", "schneller", "sichtbarkeit", "spotlight"]); } catch (e) {}
+          ["versand", "paket", "pushen", "schneller", "sichtbarkeit", "spotlight"], true); } catch (e) {}
       }
       if (colorVal) {
         try { colorOk = await selectVintedDropdownValue("farbe",
