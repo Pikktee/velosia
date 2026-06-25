@@ -7,6 +7,7 @@ import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.util.Log
 import android.view.View
 import android.webkit.*
 import android.widget.Toast
@@ -87,6 +88,12 @@ class MainActivity : AppCompatActivity() {
         webView = findViewById(R.id.webView)
         fabFill = findViewById(R.id.fabFill)
         fabClose = findViewById(R.id.fabClose)
+
+        // Enable remote inspection of the WebView (chrome://inspect) and route the
+        // engine's console logs to Logcat. Invaluable for diagnosing autofill on the
+        // live Play build during the internal-test phase.
+        // TODO: gate behind BuildConfig.DEBUG (or remove) before the public production release.
+        WebView.setWebContentsDebuggingEnabled(true)
 
         // Configure WebView settings
         val settings = webView.settings
@@ -179,6 +186,14 @@ class MainActivity : AppCompatActivity() {
                     // Grant WebRTC camera permission dynamically
                     request.grant(request.resources)
                 }
+            }
+
+            // Forward WebView console output to Logcat so the engine's autofill logs
+            // ("Velosia …") are visible via `adb logcat -s VelosiaWeb` even without
+            // chrome://inspect.
+            override fun onConsoleMessage(msg: ConsoleMessage): Boolean {
+                Log.d("VelosiaWeb", "${msg.message()} @${msg.sourceId()}:${msg.lineNumber()}")
+                return true
             }
 
             override fun getDefaultVideoPoster(): android.graphics.Bitmap? {
