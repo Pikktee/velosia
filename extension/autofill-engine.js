@@ -742,22 +742,24 @@
     } catch (e) {}
   }
 
-  // Diagnostic: after drilling to the leaf, log the modal's buttons / selection state
-  // so we can see whether a confirm step ("Fertig"/"Auswählen") is needed to close it.
+  // Diagnostic: while the picker modal is OPEN, log its buttons / close controls
+  // (incl. icon buttons via aria-label) so we can find a SAFE way to close it while
+  // keeping the selection (X / Zurück / Fertig — but never Abbrechen/Cancel).
   function vintedDiagModal() {
     try {
-      var btns = document.querySelectorAll("button, [role='button']");
+      var nodes = document.querySelectorAll("button, [role='button'], [aria-label]");
       var out = [];
-      for (var i = 0; i < btns.length && out.length < 12; i++) {
-        var el = btns[i];
+      for (var i = 0; i < nodes.length && out.length < 16; i++) {
+        var el = nodes[i];
         if (!isInteractable(el)) continue;
         if (el.closest("a[href], header, nav, [role='navigation'], [role='tablist'], #velosia-overlay, #velosia-backdrop")) continue;
-        var t = norm(el.textContent || el.getAttribute("aria-label") || "");
+        var text = norm(el.textContent || "");
+        var label = norm(el.getAttribute("aria-label") || "");
+        var t = text || label;
         if (!t || t.length > 30) continue;
-        out.push("'" + t.slice(0, 26) + "'");
+        out.push(el.tagName + " '" + t.slice(0, 22) + "'" + (label && label !== text ? " aria='" + label.slice(0, 16) + "'" : ""));
       }
-      var checked = document.querySelectorAll("input:checked, [aria-checked='true'], [aria-selected='true']").length;
-      console.log("Velosia Vinted DIAGMODAL buttons[" + out.length + "]: " + out.join(" ") + " | selected=" + checked);
+      console.log("Velosia Vinted DIAGMODAL [" + out.length + "]: " + out.join("  ||  "));
     } catch (e) {}
   }
 
@@ -824,7 +826,9 @@
       // NOT just existence). NEVER click a "confirm" button — the form's buttons are
       // things like "Entwurf speichern"/"Hochladen" and clicking them is destructive.
       for (var v = 0; v < 14 && vintedModalVisible(); v++) await sleep(300);
-      console.log("Velosia Vinted: alle Ebenen inkl. Blatt geklickt, Modal sichtbar=" + vintedModalVisible() + " — Kategorie gesetzt");
+      var stillOpen = vintedModalVisible();
+      console.log("Velosia Vinted: alle Ebenen inkl. Blatt geklickt, Modal sichtbar=" + stillOpen + " — Kategorie gesetzt");
+      if (stillOpen) { vintedDiagModal(); vintedDiag(names[names.length - 1] || ""); }
       return true;
     }
 
