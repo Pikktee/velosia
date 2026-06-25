@@ -716,7 +716,7 @@
   // a hidden radio rather than role=button elements.
   function vintedClickable(el) {
     return (el.closest && el.closest(
-      "button, li, [role='button'], [role='option'], [role='menuitem'], [role='radio'], label, div[tabindex], [class*='Cell__cell'], [class*='Cell__default']"
+      "button, li, [role='button'], [role='option'], [role='menuitem'], [role='radio'], [role='checkbox'], label, div[tabindex], [class*='Cell__cell'], [class*='Cell__default']"
     )) || el;
   }
 
@@ -730,7 +730,7 @@
       // No clickable ancestor — look for a clickable DESCENDANT (Vinted's size rows wrap
       // the option in an inner button/[role]/cell inside the <li>, where the handler is).
       var child = el.querySelector && el.querySelector(
-        "button, [role='button'], [role='option'], [role='radio'], div[tabindex], [class*='Cell__cell'], label"
+        "[role='checkbox'], [role='radio'], [role='button'], [role='option'], button, div[tabindex], [class*='filter-grid__option'], [class*='Cell__cell'], label"
       );
       if (child) target = child;
     }
