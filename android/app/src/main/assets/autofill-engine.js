@@ -925,6 +925,94 @@
   }
 
   // ----------------------------------------------------------------------------
+  // Vinted condition ("Zustand") picker — Velosia already captures the condition,
+  // so we map it to Vinted's own options and select it via the same dropdown/modal
+  // machinery as the category. Brand & size stay manual (no reliable source data).
+  // ----------------------------------------------------------------------------
+  //
+  // Velosia stores a free-text German condition (Neu / Sehr Gut / Gut / …). Vinted's
+  // labels differ slightly and have changed wording over time ("Etikett" vs
+  // "Preisschild"), so each Velosia value maps to a PRIORITISED list of candidate
+  // Vinted labels — the picker tries them in order and clicks the first present row.
+  var VINTED_CONDITION_MAP = {
+    "neu":               ["Neu ohne Preisschild", "Neu ohne Etikett", "Neu mit Preisschild", "Neu mit Etikett", "Neu"],
+    "neuwertig":         ["Sehr gut", "Neu ohne Preisschild"],
+    "sehr gut":          ["Sehr gut"],
+    "gut":               ["Gut"],
+    "zufriedenstellend": ["Zufriedenstellend", "Befriedigend"],
+    "in ordnung":        ["Zufriedenstellend", "Befriedigend"],
+    "befriedigend":      ["Zufriedenstellend", "Befriedigend"]
+  };
+
+  // The collapsed FORM field that opens a Vinted dropdown/modal, identified by its
+  // visible label text (e.g. "Zustand"). Mirrors vintedCategoryOpener but generic.
+  function vintedDropdownOpener(labelNeedle, testidHints) {
+    var o = testidHints && testidHints.length ? firstBySelectors(testidHints) : null;
+    if (o) return o;
+    var cands = document.querySelectorAll("[role='button'], button, [tabindex], input[readonly], li, div");
+    var best = null;
+    for (var i = 0; i < cands.length; i++) {
+      var el = cands[i];
+      if (!isInteractable(el)) continue;
+      if (el.closest("a[href], header, nav, [role='navigation'], [role='tablist'], [role='tab'], #velosia-backdrop, #velosia-overlay")) continue;
+      if (el.querySelector("input, textarea")) continue;
+      var t = norm(el.textContent || el.getAttribute("placeholder") || el.value || "");
+      if (t === labelNeedle || (t.indexOf(labelNeedle) !== -1 && t.length <= labelNeedle.length + 14)) {
+        if (!best || el.getElementsByTagName("*").length < best.getElementsByTagName("*").length) best = el;
+      }
+    }
+    return best;
+  }
+
+  async function selectVintedCondition(draft) {
+    var cond = norm(draft.condition || "");
+    if (!cond) return false;
+    var candidates = VINTED_CONDITION_MAP[cond];
+    if (!candidates) { console.log("Velosia Vinted: Zustand '" + cond + "' ohne Vinted-Entsprechung — manuell"); return false; }
+
+    var opener = vintedDropdownOpener("zustand", [
+      "[data-testid='condition-select-dropdown-input']",
+      "[data-testid='condition-select-dropdown-chevron']",
+      "[data-testid='status-select-dropdown-input']"
+    ]);
+    if (!opener) { console.log("Velosia Vinted: Zustand-Feld nicht gefunden — manuell"); return false; }
+
+    function findOptionRow() {
+      var root = vintedPickerContainer() || document.body;
+      for (var k = 0; k < candidates.length; k++) {
+        var row = vintedRowMatch(root, candidates[k]);
+        if (row) return { row: row, label: candidates[k] };
+      }
+      return null;
+    }
+
+    var picked = null;
+    for (var attempt = 0; attempt < 3 && !picked; attempt++) {
+      try {
+        opener.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
+        opener.click();
+        if (opener.focus) opener.focus();
+      } catch (e) {}
+      for (var s = 0; s < 8 && !picked; s++) {
+        await sleep(300);
+        picked = findOptionRow();
+      }
+    }
+    if (!picked) {
+      vintedDiagOptions();
+      console.log("Velosia Vinted: Zustand-Option (" + candidates.join("/") + ") nicht gefunden");
+      return false;
+    }
+    try { vintedClickable(picked.row).click(); } catch (e) {}
+    // Some Vinted dropdowns commit on click; the modal variant needs the "Fertig" save.
+    await sleep(250);
+    var save = vintedSaveButton();
+    if (save) { try { vintedClickable(save).click(); } catch (e) {} await sleep(300); }
+    console.log("Velosia Vinted: Zustand '" + picked.label + "' gesetzt");
+    return true;
+  }
+
+  // ----------------------------------------------------------------------------
   // Submit handling
   // ----------------------------------------------------------------------------
 
@@ -983,8 +1071,8 @@
       s.id = "velosia-style";
       s.textContent =
         "@keyframes velosia-spin{to{transform:rotate(360deg)}}" +
-        "@keyframes velosia-bounce{0%,100%{transform:translateY(0)}50%{transform:translateY(9px)}}" +
         "@keyframes velosia-pulse{0%,100%{box-shadow:0 0 0 4px rgba(9,176,183,.6)}50%{box-shadow:0 0 0 10px rgba(9,176,183,.12)}}" +
+        "@keyframes velosia-breathe{0%,100%{transform:scale(1);opacity:.85}50%{transform:scale(1.08);opacity:1}}" +
         "@keyframes velosia-fade{from{opacity:0}to{opacity:1}}";
       (document.head || document.documentElement).appendChild(s);
     } catch (e) {}
@@ -1046,14 +1134,21 @@
       "pointer-events:auto", "animation:velosia-fade .2s ease",
       "font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif"
     ].join(";");
-    var spinner = '<div style="width:46px;height:46px;border-radius:50%;' +
-      'border:4px solid rgba(255,255,255,.15);border-top-color:#09b0b7;' +
-      'animation:velosia-spin .8s linear infinite;"></div>';
+    // A sleek dual-layer spinner: a gradient conic ring (masked to a thin band) over a
+    // soft "breathing" glow. No progress text — the animation alone signals "working".
+    var spinner =
+      '<div style="position:relative;width:62px;height:62px;display:flex;align-items:center;justify-content:center;">' +
+        '<div style="position:absolute;inset:8px;border-radius:50%;background:radial-gradient(circle,rgba(9,176,183,.35),transparent 70%);animation:velosia-breathe 1.8s ease-in-out infinite;"></div>' +
+        '<div style="width:62px;height:62px;border-radius:50%;' +
+          'background:conic-gradient(from 0deg,rgba(9,176,183,0) 0deg,#09b0b7 130deg,#ec4899 290deg,rgba(236,72,153,0) 360deg);' +
+          '-webkit-mask:radial-gradient(farthest-side,transparent calc(100% - 5px),#000 calc(100% - 5px));' +
+          'mask:radial-gradient(farthest-side,transparent calc(100% - 5px),#000 calc(100% - 5px));' +
+          'animation:velosia-spin .9s linear infinite;"></div>' +
+      '</div>';
     bd.innerHTML =
-      '<div style="font-weight:700;font-size:16px;background:linear-gradient(135deg,#09b0b7,#ec4899);' +
+      '<div style="font-weight:700;font-size:16px;letter-spacing:.3px;background:linear-gradient(135deg,#09b0b7,#ec4899);' +
         '-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;">✨ Velosia</div>' +
-      spinner +
-      '<div id="velosia-backdrop-text" style="color:#e2e8f0;font-size:14px;max-width:80vw;text-align:center;padding:0 16px;">Formular wird vorbereitet …</div>';
+      spinner;
     document.body.appendChild(bd);
     _backdropSync = bindViewport(function () {
       var r = viewportRect();
@@ -1081,47 +1176,26 @@
     } catch (e) { try { bd.remove(); } catch (e2) {} }
   }
 
-  // Floating arrow that points at the publish button and keeps tracking it on
-  // scroll/zoom, so the user immediately knows what to tap once the form is filled
-  // (manual mode only). getBoundingClientRect and position:fixed share the layout-
-  // viewport coordinate space, so the arrow stays glued to the button under pan/zoom.
+  // Gently highlight the publish button once the form is filled (manual mode): scroll
+  // it into view and apply a soft pulsing ring so the user knows what to tap. We no
+  // longer render a separate bouncing "Hier veröffentlichen" label — the pulsing
+  // button alone is enough and far less intrusive.
   function pointToButton(btn) {
     if (!btn) return;
     injectStyleOnce();
     try { btn.scrollIntoView({ behavior: "smooth", block: "center" }); } catch (e) {}
     try { btn.style.animation = "velosia-pulse 1.4s infinite"; btn.style.borderRadius = btn.style.borderRadius || "8px"; } catch (e) {}
-    setTimeout(function () {
-      var old = document.getElementById("velosia-arrow");
-      if (old) old.remove();
-      var a = document.createElement("div");
-      a.id = "velosia-arrow";
-      a.textContent = "👇 Hier veröffentlichen";
-      a.style.cssText = [
-        "position:fixed", "z-index:2147483647", "pointer-events:none",
-        "background:linear-gradient(135deg,#09b0b7,#ec4899)", "color:#fff",
-        "padding:7px 13px", "border-radius:999px", "font-size:13px", "font-weight:700",
-        "font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif",
-        "box-shadow:0 8px 24px rgba(0,0,0,.45)", "animation:velosia-bounce 1s ease-in-out infinite",
-        "white-space:nowrap"
-      ].join(";");
-      document.body.appendChild(a);
-      bindViewport(function () {
-        var r = btn.getBoundingClientRect();
-        var top = r.top - 46;
-        if (top < 8) top = r.bottom + 10; // not enough room above -> sit below
-        var left = r.left + r.width / 2 - a.offsetWidth / 2;
-        var vp = viewportRect();
-        left = Math.max(vp.left + 8, Math.min(vp.left + vp.width - a.offsetWidth - 8, left));
-        a.style.top = top + "px";
-        a.style.left = left + "px";
-      });
-    }, 650);
   }
 
   function showOverlay(result, autoSubmit) {
     try {
       var existing = document.getElementById("velosia-overlay");
       if (existing) existing.remove();
+
+      // Only surface what STILL NEEDS a manual touch — successfully filled fields stay
+      // silent (no clutter). The panel is dismissible via × or the explicit "Ok" button.
+      var open = (result.manual || []).slice();
+      var photosMissing = !(result.photos > 0);
 
       var box = document.createElement("div");
       box.id = "velosia-overlay";
@@ -1134,33 +1208,37 @@
         "font-size:13px", "line-height:1.45", "box-sizing:border-box"
       ].join(";");
 
-      function row(icon, label, color) {
-        return '<div style="display:flex;gap:8px;align-items:flex-start;margin-top:5px;">' +
-               '<span style="flex-shrink:0;color:' + color + ';">' + icon + '</span>' +
+      function row(label) {
+        return '<div style="display:flex;gap:8px;align-items:flex-start;margin-top:6px;">' +
+               '<span style="flex-shrink:0;color:#f59e0b;">•</span>' +
                '<span style="color:#cbd5e1;">' + label + '</span></div>';
       }
 
-      var filledHtml = result.filled.map(function (f) { return row("✓", f, "#34d399"); }).join("");
-      var manualHtml = result.manual.map(function (f) { return row("•", f + " — bitte selbst wählen", "#f59e0b"); }).join("");
-      var photoHtml = result.photos > 0
-        ? row("✓", result.photos + (result.photos === 1 ? " Foto übertragen" : " Fotos übertragen"), "#34d399")
-        : row("•", "Fotos — bitte selbst hinzufügen", "#f59e0b");
-
-      var footer;
-      if (result.phase === "category") {
-        footer = '<div style="margin-top:11px;color:#94a3b8;font-size:12px;">Kategorie wird gewählt …</div>';
-      } else if (autoSubmit) {
-        footer = '<div style="margin-top:11px;color:#94a3b8;font-size:12px;">Wird automatisch veröffentlicht …</div>';
+      var title, bodyHtml;
+      if (open.length === 0 && !photosMissing) {
+        // Everything the engine handles is done — short confirmation only.
+        title = "✅ Alles ausgefüllt";
+        bodyHtml = '<div style="margin-top:6px;color:#94a3b8;font-size:12px;">' +
+          (autoSubmit ? "Wird automatisch veröffentlicht …"
+                      : "Prüfe kurz und tippe unten auf <b>Hochladen</b>.") + "</div>";
       } else {
-        footer = '<div style="margin-top:11px;color:#e2e8f0;font-size:12px;background:rgba(9,176,183,.12);border:1px solid rgba(9,176,183,.3);border-radius:8px;padding:8px 10px;">Prüfe die Angaben und klicke unten auf <b>Veröffentlichen</b>.</div>';
+        title = "Noch offen";
+        var items = open.map(function (f) { return row(f); }).join("");
+        if (photosMissing) items += row("Fotos — bitte selbst hinzufügen");
+        bodyHtml = items +
+          '<div style="margin-top:10px;color:#94a3b8;font-size:12px;">Bitte ergänze diese Punkte' +
+          (autoSubmit ? "." : ", dann tippe auf <b>Hochladen</b>.") + "</div>";
       }
 
       box.innerHTML =
-        '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">' +
-          '<span style="font-weight:700;background:linear-gradient(135deg,#09b0b7,#ec4899);-webkit-background-clip:text;-webkit-text-fill-color:transparent;">✨ Velosia</span>' +
+        '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:2px;">' +
+          '<span style="font-weight:700;background:linear-gradient(135deg,#09b0b7,#ec4899);-webkit-background-clip:text;-webkit-text-fill-color:transparent;">✨ ' + title + '</span>' +
           '<span id="velosia-overlay-close" style="cursor:pointer;color:#94a3b8;font-size:18px;line-height:1;">&times;</span>' +
         '</div>' +
-        filledHtml + photoHtml + manualHtml + footer;
+        bodyHtml +
+        '<button id="velosia-overlay-ok" style="margin-top:12px;width:100%;border:0;cursor:pointer;' +
+          'background:linear-gradient(135deg,#09b0b7,#ec4899);color:#fff;font-weight:700;font-size:13px;' +
+          'padding:9px 12px;border-radius:9px;font-family:inherit;">Ok</button>';
 
       document.body.appendChild(box);
       // Anchor to the visible viewport's bottom-right (tracks scroll/zoom) so the
@@ -1170,11 +1248,11 @@
         box.style.left = Math.max(r.left + 8, r.left + r.width - box.offsetWidth - 16) + "px";
         box.style.top = (r.top + r.height - box.offsetHeight - 16) + "px";
       });
+      function dismiss() { unbindViewport(sync); if (box && box.parentNode) box.remove(); }
       var close = document.getElementById("velosia-overlay-close");
-      if (close) close.addEventListener("click", function () { unbindViewport(sync); box.remove(); });
-      if (result.phase !== "category" && !autoSubmit) {
-        setTimeout(function () { if (box && box.parentNode) box.style.opacity = "0.96"; }, 50);
-      }
+      if (close) close.addEventListener("click", dismiss);
+      var ok = document.getElementById("velosia-overlay-ok");
+      if (ok) ok.addEventListener("click", dismiss);
     } catch (e) { /* overlay is best-effort, never block autofill */ }
   }
 
@@ -1261,8 +1339,9 @@
       dedupAttr.forEach(function (lbl) { filled.push(lbl); });
     }
 
-    // Vinted: drive the category picker automatically (drilled by catalog id /
-    // name). Brand / size / condition are separate pickers — still manual for now.
+    // Vinted: drive the category picker automatically (drilled by catalog id / name),
+    // then the condition picker (Velosia captures the condition). Brand & size are
+    // separate pickers with no reliable source data — still manual.
     if (platform === "vinted") {
       setBackdrop("Kategorie wird ausgewählt …");
       var vintedCatOk = false;
@@ -1272,7 +1351,16 @@
       }
       if (vintedCatOk) filled.push("Kategorie");
       else manual.push("Kategorie");
-      manual.push("Marke, Größe, Zustand");
+
+      // Condition ("Zustand"): best-effort, only after the category modal has closed.
+      var condOk = false;
+      if (draft.condition) {
+        try { condOk = await selectVintedCondition(draft); } catch (e) { condOk = false; }
+      }
+      if (condOk) filled.push("Zustand");
+
+      manual.push("Marke & Größe");
+      if (!condOk) manual.push("Zustand");
     } else if (!draft.category) {
       manual.push("Kategorie");
     }

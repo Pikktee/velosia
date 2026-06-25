@@ -37,7 +37,6 @@ import java.util.concurrent.atomic.AtomicInteger
 class MainActivity : AppCompatActivity() {
 
     private lateinit var webView: WebView
-    private lateinit var fabFill: ExtendedFloatingActionButton
     private lateinit var fabClose: ExtendedFloatingActionButton
 
     private val RC_SIGN_IN = 9001
@@ -97,7 +96,6 @@ class MainActivity : AppCompatActivity() {
         }
 
         webView = findViewById(R.id.webView)
-        fabFill = findViewById(R.id.fabFill)
         fabClose = findViewById(R.id.fabClose)
 
         // Enable remote inspection of the WebView (chrome://inspect) and route the
@@ -143,7 +141,6 @@ class MainActivity : AppCompatActivity() {
                 val isFormPage = isVintedForm || isKleinanzeigenForm
 
                 if (activeDraftJson != null && (isFormPage || isKleinanzeigenCategory)) {
-                    fabFill.visibility = View.VISIBLE
                     // On the actual form, fill once it has loaded. Whether it ALSO
                     // submits depends on the user's "publish automatically" setting
                     // (default off -> the user reviews and clicks publish himself).
@@ -159,8 +156,6 @@ class MainActivity : AppCompatActivity() {
                         hasAutoCategory = true
                         webView.postDelayed({ injectAutofill(autoSubmit = false) }, 600)
                     }
-                } else {
-                    fabFill.visibility = View.GONE
                 }
             }
         }
@@ -210,12 +205,6 @@ class MainActivity : AppCompatActivity() {
             override fun getDefaultVideoPoster(): android.graphics.Bitmap? {
                 return android.graphics.Bitmap.createBitmap(1, 1, android.graphics.Bitmap.Config.ARGB_8888)
             }
-        }
-
-        // Configure floating fill action button (manual fill, no auto-submit so the
-        // user can review before publishing)
-        fabFill.setOnClickListener {
-            injectAutofill(autoSubmit = false)
         }
 
         // Close button: leave the external listing page and return to the dashboard
@@ -421,7 +410,6 @@ class MainActivity : AppCompatActivity() {
         draftImageDataUrls = emptyList()
         hasAutoFilled = false
         hasAutoCategory = false
-        fabFill.visibility = View.GONE
         fabClose.visibility = View.GONE
         webView.loadUrl(frontendUrl)
     }
@@ -500,9 +488,6 @@ class MainActivity : AppCompatActivity() {
         webView.evaluateJavascript(engine) {
             webView.evaluateJavascript(caller, null)
         }
-
-        // Keep the draft loaded so the manual FAB can be used to retry if needed.
-        fabFill.visibility = View.GONE
     }
 
     private fun checkCameraPermission() {
