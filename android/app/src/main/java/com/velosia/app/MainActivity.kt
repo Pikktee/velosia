@@ -7,6 +7,7 @@ import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.util.Base64
 import android.util.Log
 import android.view.View
 import android.webkit.*
@@ -28,8 +29,10 @@ import com.google.android.play.core.install.model.UpdateAvailability
 import okhttp3.*
 import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import okhttp3.RequestBody.Companion.toRequestBody
+import org.json.JSONArray
 import org.json.JSONObject
 import java.io.IOException
+import java.util.concurrent.atomic.AtomicInteger
 
 class MainActivity : AppCompatActivity() {
 
@@ -46,6 +49,10 @@ class MainActivity : AppCompatActivity() {
 
     private var activeDraftJson: String? = null
     private var activePlatform: String? = null
+    // All draft photos, fetched server-side (okhttp, no browser CORS) and base64
+    // data-URL encoded, handed to the autofill engine via the JS bridge so it can
+    // inject every photo without a file chooser or a cross-origin fetch.
+    @Volatile private var draftImageDataUrls: List<String> = emptyList()
     private var userZip: String? = null
     // Guards the automatic one-shot fill so it does not re-trigger on every SPA page event
     private var hasAutoFilled = false
@@ -229,6 +236,7 @@ class MainActivity : AppCompatActivity() {
                 Toast.makeText(this@MainActivity, "Lade Angebot #$draftId...", Toast.LENGTH_SHORT).show()
                 hasAutoFilled = false
                 hasAutoCategory = false
+                draftImageDataUrls = emptyList()
                 fetchUserProfile(token)
                 fetchDraftAndPrepare(draftId, platform, token)
             }
@@ -240,6 +248,15 @@ class MainActivity : AppCompatActivity() {
                 startGoogleSignIn(clientId)
             }
         }
+
+        // The autofill engine pulls the prepared draft photos (data: URLs) from here
+        // and injects all of them — no file chooser, no cross-origin fetch.
+        @JavascriptInterface
+        fun getDraftImageCount(): Int = draftImageDataUrls.size
+
+        @JavascriptInterface
+        fun getDraftImageDataUrl(index: Int): String =
+            draftImageDataUrls.getOrNull(index) ?: ""
     }
 
     // Fetch draft metadata from the backend, then navigate to the platform form.
@@ -272,10 +289,80 @@ class MainActivity : AppCompatActivity() {
                     activeDraftJson = bodyString
                     activePlatform = platform
 
-                    runOnUiThread { navigateToPlatformListing(platform) }
+                    prepareImagesAndNavigate(bodyString, platform)
                 }
             }
         })
+    }
+
+    // Extract the draft's photo paths: image_paths (a JSON array, possibly stored as
+    // a Python list repr with single quotes) with image_path as the single fallback.
+    private fun extractImagePaths(draftJson: String): List<String> {
+        return try {
+            val o = JSONObject(draftJson)
+            val out = mutableListOf<String>()
+            val ip = o.optString("image_paths")
+            if (ip.isNotEmpty() && ip != "null") {
+                val arr = try { JSONArray(ip) } catch (e: Exception) { JSONArray(ip.replace("'", "\"")) }
+                for (i in 0 until arr.length()) {
+                    val s = arr.optString(i)
+                    if (s.isNotEmpty()) out.add(s)
+                }
+            }
+            if (out.isEmpty()) {
+                val single = o.optString("image_path")
+                if (single.isNotEmpty() && single != "null") out.add(single)
+            }
+            out
+        } catch (e: Exception) {
+            emptyList()
+        }
+    }
+
+    // Download every draft photo with okhttp (server-side: no browser CORS), base64
+    // data-URL encode them for the JS bridge, then navigate. Navigation happens once
+    // all downloads have settled so the photos are ready when the engine asks.
+    private fun prepareImagesAndNavigate(draftJson: String, platform: String) {
+        draftImageDataUrls = emptyList()
+        val paths = extractImagePaths(draftJson)
+        if (paths.isEmpty()) {
+            runOnUiThread { navigateToPlatformListing(platform) }
+            return
+        }
+        val results = arrayOfNulls<String>(paths.size)
+        val remaining = AtomicInteger(paths.size)
+        for ((idx, p) in paths.withIndex()) {
+            val url = if (p.startsWith("http")) p else "$backendUrl$p"
+            okHttpClient.newCall(Request.Builder().url(url).build()).enqueue(object : Callback {
+                override fun onFailure(call: Call, e: IOException) {
+                    if (remaining.decrementAndGet() == 0) finishImagePrep(results, platform)
+                }
+
+                override fun onResponse(call: Call, response: Response) {
+                    response.use {
+                        try {
+                            if (response.isSuccessful) {
+                                val bytes = response.body?.bytes()
+                                if (bytes != null && bytes.isNotEmpty()) {
+                                    val type = response.header("Content-Type") ?: "image/jpeg"
+                                    val b64 = Base64.encodeToString(bytes, Base64.NO_WRAP)
+                                    results[idx] = "data:$type;base64,$b64"
+                                }
+                            }
+                        } catch (e: Exception) {
+                            // skip this image
+                        } finally {
+                            if (remaining.decrementAndGet() == 0) finishImagePrep(results, platform)
+                        }
+                    }
+                }
+            })
+        }
+    }
+
+    private fun finishImagePrep(results: Array<String?>, platform: String) {
+        draftImageDataUrls = results.filterNotNull()
+        runOnUiThread { navigateToPlatformListing(platform) }
     }
 
     private fun navigateToPlatformListing(platform: String) {
@@ -326,6 +413,7 @@ class MainActivity : AppCompatActivity() {
     private fun closeListingView() {
         activeDraftJson = null
         activePlatform = null
+        draftImageDataUrls = emptyList()
         hasAutoFilled = false
         hasAutoCategory = false
         fabFill.visibility = View.GONE
@@ -374,7 +462,7 @@ class MainActivity : AppCompatActivity() {
                     window.__velosia.autofill(draft, {
                         userZip: '$zip',
                         autoSubmit: $autoSubmit,
-                        imageMode: 'datatransfer',
+                        imageMode: 'bridge',
                         backendUrl: '$backendUrl',
                         showOverlay: true
                     });

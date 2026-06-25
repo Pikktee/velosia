@@ -302,6 +302,48 @@
     return count;
   }
 
+  // Convert a data: URL (base64 or url-encoded) to a File, without any network.
+  function dataUrlToFile(dataUrl, baseName) {
+    var m = /^data:([^;,]*)(;base64)?,([\s\S]*)$/.exec(dataUrl || "");
+    if (!m) return null;
+    var type = m[1] || "image/jpeg";
+    var isB64 = !!m[2];
+    var raw = isB64 ? atob(m[3]) : decodeURIComponent(m[3]);
+    var bytes = new Uint8Array(raw.length);
+    for (var i = 0; i < raw.length; i++) bytes[i] = raw.charCodeAt(i);
+    var ext = (type.split("/")[1] || "jpg").replace("jpeg", "jpg");
+    return new File([bytes], baseName + "." + ext, { type: type });
+  }
+
+  // Android path: the native shell fetches every draft photo with okhttp (no browser
+  // CORS) and hands them over as data: URLs through the VelosiaBridge. We build Files
+  // from them and inject ALL of them via a DataTransfer — fully CORS-immune.
+  async function uploadPhotosFromBridge() {
+    var b = (typeof window !== "undefined") ? window.VelosiaBridge : null;
+    if (!b || typeof b.getDraftImageCount !== "function") return -1; // bridge not available
+    var n = 0;
+    try { n = b.getDraftImageCount(); } catch (e) { return -1; }
+    if (!n) return 0;
+    var input = await waitForFileInput();
+    if (!input || typeof DataTransfer === "undefined") return 0;
+    var dt = new DataTransfer();
+    var count = 0;
+    for (var i = 0; i < n; i++) {
+      try {
+        var du = b.getDraftImageDataUrl(i);
+        var f = du ? dataUrlToFile(du, "velosia_" + (i + 1)) : null;
+        if (f) { dt.items.add(f); count++; }
+      } catch (e) { /* skip individual failures */ }
+    }
+    if (count === 0) return 0;
+    try {
+      input.files = dt.files;
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+      input.dispatchEvent(new Event("change", { bubbles: true }));
+    } catch (e) { return 0; }
+    return count;
+  }
+
   // Native fallback (Android, only if DataTransfer is unavailable): trigger the
   // file chooser; the WebView host intercepts onShowFileChooser and supplies the
   // prepared photo URI. Kept for completeness — the datatransfer path is preferred.
@@ -559,73 +601,42 @@
     return (el.closest && el.closest("[role='button'],button,li,a,div[tabindex]")) || el.parentElement || el;
   }
 
-  function vintedFindRowByName(container, name) {
+  // Robust, layout-agnostic match for a category row by its visible label. Works for
+  // the desktop web_ui rows AND the mobile React rows (often a plain <div> with an
+  // onClick and NO role/tabindex, which the old selector-based finder missed).
+  // Returns the DEEPEST element whose normalized own text equals the name (so we
+  // click the actual row, not a big wrapper). Skips our own overlay, the nav header
+  // and any wrapper that contains the search box.
+  function vintedRowMatch(root, name) {
     var target = norm(name);
     if (!target) return null;
-    var i, titleEl;
-    // 1) Desktop markup — real option rows (exclude the navigation header / back).
-    var rows = container.querySelectorAll("li.web_ui__Item__item");
-    for (i = 0; i < rows.length; i++) {
-      if (!isInteractable(rows[i])) continue;
-      if (rows[i].closest("[data-testid^='catalog-navigation']")) continue;
-      titleEl = rows[i].querySelector(".web_ui__Cell__title") || rows[i];
-      if (norm(titleEl.textContent) === target) return rows[i];
-    }
-    var titles = container.querySelectorAll(".web_ui__Cell__title");
-    for (i = 0; i < titles.length; i++) {
-      if (!isInteractable(titles[i])) continue;
-      if (titles[i].closest("[data-testid^='catalog-navigation']")) continue;
-      if (norm(titles[i].textContent) === target) return titles[i];
-    }
-    // 2) Generic fallback (mobile modal): any clickable element whose OWN label
-    // equals the level name. Skip wrappers that contain the search input and the
-    // navigation header so we never click the whole modal / the back button.
-    var cand = container.querySelectorAll("a, button, li, [role='button'], [role='option'], div[tabindex]");
-    var fuzzy = null;
-    for (i = 0; i < cand.length; i++) {
-      if (!isInteractable(cand[i])) continue;
-      if (cand[i].closest("[data-testid^='catalog-navigation']")) continue;
-      if (cand[i].querySelector("input")) continue;
-      var ct = norm(cand[i].textContent || "");
-      if (!ct) continue;
-      if (ct === target) return cand[i];
-      if (!fuzzy && ct.indexOf(target) !== -1 && ct.length <= target.length + 14) fuzzy = cand[i];
-    }
-    return fuzzy;
-  }
-
-  // Pick the best matching search RESULT row (mobile): the most specific element
-  // containing the leaf name, preferring one that also contains the top category so
-  // an ambiguous leaf (e.g. "Jeans" under both Damen and Herren) resolves correctly.
-  function vintedFindSearchResult(container, leaf, top) {
-    var nLeaf = norm(leaf);
-    if (!nLeaf) return null;
-    var nTop = norm(top);
-    var cand = container.querySelectorAll("a, button, li, [role='option'], [role='button'], div[tabindex]");
-    var best = null, bestLen = 1e9, bestTop = false;
-    for (var i = 0; i < cand.length; i++) {
-      var el = cand[i];
+    var nodes = root.querySelectorAll("a, button, li, div, span, p, [role='button'], [role='option'], [role='menuitem']");
+    var exact = [], partial = null;
+    for (var i = 0; i < nodes.length; i++) {
+      var el = nodes[i];
       if (!isInteractable(el)) continue;
-      if (el.querySelector("input")) continue; // skip wrappers holding the search box
-      var txt = norm(el.textContent || "");
-      if (!txt || txt.indexOf(nLeaf) === -1) continue;
-      var hasTop = nTop ? (txt.indexOf(nTop) !== -1) : false;
-      var len = txt.length;
-      if (hasTop && !bestTop) { best = el; bestLen = len; bestTop = true; }
-      else if (hasTop === bestTop && len < bestLen) { best = el; bestLen = len; }
+      if (el.closest("#velosia-backdrop, #velosia-overlay, #velosia-arrow")) continue;
+      if (el.closest("[data-testid^='catalog-navigation']")) continue;
+      if (el.querySelector("input, textarea")) continue;
+      var t = norm(el.textContent || "");
+      if (!t) continue;
+      if (t === target) exact.push(el);
+      else if (!partial && t.indexOf(target) !== -1 && t.length <= target.length + 16) partial = el;
     }
-    return best;
+    if (exact.length) {
+      exact.sort(function (a, b) { return a.getElementsByTagName("*").length - b.getElementsByTagName("*").length; });
+      return exact[0];
+    }
+    return partial;
   }
 
   async function vintedClickLevel(id, name) {
     for (var t = 0; t < 16; t++) {
-      var c = vintedPickerContainer();
-      if (c) {
-        var icon = id ? c.querySelector("[data-testid='catalog-icon-" + id + "']") : null;
-        if (icon && isInteractable(icon)) { vintedClickable(icon).click(); return true; }
-        var row = vintedFindRowByName(c, name);
-        if (row) { vintedClickable(row).click(); return true; }
-      }
+      var c = vintedPickerContainer() || document.body;
+      var icon = id ? c.querySelector("[data-testid='catalog-icon-" + id + "']") : null;
+      if (icon && isInteractable(icon)) { vintedClickable(icon).click(); return true; }
+      var row = vintedRowMatch(c, name) || vintedRowMatch(document.body, name);
+      if (row) { vintedClickable(row).click(); return true; }
       await sleep(350);
     }
     return false;
@@ -644,6 +655,7 @@
     var names = String(draft.vinted_category || draft.vintedCategory || "")
       .split(">").map(function (s) { return s.trim(); }).filter(Boolean);
     if (names.length === 0 && ids.length === 0) return false;
+    console.log("Velosia Vinted: Kategorie '" + names.join(" > ") + "' (ids " + ids.join("/") + ")");
 
     // Open the picker if it is not already open. Desktop exposes a dropdown input;
     // the mobile form opens a modal when its "Kategorie" row is tapped.
@@ -671,44 +683,46 @@
         }
       }
     }
-    if (!vintedPickerContainer()) { console.warn("Velosia Vinted: Kategorie-Picker nicht gefunden/geöffnet"); return false; }
+    var hasSearch = !!vintedCategorySearchInput();
+    console.log("Velosia Vinted: Picker offen=" + !!vintedPickerContainer() + ", Suchfeld=" + hasSearch);
 
-    var leaf = names.length ? names[names.length - 1] : "";
-
-    // Strategy A (mobile) — search box: type the leaf, click the matching result.
-    var search = vintedCategorySearchInput();
-    if (search && leaf) {
-      vintedSetSearch(search, leaf);
-      for (var s = 0; s < 10; s++) {
-        await sleep(300);
-        var res = vintedFindSearchResult(vintedPickerContainer() || document.body, leaf, names[0] || "");
-        if (res) { try { vintedClickable(res).click(); } catch (e) {} break; }
-      }
-      for (var c2 = 0; c2 < 10; c2++) {
-        if (!vintedPickerContainer()) { console.log("Velosia Vinted: Kategorie über Suche gewählt ->", leaf); return true; }
-        await sleep(300);
-      }
-      // Search did not resolve it — clear the box so it doesn't filter the drill list.
-      vintedSetSearch(search, "");
-      await sleep(350);
-    }
-
-    // Strategy B — drill level by level (catalog-id icon first, then name).
-    if (!vintedPickerContainer()) return false;
+    // Strategy A — drill level by level (catalog-id icon first, then robust name
+    // match). This is the most deterministic: each level only shows its own children.
     var levels = Math.max(names.length, ids.length);
+    var drilled = true;
     for (var i = 0; i < levels; i++) {
       var ok = await vintedClickLevel(ids[i] || null, names[i] || "");
       console.log("Velosia Vinted: Ebene " + i + " '" + (names[i] || "") + "' (id " + (ids[i] || "-") + ") -> " + (ok ? "geklickt" : "NICHT gefunden"));
-      if (!ok) return false;
+      if (!ok) { drilled = false; break; }
       await sleep(450);
     }
-
-    // Honest success: only report "Kategorie ✓" if the picker actually closed.
-    for (var v = 0; v < 12; v++) {
-      if (!vintedPickerContainer()) return true;
-      await sleep(300);
+    if (drilled) {
+      for (var v = 0; v < 12; v++) {
+        if (!vintedPickerContainer()) { console.log("Velosia Vinted: per Durchklicken gewählt"); return true; }
+        await sleep(300);
+      }
     }
-    console.warn("Velosia Vinted: Picker blieb offen — Blatt evtl. nicht ausgewählt");
+
+    // Strategy B (rescue) — mobile search box: type the leaf, click the matching
+    // result. Used when drilling stalled (e.g. a level rendered differently).
+    var leaf = names.length ? names[names.length - 1] : "";
+    var search = vintedCategorySearchInput();
+    if (search && leaf) {
+      vintedSetSearch(search, leaf);
+      var clicked = false;
+      for (var s = 0; s < 12; s++) {
+        await sleep(300);
+        var res = vintedRowMatch(vintedPickerContainer() || document.body, leaf);
+        if (res) { try { vintedClickable(res).click(); clicked = true; } catch (e) {} break; }
+      }
+      console.log("Velosia Vinted: Suche nach '" + leaf + "' -> " + (clicked ? "Treffer geklickt" : "kein Treffer"));
+      for (var c2 = 0; c2 < 12; c2++) {
+        if (!vintedPickerContainer()) { console.log("Velosia Vinted: per Suche gewählt"); return true; }
+        await sleep(300);
+      }
+    }
+
+    console.warn("Velosia Vinted: Picker blieb offen — Kategorie nicht gesetzt");
     return false;
   }
 
@@ -1005,13 +1019,18 @@
     // for environments without DataTransfer or resolvable URLs.
     setBackdrop("Fotos werden übertragen …");
     var photos = 0;
-    var urls = resolveImageUrls(draft, options.backendUrl);
-    if (typeof DataTransfer !== "undefined" && urls.length > 0) {
-      photos = await uploadPhotosDataTransfer(urls);
-      if (photos === 0 && options.imageMode === "native") photos = triggerNativeFileChooser();
-    } else if (options.imageMode === "native") {
-      photos = triggerNativeFileChooser();
+    // 1) Android bridge (CORS-immune: native shell supplies the photos as data URLs).
+    var bridged = await uploadPhotosFromBridge();
+    if (bridged >= 0) photos = bridged;
+    // 2) Browser fetch + DataTransfer (extension, or Android if the bridge is absent).
+    if (photos === 0) {
+      var urls = resolveImageUrls(draft, options.backendUrl);
+      if (typeof DataTransfer !== "undefined" && urls.length > 0) {
+        photos = await uploadPhotosDataTransfer(urls);
+      }
     }
+    // 3) Last-resort native file chooser.
+    if (photos === 0 && options.imageMode === "native") photos = triggerNativeFileChooser();
 
     if (platform === "kleinanzeigen") {
       selectKleinanzeigenOffer();
@@ -1176,11 +1195,12 @@
     var showUi = options.showOverlay !== false;
 
     try {
-      console.log("Velosia engine v" + VERSION + " autofill:", {
-        platform: platform, phase: phase, autoSubmit: autoSubmit,
-        category: draft && draft.category, category_path: draft && draft.category_path,
-        vinted_category: draft && draft.vinted_category, vinted_path: draft && draft.vinted_path
-      });
+      // Plain-string log (objects render as "[object Object]" in Android Logcat).
+      console.log("Velosia engine v" + VERSION + " autofill: platform=" + platform +
+        " phase=" + phase + " autoSubmit=" + autoSubmit +
+        " imageMode=" + options.imageMode +
+        " category=" + (draft && draft.category) + " category_path=" + (draft && draft.category_path) +
+        " vinted_category=" + (draft && draft.vinted_category) + " vinted_path=" + (draft && draft.vinted_path));
     } catch (e) {}
 
     // Kleinanzeigen step 1: pick the category, then let the step-2 reload fill.
