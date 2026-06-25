@@ -726,6 +726,14 @@
   // resolved clickable cell (some Vinted sheets ignore a bare .click() on the text div).
   function vintedRobustClick(el) {
     var target = vintedClickable(el);
+    if (target === el) {
+      // No clickable ancestor — look for a clickable DESCENDANT (Vinted's size rows wrap
+      // the option in an inner button/[role]/cell inside the <li>, where the handler is).
+      var child = el.querySelector && el.querySelector(
+        "button, [role='button'], [role='option'], [role='radio'], div[tabindex], [class*='Cell__cell'], label"
+      );
+      if (child) target = child;
+    }
     var input = (target.querySelector && target.querySelector("input[type='radio'], input[type='checkbox']")) ||
                 (el.querySelector && el.querySelector("input[type='radio'], input[type='checkbox']")) || null;
     var opts = { bubbles: true, cancelable: true, view: window };
@@ -1187,11 +1195,16 @@
     if (verbose) {
       try {
         var ct = vintedClickable(picked.row);
+        var kids = picked.row.children || [], kidInfo = [];
+        for (var ki = 0; ki < kids.length && ki < 5; ki++) {
+          kidInfo.push(kids[ki].tagName + (kids[ki].getAttribute("role") ? "[role=" + kids[ki].getAttribute("role") + "]" : "") +
+            "." + ("" + (kids[ki].className || "")).slice(0, 22));
+        }
         console.log("Velosia Vinted ROWINFO " + logName + ": row=" + picked.row.tagName + "." + ("" + picked.row.className).slice(0, 28) +
           " click=" + ct.tagName + (ct.getAttribute && ct.getAttribute("role") ? "[role=" + ct.getAttribute("role") + "]" : "") +
-          "." + ("" + (ct.className || "")).slice(0, 40) +
+          "." + ("" + (ct.className || "")).slice(0, 30) +
           " radio=" + !!(ct.querySelector && ct.querySelector("input[type='radio'], input[type='checkbox']")) +
-          " forLabel=" + (ct.tagName === "LABEL" ? (ct.getAttribute("for") || "y") : "-"));
+          " kids=[" + kidInfo.join(" ") + "]");
       } catch (e) {}
       vintedDiagCommit(logName + "-vor", picked.row);
     }
