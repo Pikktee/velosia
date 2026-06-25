@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
-import { ArrowLeft, Copy, Check, ExternalLink, Monitor, RefreshCw, AlertCircle, Trash2, Plus, Sparkles, Upload, FileText, Share2, Camera, TrendingUp, ChevronDown, Tag } from 'lucide-react';
+import { ArrowLeft, Copy, Check, ExternalLink, Monitor, RefreshCw, AlertCircle, Trash2, Plus, Sparkles, Upload, Share2, Camera, TrendingUp, ChevronDown, Tag } from 'lucide-react';
 import { updateDraft, getImageUrl, getAuthToken, uploadDraftImages, deleteDraftImage, regenerateDraftField, refreshListingStatus } from '../utils/api';
 import { statusMeta, listingPlatforms } from '../utils/listingStatus';
 
@@ -544,17 +544,10 @@ export default function DraftDetail({ draft, onBack, onUpdateSuccess }) {
   const renderFormFields = () => {
     return (
       <div className="detail-section-unboxed" style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid var(--glass-border)', paddingBottom: '0.5rem', marginBottom: '0.25rem' }}>
-          <h3 className="detail-section-title" style={{ borderBottom: 'none', margin: 0, paddingBottom: 0 }}>
-            <FileText size={18} style={{ color: 'var(--primary)' }} />
-            <span>Details</span>
-          </h3>
-        </div>
-        
         {/* Title */}
         <div className="form-group" style={{ marginBottom: 0 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem', flexWrap: 'wrap', gap: '0.5rem' }}>
-            <label htmlFor="edit-title" style={{ marginBottom: 0 }}>Titel (max. 80 Zeichen)</label>
+            <label htmlFor="edit-title" style={{ marginBottom: 0 }}>Titel</label>
             <button 
               type="button"
               className="ki-regen-btn"
@@ -588,7 +581,7 @@ export default function DraftDetail({ draft, onBack, onUpdateSuccess }) {
             content fields sit together at the top of the form. */}
         <div className="form-group" style={{ marginBottom: 0 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem', flexWrap: 'wrap', gap: '0.5rem' }}>
-            <label htmlFor="edit-desc" style={{ marginBottom: 0 }}>Verkaufsbeschreibung</label>
+            <label htmlFor="edit-desc" style={{ marginBottom: 0 }}>Beschreibung</label>
             <button
               type="button"
               className="ki-regen-btn"
@@ -616,7 +609,7 @@ export default function DraftDetail({ draft, onBack, onUpdateSuccess }) {
 
         {/* Price */}
         <div className="form-group" style={{ marginBottom: 0 }}>
-          <label htmlFor="edit-price">Preis (€)</label>
+          <label htmlFor="edit-price">Preis (in €)</label>
           <input 
             type="number" 
             id="edit-price" 
@@ -659,14 +652,14 @@ export default function DraftDetail({ draft, onBack, onUpdateSuccess }) {
     const filledCount = rows.filter((r) => r.value).length;
 
     return (
-      <div className="detail-section-unboxed">
+      <div className={`detected-panel ${showDetected ? 'is-open' : ''}`}>
         <button
           type="button"
           className="detected-toggle"
           onClick={() => setShowDetected((s) => !s)}
           aria-expanded={showDetected}
         >
-          <Tag size={18} style={{ color: 'var(--primary)', flexShrink: 0 }} />
+          <Tag size={16} style={{ color: 'var(--primary)', flexShrink: 0 }} />
           <span className="detected-toggle-label">Automatisch erkannt</span>
           {filledCount > 0 && <span className="detected-toggle-count">{filledCount}</span>}
           <ChevronDown
@@ -734,11 +727,11 @@ export default function DraftDetail({ draft, onBack, onUpdateSuccess }) {
       <div className="detail-content-container">
         <div className="draft-detail-grid fade-in">
           {renderListingStatus()}
-          {renderImageBox()}
           {renderFormFields()}
+          {renderImageBox()}
           {renderPriceComparison()}
-          {!isAndroidApp && renderPublishingAssist()}
           {renderDetectedInfo()}
+          {!isAndroidApp && renderPublishingAssist()}
         </div>
       </div>
 

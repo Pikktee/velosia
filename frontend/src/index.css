@@ -1169,26 +1169,41 @@ select.form-control {
   gap: 0.5rem;
 }
 
-/* Collapsible "Automatisch erkannt" panel (read-only category + attributes) */
+/* Collapsible "Automatisch erkannt" panel (read-only category + attributes).
+   Header + body live in one bordered card so they read as a single unit; rows
+   are separated by hairlines rather than individual boxes. */
+.detected-panel {
+  width: 100%;
+  margin-bottom: 0.5rem;
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-md);
+  background: rgba(255, 255, 255, 0.015);
+  overflow: hidden;
+  transition: background-color 0.2s ease, border-color 0.2s ease;
+}
+
+.detected-panel.is-open {
+  background: var(--glass-bg);
+}
+
 .detected-toggle {
   display: flex;
   align-items: center;
-  gap: 0.6rem;
+  gap: 0.55rem;
   width: 100%;
-  padding: 0.85rem 1rem;
-  background: var(--glass-bg);
-  border: 1px solid var(--glass-border);
-  border-radius: var(--radius-md);
-  color: var(--text-primary);
+  padding: 0.8rem 1rem;
+  background: transparent;
+  border: none;
+  color: var(--text-secondary);
   font-family: var(--font-title);
   font-weight: 600;
-  font-size: 0.95rem;
+  font-size: 0.9rem;
   cursor: pointer;
-  transition: border-color 0.2s ease, background-color 0.2s ease;
+  transition: color 0.2s ease;
 }
 
 .detected-toggle:hover {
-  border-color: rgba(255, 255, 255, 0.12);
+  color: var(--text-primary);
 }
 
 .detected-toggle-label {
@@ -1198,8 +1213,8 @@ select.form-control {
 
 .detected-toggle-count {
   flex-shrink: 0;
-  min-width: 1.4rem;
-  height: 1.4rem;
+  min-width: 1.35rem;
+  height: 1.35rem;
   padding: 0 0.4rem;
   display: inline-flex;
   align-items: center;
@@ -1207,7 +1222,7 @@ select.form-control {
   border-radius: 999px;
   background: rgba(9, 176, 183, 0.15);
   color: var(--primary);
-  font-size: 0.75rem;
+  font-size: 0.72rem;
   font-weight: 700;
 }
 
@@ -1220,24 +1235,25 @@ select.form-control {
 .detected-body {
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
-  margin-top: 0.65rem;
-  animation: fadeIn 0.25s ease;
+  padding: 0 1rem;
+  animation: fadeIn 0.2s ease;
 }
 
 .detected-row {
   display: flex;
   align-items: baseline;
-  gap: 0.75rem;
-  padding: 0.6rem 0.75rem;
-  background: var(--glass-bg);
-  border: 1px solid var(--glass-border);
-  border-radius: 10px;
+  gap: 0.85rem;
+  padding: 0.65rem 0;
+  border-top: 1px solid var(--glass-border);
+}
+
+.detected-row:last-child {
+  padding-bottom: 0.85rem;
 }
 
 .detected-row-label {
   flex-shrink: 0;
-  min-width: 110px;
+  min-width: 116px;
   font-size: 0.68rem;
   font-weight: 600;
   text-transform: uppercase;
