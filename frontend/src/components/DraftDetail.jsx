@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
-import { ArrowLeft, Copy, Check, ExternalLink, Monitor, RefreshCw, AlertCircle, Trash2, Plus, Sparkles, Upload, FileText, Share2, Camera, TrendingUp } from 'lucide-react';
+import { ArrowLeft, Copy, Check, ExternalLink, Monitor, RefreshCw, AlertCircle, Trash2, Plus, Sparkles, Upload, FileText, Share2, Camera, TrendingUp, ChevronDown, Tag } from 'lucide-react';
 import { updateDraft, getImageUrl, getAuthToken, uploadDraftImages, deleteDraftImage, regenerateDraftField, refreshListingStatus } from '../utils/api';
 import { statusMeta, listingPlatforms } from '../utils/listingStatus';
 
@@ -20,7 +20,25 @@ export default function DraftDetail({ draft, onBack, onUpdateSuccess }) {
   const [regeneratingField, setRegeneratingField] = useState(null);
   const [uploadingImage, setUploadingImage] = useState(false);
   const [refreshingStatus, setRefreshingStatus] = useState(false);
+  const [showDetected, setShowDetected] = useState(false); // collapsible "Automatisch erkannt"
   const fileInputRef = useRef(null);
+
+  // Attributes (Größe, Marke, Material, Farbe, …) the AI extracted into a JSON
+  // blob. Read-only here — they feed the Vinted autofill; we only surface them.
+  const detectedAttributes = React.useMemo(() => {
+    if (!draft.attributes) return [];
+    try {
+      const parsed = JSON.parse(draft.attributes);
+      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+        return Object.entries(parsed).filter(
+          ([, v]) => v !== null && v !== undefined && String(v).trim() !== ''
+        );
+      }
+    } catch (e) {
+      console.error('Failed to parse attributes:', e);
+    }
+    return [];
+  }, [draft.attributes]);
 
   // Parse multiple images
   const allImages = React.useMemo(() => {
@@ -566,6 +584,36 @@ export default function DraftDetail({ draft, onBack, onUpdateSuccess }) {
           </div>
         </div>
 
+        {/* Description — placed directly under the title so the two main
+            content fields sit together at the top of the form. */}
+        <div className="form-group" style={{ marginBottom: 0 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem', flexWrap: 'wrap', gap: '0.5rem' }}>
+            <label htmlFor="edit-desc" style={{ marginBottom: 0 }}>Verkaufsbeschreibung</label>
+            <button
+              type="button"
+              className="ki-regen-btn"
+              onClick={() => handleRegenerateField('description')}
+              disabled={regeneratingField !== null || allImages.length === 0}
+              title={allImages.length === 0 ? "Bilder hinzufügen, um Beschreibung per KI zu generieren" : "Beschreibung per KI neu generieren"}
+            >
+              {regeneratingField === 'description' ? (
+                <RefreshCw size={11} className="spin-animation" />
+              ) : (
+                <Sparkles size={11} />
+              )}
+            </button>
+          </div>
+          <textarea
+            id="edit-desc"
+            className="form-control"
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+            placeholder={regeneratingField === 'description' ? "Generiere..." : "Verkaufsbeschreibung schreiben..."}
+            disabled={regeneratingField === 'description'}
+            style={{ opacity: regeneratingField === 'description' ? 0.6 : 1, minHeight: '138px' }}
+          />
+        </div>
+
         {/* Price */}
         <div className="form-group" style={{ marginBottom: 0 }}>
           <label htmlFor="edit-price">Preis (€)</label>
@@ -579,58 +627,6 @@ export default function DraftDetail({ draft, onBack, onUpdateSuccess }) {
             min="0"
             step="1"
           />
-        </div>
-
-        {/* Category — read-only. The categories are resolved by the AI from the
-            full Kleinanzeigen and Vinted taxonomies (each its own breadcrumb, e.g.
-            "Elektronik > Haushaltsgeräte > Staubsauger") and drive the autofill.
-            We deliberately do NOT offer a coarse editable dropdown here: picking a
-            generic bucket would overwrite the precise AI breadcrumb and degrade the
-            auto-category selection. */}
-        <div className="form-group" style={{ marginBottom: 0 }}>
-          <label style={{ marginBottom: '0.5rem' }}>Kategorie (automatisch erkannt)</label>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-            {[
-              { key: 'ka', name: 'Kleinanzeigen', value: draft.category },
-              { key: 'vinted', name: 'Vinted', value: draft.vinted_category },
-            ].map(({ key, name, value }) => (
-              <div
-                key={key}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '0.6rem',
-                  padding: '0.6rem 0.75rem',
-                  background: 'var(--glass-bg)',
-                  border: '1px solid var(--glass-border)',
-                  borderRadius: '10px',
-                }}
-              >
-                <span
-                  style={{
-                    flexShrink: 0,
-                    fontSize: '0.68rem',
-                    fontWeight: 600,
-                    textTransform: 'uppercase',
-                    letterSpacing: '0.03em',
-                    color: 'var(--text-muted)',
-                    minWidth: '96px',
-                  }}
-                >
-                  {name}
-                </span>
-                {value ? (
-                  <span style={{ fontSize: '0.85rem', color: 'var(--text-primary)', lineHeight: 1.35 }}>
-                    {value}
-                  </span>
-                ) : (
-                  <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)', fontStyle: 'italic' }}>
-                    wird beim Einstellen manuell gewählt
-                  </span>
-                )}
-              </div>
-            ))}
-          </div>
         </div>
 
         {/* Condition */}
@@ -647,35 +643,53 @@ export default function DraftDetail({ draft, onBack, onUpdateSuccess }) {
             ))}
           </select>
         </div>
+      </div>
+    );
+  };
 
-        {/* Description */}
-        <div className="form-group" style={{ marginBottom: 0 }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem', flexWrap: 'wrap', gap: '0.5rem' }}>
-            <label htmlFor="edit-desc" style={{ marginBottom: 0 }}>Verkaufsbeschreibung</label>
-            <button 
-              type="button"
-              className="ki-regen-btn"
-              onClick={() => handleRegenerateField('description')}
-              disabled={regeneratingField !== null || allImages.length === 0}
-              title={allImages.length === 0 ? "Bilder hinzufügen, um Beschreibung per KI zu generieren" : "Beschreibung per KI neu generieren"}
-            >
-              {regeneratingField === 'description' ? (
-                <RefreshCw size={11} className="spin-animation" />
-              ) : (
-                <Sparkles size={11} />
-              )}
-            </button>
-          </div>
-          <textarea 
-            id="edit-desc" 
-            className="form-control" 
-            value={description} 
-            onChange={(e) => setDescription(e.target.value)}
-            placeholder={regeneratingField === 'description' ? "Generiere..." : "Verkaufsbeschreibung schreiben..."}
-            disabled={regeneratingField === 'description'}
-            style={{ opacity: regeneratingField === 'description' ? 0.6 : 1, minHeight: '140px' }}
+  // Collapsible "Automatisch erkannt" panel — read-only category + attributes.
+  // Categories stay read-only by design: the AI resolves an exact taxonomy
+  // breadcrumb that drives the autofill; a free-text edit would break the path.
+  const renderDetectedInfo = () => {
+    const rows = [
+      { key: 'ka', name: 'Kategorie · Kleinanzeigen', value: draft.category },
+      { key: 'vinted', name: 'Kategorie · Vinted', value: draft.vinted_category },
+      ...detectedAttributes.map(([k, v]) => ({ key: `attr-${k}`, name: k, value: String(v) })),
+    ];
+    const filledCount = rows.filter((r) => r.value).length;
+
+    return (
+      <div className="detail-section-unboxed">
+        <button
+          type="button"
+          className="detected-toggle"
+          onClick={() => setShowDetected((s) => !s)}
+          aria-expanded={showDetected}
+        >
+          <Tag size={18} style={{ color: 'var(--primary)', flexShrink: 0 }} />
+          <span className="detected-toggle-label">Automatisch erkannt</span>
+          {filledCount > 0 && <span className="detected-toggle-count">{filledCount}</span>}
+          <ChevronDown
+            size={18}
+            className="detected-toggle-chevron"
+            style={{ transform: showDetected ? 'rotate(180deg)' : 'none' }}
           />
-        </div>
+        </button>
+
+        {showDetected && (
+          <div className="detected-body">
+            {rows.map(({ key, name, value }) => (
+              <div key={key} className="detected-row">
+                <span className="detected-row-label">{name}</span>
+                {value ? (
+                  <span className="detected-row-value">{value}</span>
+                ) : (
+                  <span className="detected-row-empty">wird beim Einstellen manuell gewählt</span>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
       </div>
     );
   };
@@ -724,6 +738,7 @@ export default function DraftDetail({ draft, onBack, onUpdateSuccess }) {
           {renderFormFields()}
           {renderPriceComparison()}
           {!isAndroidApp && renderPublishingAssist()}
+          {renderDetectedInfo()}
         </div>
       </div>
 
