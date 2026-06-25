@@ -1,6 +1,6 @@
-import React, { useState, useEffect, useRef, useLayoutEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
-import { ArrowLeft, Copy, Check, ExternalLink, Smartphone, Monitor, RefreshCw, AlertCircle, Trash2, Plus, Sparkles, Upload, FileText, Share2, Camera, TrendingUp } from 'lucide-react';
+import { ArrowLeft, Copy, Check, ExternalLink, Monitor, RefreshCw, AlertCircle, Trash2, Plus, Sparkles, Upload, FileText, Share2, Camera, TrendingUp } from 'lucide-react';
 import { updateDraft, getImageUrl, getAuthToken, uploadDraftImages, deleteDraftImage, regenerateDraftField, refreshListingStatus } from '../utils/api';
 import { statusMeta, listingPlatforms } from '../utils/listingStatus';
 
@@ -60,169 +60,33 @@ export default function DraftDetail({ draft, onBack, onUpdateSuccess }) {
     setHasChanges(hasDiff);
   }, [title, description, condition, price, draft]);
 
+  // Persist the current field values. Shared by the debounced auto-save and the
+  // manual retry shown when a save fails. Defined in render scope so it always
+  // closes over the latest field values.
+  const saveDraft = async () => {
+    setSaveStatus('saving');
+    try {
+      const updated = await updateDraft(draft.id, {
+        title,
+        description,
+        condition,
+        price: parseFloat(price) || 0
+      });
+      setSaveStatus('saved');
+      onUpdateSuccess(updated);
+    } catch (err) {
+      console.error(err);
+      setSaveStatus('error');
+    }
+  };
+
   // Debounced auto-save effect
   useEffect(() => {
     if (!hasChanges) return;
-
     setSaveStatus('saving');
-    const delayDebounceFn = setTimeout(async () => {
-      try {
-        const updated = await updateDraft(draft.id, {
-          title,
-          description,
-          condition,
-          price: parseFloat(price) || 0
-        });
-        setSaveStatus('saved');
-        onUpdateSuccess(updated);
-      } catch (err) {
-        console.error(err);
-        setSaveStatus('error');
-      }
-    }, 1200); // 1.2s delay for a snappy but typing-friendly feel
-
+    const delayDebounceFn = setTimeout(saveDraft, 1200); // snappy but typing-friendly
     return () => clearTimeout(delayDebounceFn);
   }, [title, description, condition, price, hasChanges]);
-
-  // Responsive Layout detection hook
-  const [activeTab, setActiveTab] = useState('edit'); // 'edit', 'publish'
-  const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
-
-  useEffect(() => {
-    const handleResize = () => {
-      setIsMobile(window.innerWidth < 768 && window.innerHeight > window.innerWidth);
-    };
-    window.addEventListener('resize', handleResize);
-    handleResize();
-    return () => window.removeEventListener('resize', handleResize);
-  }, []);
-
-  // Ordered list of tabs for swipe navigation
-  const TAB_ORDER = ['edit', 'publish'];
-
-  // Swipe gesture detection refs & handlers
-  const touchStartX = useRef(0);
-  const touchStartY = useRef(0);
-  const swipeBlocked = useRef(false); // true when the gesture started on an interactive element
-  const isDragging = useRef(false);   // true once a horizontal drag is recognized
-  const dragTarget = useRef(null);    // tab the finger is currently dragging toward
-
-  // Refs to the tab buttons so we can measure the underline geometry
-  const tabsRowRef = useRef(null);
-  const tabRefs = useRef({});
-
-  // Sliding underline indicator: { left, width } relative to the tabs row, plus
-  // whether the movement should animate (true) or follow the finger 1:1 (false).
-  const [indicator, setIndicator] = useState({ left: 0, width: 0, animate: false });
-
-  // Measure a tab's position/width relative to the tabs row
-  const measureTab = (tabKey) => {
-    const row = tabsRowRef.current;
-    const el = tabRefs.current[tabKey];
-    if (!row || !el) return null;
-    const rowRect = row.getBoundingClientRect();
-    const elRect = el.getBoundingClientRect();
-    return { left: elRect.left - rowRect.left, width: elRect.width };
-  };
-
-  // Snap the indicator under the active tab (animated) whenever it changes / layout shifts
-  useLayoutEffect(() => {
-    const geo = measureTab(activeTab);
-    if (geo) setIndicator({ ...geo, animate: true });
-    const handleResize = () => {
-      const g = measureTab(activeTab);
-      if (g) setIndicator({ ...g, animate: false });
-    };
-    window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
-  }, [activeTab, isMobile]);
-
-  // Distance (px) the finger must travel for a full tab transition
-  const SWIPE_FULL_DISTANCE = 140;
-
-  const handleTouchStart = (e) => {
-    touchStartX.current = e.targetTouches[0].clientX;
-    touchStartY.current = e.targetTouches[0].clientY;
-    isDragging.current = false;
-    dragTarget.current = null;
-
-    // Decide up-front whether this gesture should be ignored (interactive element or modal)
-    const target = e.target;
-    swipeBlocked.current = Boolean(
-      selectedModalImage ||
-      target.closest('input') ||
-      target.closest('textarea') ||
-      target.closest('select') ||
-      target.closest('button') ||
-      target.closest('a') ||
-      target.closest('.thumbnail-grid-item') ||
-      target.closest('.price-comparison-link')
-    );
-  };
-
-  const handleTouchMove = (e) => {
-    if (swipeBlocked.current) return;
-
-    const currentX = e.targetTouches[0].clientX;
-    const currentY = e.targetTouches[0].clientY;
-    const diffX = currentX - touchStartX.current; // >0 finger moves right, <0 moves left
-    const diffY = currentY - touchStartY.current;
-
-    // Only start a horizontal drag once movement is clearly horizontal
-    if (!isDragging.current) {
-      if (Math.abs(diffX) < 8 || Math.abs(diffX) <= Math.abs(diffY)) return;
-      isDragging.current = true;
-    }
-
-    // Determine which tab we are heading toward based on direction
-    const currentIndex = TAB_ORDER.indexOf(activeTab);
-    const targetIndex = diffX < 0 ? currentIndex + 1 : currentIndex - 1;
-    const targetKey = TAB_ORDER[targetIndex];
-
-    const activeGeo = measureTab(activeTab);
-    if (!activeGeo) return;
-
-    // No neighbouring tab in that direction -> keep the underline pinned (edge resistance)
-    if (!targetKey) {
-      dragTarget.current = null;
-      setIndicator({ ...activeGeo, animate: false });
-      return;
-    }
-
-    const targetGeo = measureTab(targetKey);
-    if (!targetGeo) return;
-
-    dragTarget.current = targetKey;
-
-    // Progress 0..1 of the gesture, interpolating the underline between both tabs
-    const progress = Math.min(Math.abs(diffX) / SWIPE_FULL_DISTANCE, 1);
-    setIndicator({
-      left: activeGeo.left + (targetGeo.left - activeGeo.left) * progress,
-      width: activeGeo.width + (targetGeo.width - activeGeo.width) * progress,
-      animate: false,
-    });
-  };
-
-  const handleTouchEnd = (e) => {
-    if (swipeBlocked.current || !isDragging.current) {
-      isDragging.current = false;
-      return;
-    }
-    isDragging.current = false;
-
-    const endX = e.changedTouches[0].clientX;
-    const diffX = endX - touchStartX.current;
-    const target = dragTarget.current;
-    dragTarget.current = null;
-
-    // Commit the switch if dragged far enough; otherwise snap back to the active tab
-    if (target && Math.abs(diffX) > SWIPE_FULL_DISTANCE * 0.4) {
-      setActiveTab(target); // useLayoutEffect animates the underline to its final spot
-    } else {
-      const geo = measureTab(activeTab);
-      if (geo) setIndicator({ ...geo, animate: true });
-    }
-  };
 
   const copyToClipboard = (text, fieldName) => {
     navigator.clipboard.writeText(text);
@@ -462,6 +326,10 @@ export default function DraftDetail({ draft, onBack, onUpdateSuccess }) {
     );
   };
 
+  // Desktop-only publishing helper. In the app, publishing happens via the
+  // bottom sticky bar (handlePostInApp); on desktop the autofill runs through
+  // the Chrome extension on the platform page, so we offer "open platform" +
+  // a manual copy panel as a no-extension fallback.
   const renderPublishingAssist = () => {
     return (
       <div className="detail-section-unboxed">
@@ -471,26 +339,8 @@ export default function DraftDetail({ draft, onBack, onUpdateSuccess }) {
             <span>Veröffentlichen</span>
           </h3>
         </div>
-        
-        {isAndroidApp ? (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', width: '100%' }}>
-            <button 
-              className="btn btn-vinted" 
-              onClick={() => handlePostInApp('vinted')}
-              style={{ width: '100%', minHeight: '44px', fontWeight: '700' }}
-            >
-              Auf Vinted einstellen
-            </button>
-            <button 
-              className="btn btn-kleinanzeigen" 
-              onClick={() => handlePostInApp('kleinanzeigen')}
-              style={{ width: '100%', minHeight: '44px', fontWeight: '700' }}
-            >
-              Auf Kleinanzeigen einstellen
-            </button>
-          </div>
-        ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem', width: '100%' }}>
+
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem', width: '100%' }}>
             {/* Extension Guidance Info */}
             <div style={{ display: 'flex', gap: '0.5rem', background: 'rgba(255,255,255,0.02)', padding: '0.75rem', borderRadius: 'var(--radius-sm)', fontSize: '0.825rem', border: '1px solid var(--glass-border)', color: 'var(--text-secondary)' }}>
               <Monitor size={16} style={{ color: 'var(--primary)', flexShrink: 0, marginTop: '0.15rem' }} />
@@ -562,7 +412,6 @@ export default function DraftDetail({ draft, onBack, onUpdateSuccess }) {
               </button>
             </div>
           </div>
-        )}
       </div>
     );
   };
@@ -832,69 +681,73 @@ export default function DraftDetail({ draft, onBack, onUpdateSuccess }) {
   };
 
   return (
-    <div
-      className="fade-in"
-      onTouchStart={handleTouchStart}
-      onTouchMove={handleTouchMove}
-      onTouchEnd={handleTouchEnd}
-    >
-      {/* Sticky Tinder-style Header */}
+    <div className="fade-in">
+      {/* Material-style top app bar: Up arrow (always returns to the list) +
+          screen title + state-dependent save status (silent when saved). */}
       <div className="detail-sticky-header">
         <div className="detail-header-inner">
-          <div className="detail-header-title-row">
-            <div className="detail-header-title-container">
-              <h2 className="detail-header-title">Angebot bearbeiten</h2>
+          <div className="detail-header-bar">
+            <button
+              className="detail-up-btn"
+              onClick={onBack}
+              aria-label="Zurück zur Angebotsliste"
+            >
+              <ArrowLeft size={22} />
+            </button>
+            <h2 className="detail-header-title">Angebot bearbeiten</h2>
+            <div className="detail-header-status">
+              {saveStatus === 'saving' && (
+                <RefreshCw size={16} className="spin" aria-label="Speichern" />
+              )}
+              {saveStatus === 'error' && (
+                <button
+                  className="detail-save-error"
+                  onClick={saveDraft}
+                  title="Erneut versuchen"
+                >
+                  <AlertCircle size={13} />
+                  <span>Nicht gespeichert</span>
+                </button>
+              )}
             </div>
-            <button className="detail-done-btn" onClick={onBack}>
-              Fertig
-            </button>
-          </div>
-          <div className="detail-tabs-row" ref={tabsRowRef}>
-            <button
-              ref={(el) => (tabRefs.current.edit = el)}
-              className={`detail-tab ${activeTab === 'edit' ? 'active' : ''}`}
-              onClick={() => setActiveTab('edit')}
-            >
-              <FileText size={16} />
-              <span>Übersicht</span>
-            </button>
-            <button
-              ref={(el) => (tabRefs.current.publish = el)}
-              className={`detail-tab ${activeTab === 'publish' ? 'active' : ''}`}
-              onClick={() => setActiveTab('publish')}
-            >
-              <Share2 size={16} />
-              <span>Veröffentlichen</span>
-            </button>
-            <span
-              className="detail-tab-indicator"
-              style={{
-                transform: `translateX(${indicator.left}px)`,
-                width: `${indicator.width}px`,
-                transition: indicator.animate
-                  ? 'transform 0.3s cubic-bezier(0.22, 1, 0.36, 1), width 0.3s cubic-bezier(0.22, 1, 0.36, 1)'
-                  : 'none',
-              }}
-            />
           </div>
         </div>
       </div>
 
-      {/* Content Container */}
+      {/* Content Container — single scroll surface, no tabs. The status section
+          renders only once the item is published; the desktop publishing assist
+          (copy panel + extension tip) replaces the in-app sticky bar below. */}
       <div className="detail-content-container">
-        {activeTab === 'edit' ? (
-          <div className="draft-detail-grid fade-in">
-            {renderImageBox()}
-            {renderFormFields()}
-            {renderPriceComparison()}
-          </div>
-        ) : (
-          <div className="fade-in" style={{ width: '100%' }}>
-            {renderListingStatus()}
-            {renderPublishingAssist()}
-          </div>
-        )}
+        <div className="draft-detail-grid fade-in">
+          {renderListingStatus()}
+          {renderImageBox()}
+          {renderFormFields()}
+          {renderPriceComparison()}
+          {!isAndroidApp && renderPublishingAssist()}
+        </div>
       </div>
+
+      {/* In-app primary action: publish straight to a platform. Sits as a flex
+          sibling at the bottom of the column; hidden while the keyboard is open
+          (.keyboard-open on app-shell) so it never covers a focused field. */}
+      {isAndroidApp && (
+        <div className="detail-publish-bar">
+          <button
+            className="btn btn-vinted"
+            onClick={() => handlePostInApp('vinted')}
+          >
+            <Upload size={16} />
+            <span>Auf Vinted</span>
+          </button>
+          <button
+            className="btn btn-kleinanzeigen"
+            onClick={() => handlePostInApp('kleinanzeigen')}
+          >
+            <Upload size={16} />
+            <span>Kleinanzeigen</span>
+          </button>
+        </div>
+      )}
 
       {/* Image Detail Popup Modal */}
       {selectedModalImage && (

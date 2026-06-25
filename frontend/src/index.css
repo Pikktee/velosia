@@ -1011,134 +1011,111 @@ select.form-control {
   padding: 0 1.25rem;
 }
 
-.detail-header-title-row {
+.detail-header-bar {
   display: flex;
-  justify-content: space-between;
   align-items: center;
+  gap: 0.5rem;
   height: 56px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
 }
 
-.detail-header-title-container {
+.detail-up-btn {
   display: flex;
   align-items: center;
-  gap: 0.75rem;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  margin-left: -0.5rem;
+  flex-shrink: 0;
+  background: transparent;
+  border: none;
+  border-radius: 50%;
+  color: var(--text-primary);
+  cursor: pointer;
+  transition: background 0.2s ease, transform 0.1s ease;
+  outline: none;
+}
+
+.detail-up-btn:hover {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.detail-up-btn:active {
+  transform: scale(0.92);
 }
 
 .detail-header-title {
   font-family: var(--font-title);
   font-weight: 700;
-  font-size: 1.2rem;
+  font-size: 1.15rem;
   color: var(--text-primary);
   margin: 0;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.detail-done-btn {
-  background: transparent;
-  border: none;
-  color: var(--primary);
-  font-weight: 700;
-  font-size: 0.95rem;
-  cursor: pointer;
-  padding: 0.5rem 0.75rem;
-  margin-right: -0.75rem;
-  transition: opacity 0.2s ease, transform 0.1s ease;
-  outline: none;
-}
-
-.detail-done-btn:hover {
-  opacity: 0.85;
-}
-
-.detail-done-btn:active {
-  transform: scale(0.96);
-}
-
-.detail-tabs-row {
-  display: flex;
-  gap: 1.5rem;
-  height: 48px;
-  position: relative;
-}
-
-.detail-tab {
-  background: transparent;
-  border: none;
-  font-family: var(--font-title);
-  font-weight: 600;
-  font-size: 0.9rem;
-  color: var(--text-secondary);
-  cursor: pointer;
+.detail-header-status {
+  flex-shrink: 0;
   display: flex;
   align-items: center;
-  gap: 0.5rem;
-  padding: 0;
-  position: relative;
-  transition: color 0.2s ease;
-  min-height: auto;
-  outline: none;
+  justify-content: flex-end;
+  min-width: 24px;
+  color: var(--text-muted);
 }
 
-.detail-tab:hover {
-  color: var(--text-primary);
-}
-
-.detail-tab.active {
-  color: var(--primary);
-}
-
-/* Single sliding underline shared by both tabs (moves fluidly while swiping) */
-.detail-tab-indicator {
-  position: absolute;
-  bottom: 0;
-  left: 0;
-  height: 3px;
-  background: var(--primary);
-  border-radius: 99px 99px 0 0;
-  box-shadow: 0 -2px 10px var(--primary-glow);
-  pointer-events: none;
-  will-change: transform, width;
-}
-
-/* Save status inside Header */
-.detail-save-status {
+/* Save status inside the header — only the error state is shown (saving uses a
+   bare spinner; the saved state stays silent). */
+.detail-save-error {
   display: flex;
   align-items: center;
+  gap: 0.3rem;
   font-size: 0.75rem;
   font-weight: 600;
-}
-
-.status-saved {
-  color: #10b981;
-  background: rgba(16, 185, 129, 0.08);
-  border: 1px solid rgba(16, 185, 129, 0.15);
-  padding: 0.2rem 0.5rem;
-  border-radius: 6px;
-  display: flex;
-  align-items: center;
-  gap: 0.25rem;
-}
-
-.status-saving {
-  color: #f59e0b;
-  background: rgba(245, 158, 11, 0.08);
-  border: 1px solid rgba(245, 158, 11, 0.15);
-  padding: 0.2rem 0.5rem;
-  border-radius: 6px;
-  display: flex;
-  align-items: center;
-  gap: 0.25rem;
-}
-
-.status-error {
   color: #ef4444;
-  background: rgba(239, 68, 68, 0.08);
-  border: 1px solid rgba(239, 68, 68, 0.15);
-  padding: 0.2rem 0.5rem;
-  border-radius: 6px;
+  background: rgba(239, 68, 68, 0.12);
+  border: 1px solid rgba(239, 68, 68, 0.2);
+  padding: 0.3rem 0.6rem;
+  border-radius: 99px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.2s ease;
+  outline: none;
+}
+
+.detail-save-error:hover {
+  background: rgba(239, 68, 68, 0.18);
+}
+
+/* In-app bottom publish bar — flex sibling pinned to the bottom of the detail
+   column. Hidden while the keyboard is open so it never covers a focused field. */
+.detail-publish-bar {
+  flex-shrink: 0;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.75rem;
+  padding: 0.75rem 1rem;
+  padding-bottom: calc(0.75rem + env(safe-area-inset-bottom, 0px));
+  background: rgba(13, 17, 25, 0.92);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: 0 -6px 24px -8px rgba(0, 0, 0, 0.6);
+  z-index: 90;
+}
+
+.detail-publish-bar .btn {
+  min-height: 48px;
+  font-weight: 700;
   display: flex;
   align-items: center;
-  gap: 0.25rem;
+  justify-content: center;
+  gap: 0.4rem;
+}
+
+.app-shell.keyboard-open .detail-publish-bar {
+  display: none;
 }
 
 /* Content Container styling */
