@@ -47,6 +47,22 @@ After a listing goes live we capture its **public listing id/URL** and track its
 
 ---
 
+## Play-Store-Release, Store-Präsenz & Admin (V2.6)
+
+**Rebrand:** Die App heißt seit V2.6 **Velosia** (vorher „Vintamie"). Bewusst NICHT umbenannt: die DB-Datei `vintamie.db` (lokal + Prod-Volume `/data/vintamie.db`) und der lokale Ordnerpfad `/Users/henrik/Dev/vintamie`. GitHub-Repo: `Pikktee/velosia`.
+
+**Play-Store-Auto-Upload:** `./deploy.py 2.6.x "msg" --play` baut den signierten Release-AAB und lädt ihn über **Gradle Play Publisher** (`com.github.triplet.play`, `play{}`-Block in `android/app/build.gradle`, Ziel `internal`) direkt in die interne Test-Spur. Greift nur, wenn `android/play-deploy-key.json` (Service-Account, gitignored) existiert → CI bleibt unberührt. `deploy.py` setzt `JAVA_HOME` auf die Android-Studio-JBR. Ohne `--play` = reiner Web-Deploy. Release-Stand: **interner Test live**; für Produktion verlangt Google (neues Konto) zuerst einen **geschlossenen Test** (≥12 Tester, 14 Tage). Interner Test wird **nicht** geprüft → Store zeigt bis zum ersten Review eines geprüften Tracks „(unreviewed)" + Platzhalter-Icon (kosmetisch, kein Fehler).
+
+**Android-Berechtigungen:** Nur `INTERNET` + `CAMERA`. `READ_MEDIA_IMAGES`/`READ_EXTERNAL_STORAGE` wurden **entfernt** — der WebView-File-Picker nutzt `fileChooserParams.createIntent()` (ACTION_GET_CONTENT, temporärer Lesezugriff), die Kamera läuft über WebRTC/`onPermissionRequest`. So ist Googles „Fotos & Videos"-Policy erfüllt. **Store-Assets** (512-Icon, 1024×500-Feature-Grafik) liegen als SVG+PNG in `android/store-assets/` (gerendert via qlmanage + sips).
+
+**Öffentliche Frontend-Routen (Hash-Routing, ohne Login erreichbar):** `#/datenschutz`, `#/impressum`, `#/konto-loeschen` (gemeinsame Texte in `frontend/src/components/legal.jsx`, genutzt von Modal **und** `LegalPage.jsx`) — liefern Google Play feste URLs (Datenschutz + Konto-Löschung). `#/testen` (`TesterPage.jsx`) erklärt den geschlossenen Test + Opt-in-Link. Alle in `App.jsx` als `guestRoutes` gewhitelistet.
+
+**Tester-Warteliste:** Landing-Haupt-CTA ist ein E-Mail-Feld → `POST /api/waitlist` (öffentlich, idempotent, `models.WaitlistEntry`, mailt den Maintainer via `services/notifications`). APK-Download wurde von der Landing entfernt; Desktop-Optionen (Chrome-Extension + Web-App) sind in einem eigenen Block. Echtes Google-Play-Badge als Inline-SVG.
+
+**Admin-Panel** (`IssueManagement.jsx`, Settings → nur `User.is_admin`, Route `#/admin/issues`): 3 Tabs — **Bug-Reports**, **Warteliste** (`GET /api/waitlist`), **Benutzer** (`GET /api/admin/users`). Benutzer-Verwaltung: sperren/entsperren (`POST /api/admin/users/{id}/block`, neue Spalte `User.is_blocked`, durchgesetzt in `get_current_user`/`login`/`login_google`), löschen (`DELETE /api/admin/users/{id}`, cascade). Eigenes/Admin-Konto geschützt. **AI-Kosten sind GESCHÄTZT** (kein Token-Tracking): `image_count × EST_COST_PER_IMAGE_EUR` (env, Default 0.0025 €).
+
+---
+
 ## Project Structure
 ```
 /Users/henrik/Dev/vintamie/
@@ -107,6 +123,8 @@ To release a new version, update version numbers in all configuration files, pus
 ```
 *Example:* `./deploy.py 2.0.2 "Release version 2.0.2 with volume fixes"`
 *(If run without arguments, it will automatically bump the patch version and prompt for a commit message).*
+
+Add **`--play`** to also build the signed AAB and upload it to the Play **internal** test track in the same run (see „Play-Store-Release" above): `./deploy.py 2.6.x "msg" --play`.
 
 ### Production Environment Settings
 
