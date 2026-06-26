@@ -809,6 +809,37 @@
     return (control.tagName === "INPUT") ? control : null;
   }
 
+  // Fire a full pointer+mouse+click sequence on an option. KA's brand combobox (like
+  // many React autocompletes) commits the selection on pointerdown/mousedown — NOT a
+  // bare .click() (which would arrive only after the input blur already closed the
+  // list). So on mobile opt.click() "succeeds" yet the field stays empty; dispatching
+  // the whole sequence is what actually commits the pick.
+  function kaCommitClick(el) {
+    var o = { bubbles: true, cancelable: true, view: window };
+    ["pointerover", "pointerenter", "pointerdown", "mousedown", "pointerup", "mouseup", "click"].forEach(function (t) {
+      try {
+        var Ctor = (t.indexOf("pointer") === 0 && window.PointerEvent) ? PointerEvent : MouseEvent;
+        el.dispatchEvent(new Ctor(t, o));
+      } catch (e) { try { el.dispatchEvent(new Event(t, { bubbles: true })); } catch (e2) {} }
+    });
+    try { el.click(); } catch (e) {}
+  }
+
+  // Did the brand actually land? After a real commit KA fills the visible combobox with
+  // the full brand text AND writes the hidden attributeMap[...brand] input — either is a
+  // reliable signal (typing the filter only ever set the control to the prefix). Lets us
+  // report honest success/failure instead of trusting that a click did anything.
+  function kaBrandCommitted(brand, control) {
+    var want = kaLooseKey(brand);
+    if (control && kaLooseKey(control.value || "") === want) return true;
+    var hid = document.querySelectorAll("input[name*='brand' i], input[name*='marke' i]");
+    for (var i = 0; i < hid.length; i++) {
+      if (hid[i] === control) continue;
+      if (String(hid[i].value || "").trim()) return true;
+    }
+    return false;
+  }
+
   // Type the brand to FILTER the (huge) brand listbox, then click the exact
   // (connector-insensitive) match. KA only filters on a real InputEvent — a plain
   // Event("input") does NOT — and we also fire key events for keyup-based filters.
@@ -861,10 +892,26 @@
         activeTag: (document.activeElement || {}).tagName || null,
         inputVal: (input.value || "").slice(0, 20) });
     }
-    try { opt.click(); } catch (e) {}
-    await sleep(200);
-    try { console.log("Velosia KA: Marke '" + brand + "' gesetzt (gefiltert)"); } catch (e) {}
-    return { ok: true };
+    // Commit via the full pointer/mouse sequence (mobile needs pointerdown/mousedown),
+    // then VERIFY the field really changed — only then report success. Retry on an inner
+    // element and the wrapping <li> in case the React handler sits there.
+    kaCommitClick(opt);
+    await sleep(250);
+    if (!kaBrandCommitted(brand, control)) {
+      var inner = opt.querySelector && opt.querySelector("[role='option'], button, a, [class*='ell'], span, div");
+      if (inner) { kaCommitClick(inner); await sleep(250); }
+    }
+    if (!kaBrandCommitted(brand, control)) {
+      var li = opt.closest && opt.closest("li");
+      if (li && li !== opt) { kaCommitClick(li); await sleep(250); }
+    }
+    if (kaBrandCommitted(brand, control)) {
+      try { console.log("Velosia KA: Marke '" + brand + "' gesetzt (gefiltert)"); } catch (e) {}
+      return { ok: true };
+    }
+    // Clicked the right option but KA didn't commit it — report honestly so the overlay
+    // shows "Marke — clicked_no_commit" instead of a false "Alles ausgefüllt".
+    return bail("clicked_no_commit", { optText: norm(opt.textContent).slice(0, 18), ctrlVal: (control.value || "").slice(0, 18) });
   }
 
   // Velosia's free-text condition -> the new KA option labels (no "Defekt" any more
