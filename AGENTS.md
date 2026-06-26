@@ -70,6 +70,20 @@ Velosias Oberfläche folgt bewusst **Progressive Disclosure**: Übersichts-/List
 
 ---
 
+## Angebots-Lebenszyklus & Cross-Posting-Sync (V2.7)
+
+Aufbauend auf dem Status-Tracking (V2.5) gliedert `DraftList` die Angebote jetzt in **drei Abschnitte** und macht den Nach-dem-Einstellen-Zustand handlungsleitend. Logik liegt in `frontend/src/utils/listingStatus.js`:
+*   **Gruppierung:** `draftSection(draft)` → `draft` (noch nicht eingestellt) / `active` (online/reserviert auf ≥1 Plattform) / `done` (auf allen Plattformen `TERMINAL` = verkauft/geloescht); `groupDrafts()` erhält die Reihenfolge. Abschnitte: **Entwürfe / Aktiv / Erledigt**.
+*   **Kompakter Status (`statusSummary`):** Stimmen beide Plattformen überein → **ein** Wort-Chip (Status + farbiger Punkt) + graue Plattform-Kürzel. Laufen sie auseinander → **pro-Plattform-Split** + amber **„Aktion"**-Marker (`crossPostConflict`: auf einer Plattform verkauft, auf der anderen noch live). Farbe verstärkt nur, das **Wort** trägt die Bedeutung.
+*   **Datum als Signal, nicht als Feld:** kein festes `created_at` mehr in der Liste — nur „verkauft am …" (Erledigt) bzw. ein dezenter „seit X Tagen"-Nudge bei aktiven Angeboten älter als `STALE_DAYS` (21, proxy: `created_at`). Entwürfe zeigen nichts.
+*   **Header:** der Status-Refresh ist **icon-only** (`.status-refresh-btn.icon-only`), damit „Deine Angebote" auf schmalen Phones nie umbricht.
+
+**Manuelles „Als verkauft markieren" (Kleinanzeigen):** KA exponiert kein öffentliches „verkauft", also kann der Poller einen KA-Verkauf nie erkennen → in `DraftDetail` setzt der Nutzer ihn per Hand. Endpoint `POST /api/listings/{id}/set-status` (`schemas.ListingStatusSet`, Status aus `_MANUAL_STATUSES`) setzt `{platform}_status` + `_status_at`; dient auch dem Festhalten von „geloescht" nach dem Cross-Platform-Löschen. Frontend: `setListingStatus()` in `api.js`.
+
+**Cross-Platform-Verkaufs-Sync-Sheet (`CrossPostSheet` in `DraftList`):** Nach „Status aktualisieren" (`refresh-all`) sucht die Liste den ersten `crossPostConflict` und öffnet ein Bottom-Sheet „auf X verkauft — auf Y noch online → löschen?". Das Löschen ist bewusst **halb-manuell** (siehe Memory `platform-account-writes-semi-manual`): es öffnet die noch aktive Anzeige (`window.VelosiaBridge.deleteOnPlatform(draftId, platform, url, token)` → native `loadUrl`; Desktop-Fallback `window.open`), die **finale Lösch-Bestätigung tippt der Nutzer selbst**. Kein Headless-Delete. Der neue Kotlin-Bridge-Call lebt in `MainActivity.kt` und greift erst ab dem nächsten App-Build (`--play`); das Frontend prüft die Existenz und fällt sonst auf den Tab-Fallback zurück.
+
+---
+
 ## Project Structure
 ```
 /Users/henrik/Dev/vintamie/
