@@ -278,6 +278,26 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
+        // Semi-manual cross-platform take-down: open the still-live ad in the
+        // WebView (the user's session cookies are present) so the user can delete
+        // it himself. Deliberately NOT a headless delete — a write to the user's
+        // platform account always keeps the user in the loop (final tap is his).
+        @JavascriptInterface
+        fun deleteOnPlatform(draftId: Int, platform: String, listingUrl: String, token: String) {
+            runOnUiThread {
+                authToken = token
+                activeDraftId = draftId
+                Toast.makeText(
+                    this@MainActivity,
+                    "Anzeige öffnen – du bestätigst das Löschen selbst.",
+                    Toast.LENGTH_LONG
+                ).show()
+                if (listingUrl.isNotBlank()) {
+                    webView.loadUrl(listingUrl)
+                }
+            }
+        }
+
         // The autofill engine pulls the prepared draft photos (data: URLs) from here
         // and injects all of them — no file chooser, no cross-origin fetch.
         @JavascriptInterface

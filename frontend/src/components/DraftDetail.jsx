@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
-import { ArrowLeft, Copy, Check, ExternalLink, Monitor, RefreshCw, AlertCircle, Trash2, Plus, Sparkles, Upload, Share2, Camera, TrendingUp, ChevronDown, Tag } from 'lucide-react';
-import { updateDraft, getImageUrl, getAuthToken, uploadDraftImages, deleteDraftImage, regenerateDraftField, refreshListingStatus } from '../utils/api';
-import { statusMeta, listingPlatforms } from '../utils/listingStatus';
+import { ArrowLeft, Copy, Check, ExternalLink, Monitor, RefreshCw, AlertCircle, Trash2, Plus, Sparkles, Upload, Share2, Camera, TrendingUp, ChevronDown, Tag, Coins } from 'lucide-react';
+import { updateDraft, getImageUrl, getAuthToken, uploadDraftImages, deleteDraftImage, regenerateDraftField, refreshListingStatus, setListingStatus } from '../utils/api';
+import { statusMeta, listingPlatforms, TERMINAL } from '../utils/listingStatus';
 
 export default function DraftDetail({ draft, onBack, onUpdateSuccess }) {
   const [title, setTitle] = useState(draft.title || '');
@@ -20,6 +20,7 @@ export default function DraftDetail({ draft, onBack, onUpdateSuccess }) {
   const [regeneratingField, setRegeneratingField] = useState(null);
   const [uploadingImage, setUploadingImage] = useState(false);
   const [refreshingStatus, setRefreshingStatus] = useState(false);
+  const [settingStatus, setSettingStatus] = useState(false);
   const [showDetected, setShowDetected] = useState(false); // collapsible "Automatisch erkannt"
   const fileInputRef = useRef(null);
 
@@ -137,6 +138,22 @@ export default function DraftDetail({ draft, onBack, onUpdateSuccess }) {
       alert(`Status konnte nicht aktualisiert werden: ${err.message}`);
     } finally {
       setRefreshingStatus(false);
+    }
+  };
+
+  // Manually set a platform's status — KA has no public "verkauft" state, so the
+  // user marks a KA sale by hand.
+  const handleSetStatus = async (platform, newStatus) => {
+    if (settingStatus) return;
+    setSettingStatus(true);
+    try {
+      const updated = await setListingStatus(draft.id, platform, newStatus);
+      onUpdateSuccess(updated);
+    } catch (err) {
+      console.error(err);
+      alert(`Status konnte nicht gesetzt werden: ${err.message}`);
+    } finally {
+      setSettingStatus(false);
     }
   };
 
@@ -303,39 +320,54 @@ export default function DraftDetail({ draft, onBack, onUpdateSuccess }) {
         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', width: '100%' }}>
           {platforms.map((p) => {
             const meta = statusMeta(p.status);
+            const canMarkSold = p.key === 'kleinanzeigen' && !TERMINAL.has(p.status);
             return (
-              <div key={p.key} className="listing-status-row">
-                <div className="listing-status-row-left">
-                  <span className="listing-status-platform">{p.name}</span>
-                  <span
-                    className="listing-status-badge"
-                    style={{ color: meta.color, background: meta.bg, borderColor: meta.color }}
-                  >
-                    <span className="listing-status-dot" style={{ background: meta.color }} />
-                    {meta.label}
-                  </span>
-                  {p.at && <span className="listing-status-time">{fmt(p.at)}</span>}
-                </div>
-                <div className="listing-status-row-actions">
-                  {p.url && (
-                    <a
-                      href={p.url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="btn-text-link"
-                      title="Anzeige öffnen"
+              <div key={p.key} className="listing-status-rowwrap">
+                <div className="listing-status-row">
+                  <div className="listing-status-row-left">
+                    <span className="listing-status-platform">{p.name}</span>
+                    <span
+                      className="listing-status-badge"
+                      style={{ color: meta.color, background: meta.bg, borderColor: meta.color }}
                     >
-                      Anzeige <ExternalLink size={12} />
-                    </a>
-                  )}
-                  <button
-                    className="btn-text-link"
-                    onClick={() => (isAndroidApp ? handlePostInApp(p.key) : openPlatformPage(p.key))}
-                    title="Neu einstellen"
-                  >
-                    Neu einstellen
-                  </button>
+                      <span className="listing-status-dot" style={{ background: meta.color }} />
+                      {meta.label}
+                    </span>
+                    {p.at && <span className="listing-status-time">{fmt(p.at)}</span>}
+                  </div>
+                  <div className="listing-status-row-actions">
+                    {p.url && (
+                      <a
+                        href={p.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="btn-text-link"
+                        title="Anzeige öffnen"
+                      >
+                        Anzeige <ExternalLink size={12} />
+                      </a>
+                    )}
+                    <button
+                      className="btn-text-link"
+                      onClick={() => (isAndroidApp ? handlePostInApp(p.key) : openPlatformPage(p.key))}
+                      title="Neu einstellen"
+                    >
+                      Neu einstellen
+                    </button>
+                  </div>
                 </div>
+                {canMarkSold && (
+                  <div className="mark-sold-hint">
+                    <p>Kleinanzeigen zeigt „verkauft" nicht öffentlich — du kannst es selbst setzen.</p>
+                    <button
+                      className="mark-sold-btn"
+                      disabled={settingStatus}
+                      onClick={() => handleSetStatus('kleinanzeigen', 'verkauft')}
+                    >
+                      <Coins size={15} /> Als verkauft markieren
+                    </button>
+                  </div>
+                )}
               </div>
             );
           })}

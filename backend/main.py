@@ -115,7 +115,7 @@ def run_migrations():
 
 run_migrations()
 
-app = FastAPI(title="Velosia API", version="2.6.43")
+app = FastAPI(title="Velosia API", version="2.7.0")
 
 UPLOAD_DIR = "/data/uploads" if os.path.isdir("/data") else "uploads"
 os.makedirs(UPLOAD_DIR, exist_ok=True)
@@ -957,6 +957,47 @@ def capture_published_listing(
         raise HTTPException(status_code=400, detail="Unbekannte Plattform.")
 
     _apply_listing_capture(draft, payload.platform, payload.listing_id, payload.listing_url)
+    db.commit()
+    db.refresh(draft)
+    return draft
+
+
+_MANUAL_STATUSES = {
+    listing_status.ONLINE,
+    listing_status.RESERVIERT,
+    listing_status.VERKAUFT,
+    listing_status.GELOESCHT,
+}
+
+
+@app.post("/api/listings/{draft_id}/set-status", response_model=schemas.DraftResponse)
+def set_listing_status(
+    draft_id: int,
+    payload: schemas.ListingStatusSet,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    """Manually set a platform's listing status. Needed because Kleinanzeigen
+    exposes no public 'verkauft' state — the user marks a KA sale by hand — and to
+    record a 'geloescht' after the semi-manual cross-platform take-down."""
+    draft = db.query(models.Draft).filter(
+        models.Draft.id == draft_id,
+        models.Draft.user_id == current_user.id,
+    ).first()
+    if not draft:
+        raise HTTPException(status_code=404, detail="Angebot wurde nicht gefunden.")
+    if payload.platform not in ("kleinanzeigen", "vinted"):
+        raise HTTPException(status_code=400, detail="Unbekannte Plattform.")
+    if payload.status not in _MANUAL_STATUSES:
+        raise HTTPException(status_code=400, detail="Unbekannter Status.")
+
+    now = datetime.utcnow()
+    if payload.platform == "kleinanzeigen":
+        draft.ka_status = payload.status
+        draft.ka_status_at = now
+    else:
+        draft.vinted_status = payload.status
+        draft.vinted_status_at = now
     db.commit()
     db.refresh(draft)
     return draft

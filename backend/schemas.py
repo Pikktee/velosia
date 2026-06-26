@@ -98,6 +98,11 @@ class ListingPublishedCreate(BaseModel):
     listing_id: Optional[str] = None
     listing_url: Optional[str] = None
 
+
+class ListingStatusSet(BaseModel):
+    platform: str                 # "vinted" | "kleinanzeigen"
+    status: str                   # "online" | "reserviert" | "verkauft" | "geloescht"
+
 class AnalysisResponse(BaseModel):
     title: str
     description: str

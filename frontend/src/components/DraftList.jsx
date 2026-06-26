@@ -1,18 +1,30 @@
 import React, { useRef, useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { Tag, Sparkles, Trash2, Calendar, ShoppingBag, Camera, FolderHeart, ChevronRight, Rocket, RefreshCw } from 'lucide-react';
-import { getImageUrl } from '../utils/api';
-import { statusMeta, hasListing, listingPlatforms } from '../utils/listingStatus';
+import { Tag, Sparkles, Trash2, Calendar, ShoppingBag, Camera, FolderHeart, ChevronRight, Rocket, RefreshCw, AlertTriangle, Clock, Coins, ExternalLink, X } from 'lucide-react';
+import { getImageUrl, getAuthToken, setListingStatus } from '../utils/api';
+import { statusMeta, hasListing, listingPlatforms, groupDrafts, draftSection, statusSummary, platformShort, crossPostConflict, listingAgeDays, STALE_DAYS, TERMINAL } from '../utils/listingStatus';
+
+// dd.mm for compact list signals.
+const fmtShort = (iso) => {
+  if (!iso) return null;
+  const d = new Date(iso);
+  return d.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit' });
+};
 
 export default function DraftList({ drafts, isLoading, onSelectDraft, onDeleteDraft, onRefreshStatuses }) {
   const [refreshing, setRefreshing] = useState(false);
+  const [conflict, setConflict] = useState(null);
   const anyListing = drafts.some(hasListing);
 
   const handleRefresh = async () => {
     if (refreshing || !onRefreshStatuses) return;
     setRefreshing(true);
     try {
-      await onRefreshStatuses();
+      const data = await onRefreshStatuses();
+      // Surface the first cross-posting conflict (sold on one platform, still
+      // live on the other) as the take-down sheet.
+      const found = (data || []).map(crossPostConflict).find(Boolean);
+      if (found) setConflict(found);
     } catch (err) {
       console.error('Status-Aktualisierung fehlgeschlagen:', err);
     } finally {
@@ -141,6 +153,13 @@ export default function DraftList({ drafts, isLoading, onSelectDraft, onDeleteDr
     );
   }
 
+  const groups = groupDrafts(drafts);
+  const sections = [
+    { key: 'draft', label: 'Entwürfe', items: groups.draft },
+    { key: 'active', label: 'Aktiv', items: groups.active },
+    { key: 'done', label: 'Erledigt', items: groups.done },
+  ].filter((s) => s.items.length > 0);
+
   return (
     <div className="fade-in">
       <div className="drafts-header-row">
@@ -149,27 +168,39 @@ export default function DraftList({ drafts, isLoading, onSelectDraft, onDeleteDr
         </h2>
         {anyListing && onRefreshStatuses && (
           <button
-            className="status-refresh-btn"
+            className="status-refresh-btn icon-only"
             onClick={handleRefresh}
             disabled={refreshing}
             title="Status aller Angebote aktualisieren"
+            aria-label="Status aller Angebote aktualisieren"
           >
-            <RefreshCw size={15} className={refreshing ? 'spin' : ''} />
-            <span>{refreshing ? 'Aktualisiere…' : 'Status aktualisieren'}</span>
+            <RefreshCw size={16} className={refreshing ? 'spin' : ''} />
           </button>
         )}
       </div>
 
-      <ul className="SwipeableList">
-        {drafts.map((draft) => (
-          <DraftListItem 
-            key={draft.id}
-            draft={draft}
-            onSelect={onSelectDraft}
-            onDelete={onDeleteDraft}
-          />
-        ))}
-      </ul>
+      {sections.map((sec) => (
+        <div key={sec.key} className="draft-section">
+          <div className="draft-section-head">
+            <span className="draft-section-label">{sec.label}</span>
+            <span className="draft-section-count">{sec.items.length}</span>
+          </div>
+          <ul className="SwipeableList">
+            {sec.items.map((draft) => (
+              <DraftListItem
+                key={draft.id}
+                draft={draft}
+                onSelect={onSelectDraft}
+                onDelete={onDeleteDraft}
+              />
+            ))}
+          </ul>
+        </div>
+      ))}
+
+      {conflict && (
+        <CrossPostSheet conflict={conflict} onClose={() => setConflict(null)} />
+      )}
     </div>
   );
 }
@@ -407,32 +438,17 @@ function DraftListItem({ draft, onSelect, onDelete }) {
               {draft.title || 'Unbenanntes Angebot'}
             </h3>
             
-            <div className="draft-list-item-meta">
-              <span className="draft-list-item-date">
-                <Calendar size={11} />
-                <span>{formatDate(draft.created_at)}</span>
-              </span>
-              {draft.is_turbo && (
-                <span className="draft-list-item-badge turbo-badge">
-                  <Rocket size={11} />
-                  <span>Turbo</span>
-                </span>
-              )}
-              {listingPlatforms(draft).map((p) => {
-                const meta = statusMeta(p.status);
-                return (
-                  <span
-                    key={p.key}
-                    className="draft-list-item-badge listing-status-badge"
-                    style={{ color: meta.color, background: meta.bg, borderColor: meta.color }}
-                    title={`${p.name}: ${meta.label}`}
-                  >
-                    <span className="listing-status-dot" style={{ background: meta.color }} />
-                    <span>{meta.label}</span>
+            {(draft.is_turbo || draftSection(draft) !== 'draft') && (
+              <div className="draft-list-item-meta">
+                {draft.is_turbo && (
+                  <span className="draft-list-item-badge turbo-badge">
+                    <Rocket size={11} />
+                    <span>Turbo</span>
                   </span>
-                );
-              })}
-            </div>
+                )}
+                <ListingStatusMeta draft={draft} />
+              </div>
+            )}
           </div>
 
           {/* Right Section: Price & Actions */}
@@ -469,5 +485,131 @@ function DraftListItem({ draft, onSelect, onDelete }) {
         document.body
       )}
     </li>
+  );
+}
+
+// Compact, color-coded status for a list row. One chip when both platforms agree
+// (status word + muted platform names); a per-platform split + "Aktion" marker on
+// divergence. Plus a conditional date signal: "verkauft am …" (done) or a gentle
+// "seit X Tagen" stale nudge (active). Progressive disclosure — drafts show none.
+function ListingStatusMeta({ draft }) {
+  const summary = statusSummary(draft);
+  if (!summary) return null;
+  const section = draftSection(draft);
+  const chips = [];
+
+  if (summary.mode === 'collapsed') {
+    const meta = statusMeta(summary.status);
+    chips.push(
+      <span
+        key="s"
+        className="draft-list-item-badge listing-status-badge"
+        style={{ color: meta.color, background: meta.bg, borderColor: meta.color }}
+      >
+        <span className="listing-status-dot" style={{ background: meta.color }} />
+        <span>{meta.label}</span>
+      </span>
+    );
+    chips.push(
+      <span key="p" className="listing-platforms-muted">
+        {summary.platforms.map((p) => platformShort(p.key)).join(' · ')}
+      </span>
+    );
+  } else {
+    summary.platforms.forEach((p) => {
+      const meta = statusMeta(p.status);
+      chips.push(
+        <span
+          key={p.key}
+          className="draft-list-item-badge listing-status-badge"
+          style={{ color: meta.color, background: meta.bg, borderColor: meta.color }}
+        >
+          <span className="listing-status-dot" style={{ background: meta.color }} />
+          <span>{meta.label} · {platformShort(p.key)}</span>
+        </span>
+      );
+    });
+    if (summary.conflict) {
+      chips.push(
+        <span key="a" className="draft-list-item-badge listing-action-badge">
+          <AlertTriangle size={11} />
+          <span>Aktion</span>
+        </span>
+      );
+    }
+  }
+
+  let signal = null;
+  if (section === 'done') {
+    const sold = summary.platforms.find((p) => p.status === 'verkauft');
+    if (sold && sold.at) {
+      signal = (
+        <span className="listing-meta-signal sold">
+          <Coins size={11} />
+          <span>verkauft am {fmtShort(sold.at)}</span>
+        </span>
+      );
+    }
+  } else if (section === 'active' && summary.mode === 'collapsed') {
+    const age = listingAgeDays(draft);
+    if (age > STALE_DAYS) {
+      signal = (
+        <span className="listing-meta-signal stale">
+          <Clock size={11} />
+          <span>seit {age} Tagen</span>
+        </span>
+      );
+    }
+  }
+
+  return (<>{chips}{signal}</>);
+}
+
+// The cross-platform sell-sync sheet: appears after a refresh detects a sale on
+// one platform while the item is still live on the other. The take-down is
+// semi-manual — we open the still-live ad (native bridge if present, else a new
+// tab) and the user confirms the deletion himself. Never a headless delete.
+function CrossPostSheet({ conflict, onClose }) {
+  const { draft, sold, live } = conflict;
+
+  const handleDelete = () => {
+    if (typeof window !== 'undefined'
+        && window.VelosiaBridge
+        && typeof window.VelosiaBridge.deleteOnPlatform === 'function') {
+      window.VelosiaBridge.deleteOnPlatform(draft.id, live.key, live.url || '', getAuthToken());
+    } else if (live.url) {
+      window.open(live.url, '_blank', 'noopener');
+    }
+    onClose();
+  };
+
+  return createPortal(
+    <div className="sync-sheet-overlay" onClick={onClose}>
+      <div className="sync-sheet" onClick={(e) => e.stopPropagation()}>
+        <button className="sync-sheet-x" onClick={onClose} aria-label="Schließen"><X size={18} /></button>
+        <div className="sync-sheet-handle" />
+        <div className="sync-sheet-head">
+          <div className="sync-sheet-icon"><Coins size={22} /></div>
+          <div>
+            <h3>Auf {sold.name} verkauft</h3>
+            <p>{draft.title || 'Angebot'}{draft.price != null ? ` · ${Math.round(draft.price)} €` : ''}</p>
+          </div>
+        </div>
+        <div className="sync-sheet-warn">
+          <AlertTriangle size={17} />
+          <p>Der Artikel ist auf <strong>{live.name} noch online</strong>. Nimm ihn dort runter, damit du ihn nicht zweimal verkaufst.</p>
+        </div>
+        <button className="btn btn-primary sync-sheet-btn" onClick={handleDelete}>
+          <Trash2 size={16} /> Auf {live.name} öffnen &amp; löschen
+        </button>
+        <button className="btn sync-sheet-keep" onClick={onClose}>
+          Behalten — ich mach&apos;s selbst
+        </button>
+        <p className="sync-sheet-note">
+          Du bestätigst das Löschen selbst auf {live.name}. Danach aktualisiert sich der Status beim nächsten Abruf.
+        </p>
+      </div>
+    </div>,
+    document.body
   );
 }

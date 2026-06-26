@@ -64,6 +64,12 @@ After a listing goes live we capture its **public listing id/URL** and track its
 
 ---
 
+## UI-Designprinzip: Progressive Disclosure
+
+Velosias Oberfläche folgt bewusst **Progressive Disclosure**: Übersichts-/Listenansichten (v. a. `DraftList`) bleiben **minimal** — Thumbnail, Titel, Datum, Preis und höchstens ein **kompakter, farbcodierter** Veröffentlichungs-Status. **Keine** abgeleiteten Zustands-Labels wie „Bereit" oder „Kategorie prüfen" in der Liste — solche Hinweise gehören eine Ebene tiefer in `DraftDetail`. Im Zweifel: Info **nicht** in die Liste, sondern ins Detail. Listen-Status-Indikatoren sollen kompakt und idealerweise wortlos sein (Plattform-Kürzel in der Status-Farbe), die volle Pro-Plattform-Aufschlüsselung lebt in der Status-Sektion von `DraftDetail`.
+
+---
+
 ## Project Structure
 ```
 /Users/henrik/Dev/vintamie/

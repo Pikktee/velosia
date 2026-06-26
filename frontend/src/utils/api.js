@@ -333,6 +333,20 @@ export const refreshListingStatus = async (id) => {
   return response.json();
 };
 
+// Manually set a platform's listing status (e.g. mark a Kleinanzeigen ad as sold,
+// or record a 'geloescht' after a semi-manual cross-platform take-down).
+export const setListingStatus = async (id, platform, status) => {
+  const response = await fetch(`${API_BASE_URL}/api/listings/${id}/set-status`, {
+    method: 'POST',
+    headers: getHeaders(),
+    body: JSON.stringify({ platform, status }),
+  });
+  if (!response.ok) {
+    throw new Error('Status konnte nicht gesetzt werden.');
+  }
+  return response.json();
+};
+
 // Re-poll all of the user's active listings at once. Returns the full draft list.
 export const refreshAllListings = async () => {
   const response = await fetch(`${API_BASE_URL}/api/listings/refresh-all`, {

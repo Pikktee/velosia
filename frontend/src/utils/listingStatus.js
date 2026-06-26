@@ -18,6 +18,62 @@ export const hasListing = (draft) =>
   !!(draft && (draft.ka_listing_url || draft.vinted_listing_url ||
                draft.ka_listing_id || draft.vinted_listing_id));
 
+// Terminal statuses — a listing in one of these is "done" (off the market).
+export const TERMINAL = new Set(['verkauft', 'geloescht']);
+
+// Short platform label for compact list chips.
+export const platformShort = (key) => (key === 'kleinanzeigen' ? 'KA' : 'Vinted');
+
+// After how many days an *active* listing earns a gentle "seit X Tagen" nudge
+// (invitation to lower the price / re-list). Soft signal — uses created_at as a
+// proxy for "online since".
+export const STALE_DAYS = 21;
+
+// Which list section a draft belongs to: 'draft' (not yet listed), 'active'
+// (live on ≥1 platform), or 'done' (terminal on every platform it's on).
+export const draftSection = (draft) => {
+  const platforms = listingPlatforms(draft);
+  if (platforms.length === 0) return 'draft';
+  return platforms.every((p) => TERMINAL.has(p.status)) ? 'done' : 'active';
+};
+
+// Group drafts into the three sections, preserving incoming order.
+export const groupDrafts = (drafts) => {
+  const groups = { draft: [], active: [], done: [] };
+  (drafts || []).forEach((d) => { groups[draftSection(d)].push(d); });
+  return groups;
+};
+
+// Days since the draft was created (proxy for "online since").
+export const listingAgeDays = (draft) => {
+  if (!draft || !draft.created_at) return 0;
+  const ms = Date.now() - new Date(draft.created_at).getTime();
+  return Math.max(0, Math.floor(ms / 86400000));
+};
+
+// Cross-posting conflict: sold on one platform while still online/reserved on the
+// other — the actionable "take it down elsewhere" moment.
+export const crossPostConflict = (draft) => {
+  const platforms = listingPlatforms(draft);
+  if (platforms.length < 2) return null;
+  const sold = platforms.find((p) => p.status === 'verkauft');
+  const live = platforms.find((p) => p.status === 'online' || p.status === 'reserviert');
+  if (sold && live) return { draft, sold, live };
+  return null;
+};
+
+// Compact status summary for the list row: one chip when all platforms agree,
+// a per-platform split (plus a conflict flag) when they diverge.
+export const statusSummary = (draft) => {
+  const platforms = listingPlatforms(draft);
+  if (platforms.length === 0) return null;
+  const distinct = [...new Set(platforms.map((p) => p.status))];
+  if (distinct.length === 1) {
+    return { mode: 'collapsed', status: distinct[0], platforms };
+  }
+  return { mode: 'split', platforms, conflict: !!crossPostConflict(draft) };
+};
+
 // The platforms this draft is published on, with their status + public URL.
 export const listingPlatforms = (draft) => {
   const out = [];

@@ -3780,3 +3780,196 @@ select.form-control {
 .turbo-onboarding-cta:active { transform: scale(0.97); }
 
 
+
+/* === Listing lifecycle: sections, compact status, sync sheet (V2.7) === */
+
+/* Section headers in the draft list (Entwürfe / Aktiv / Erledigt) */
+.draft-section + .draft-section { margin-top: 0.35rem; }
+.draft-section-head {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.7rem 0.35rem 0.6rem;
+}
+.draft-section-label {
+  font-family: var(--font-title);
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: var(--text-secondary);
+}
+.draft-section-count {
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: var(--primary);
+  background: rgba(9, 176, 183, 0.08);
+  border: 1px solid rgba(9, 176, 183, 0.2);
+  border-radius: 99px;
+  padding: 0.05rem 0.5rem;
+}
+
+/* Icon-only refresh button — never wraps the page title on narrow phones */
+.status-refresh-btn.icon-only {
+  width: 38px;
+  height: 38px;
+  padding: 0;
+  border-radius: 50%;
+  justify-content: center;
+}
+
+/* Muted platform names next to a single collapsed status chip */
+.listing-platforms-muted {
+  font-size: 0.7rem;
+  color: var(--text-muted);
+}
+
+/* Cross-post "Aktion" marker (platforms diverge: sold here, live there) */
+.draft-list-item-badge.listing-action-badge {
+  color: var(--warning);
+  background: rgba(245, 158, 11, 0.16);
+  border: 1px solid rgba(245, 158, 11, 0.45);
+  font-weight: 600;
+}
+
+/* Conditional date signals on list rows */
+.listing-meta-signal {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  font-size: 0.68rem;
+  font-weight: 600;
+}
+.listing-meta-signal.stale { color: var(--warning); }
+.listing-meta-signal.sold { color: var(--text-muted); }
+
+/* Detail: manual "Als verkauft markieren" (KA has no public sold state) */
+.listing-status-rowwrap {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+.mark-sold-hint p {
+  font-size: 0.72rem;
+  line-height: 1.45;
+  color: var(--text-muted);
+  margin: 0 0 0.5rem;
+}
+.mark-sold-btn {
+  width: 100%;
+  min-height: 40px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  font-family: var(--font-title);
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: #60a5fa;
+  background: rgba(96, 165, 250, 0.1);
+  border: 1px solid rgba(96, 165, 250, 0.3);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: background 0.2s ease;
+}
+.mark-sold-btn:hover:not(:disabled) { background: rgba(96, 165, 250, 0.18); }
+.mark-sold-btn:disabled { opacity: 0.6; cursor: default; }
+
+/* Cross-platform sell-sync bottom sheet */
+.sync-sheet-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  background: rgba(0, 0, 0, 0.55);
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  animation: syncFade 0.2s ease;
+}
+@keyframes syncFade { from { opacity: 0; } to { opacity: 1; } }
+.sync-sheet {
+  position: relative;
+  width: 100%;
+  max-width: 480px;
+  background: rgba(17, 21, 30, 0.96);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+  padding: 1rem 1.25rem calc(1.75rem + env(safe-area-inset-bottom, 0px));
+  animation: sheetUp 0.32s cubic-bezier(0.2, 0.9, 0.3, 1.1);
+}
+@keyframes sheetUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
+.sync-sheet-x {
+  position: absolute;
+  top: 0.85rem;
+  right: 0.85rem;
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 0.25rem;
+  display: flex;
+}
+.sync-sheet-handle {
+  width: 40px;
+  height: 4px;
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.18);
+  margin: 0 auto 1.1rem;
+}
+.sync-sheet-head {
+  display: flex;
+  gap: 0.85rem;
+  align-items: center;
+  margin-bottom: 1rem;
+}
+.sync-sheet-icon {
+  width: 46px;
+  height: 46px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #60a5fa;
+  background: rgba(96, 165, 250, 0.14);
+  border: 1px solid rgba(96, 165, 250, 0.4);
+}
+.sync-sheet-head h3 {
+  font-family: var(--font-title);
+  font-size: 1.1rem;
+  margin: 0;
+  color: var(--text-primary);
+}
+.sync-sheet-head p {
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  margin: 0.2rem 0 0;
+}
+.sync-sheet-warn {
+  display: flex;
+  gap: 0.6rem;
+  align-items: flex-start;
+  background: rgba(245, 158, 11, 0.1);
+  border: 1px solid rgba(245, 158, 11, 0.3);
+  border-radius: var(--radius-sm);
+  padding: 0.75rem 0.85rem;
+  margin-bottom: 1rem;
+}
+.sync-sheet-warn svg { color: var(--warning); flex-shrink: 0; margin-top: 1px; }
+.sync-sheet-warn p { font-size: 0.84rem; line-height: 1.5; color: #fcd34d; margin: 0; }
+.sync-sheet-warn strong { font-weight: 600; color: #fde68a; }
+.sync-sheet-btn { width: 100%; margin-bottom: 0.6rem; }
+.sync-sheet-keep {
+  width: 100%;
+  background: transparent;
+  color: var(--text-secondary);
+  border: 1px solid var(--glass-border);
+}
+.sync-sheet-keep:hover { background: rgba(255, 255, 255, 0.03); }
+.sync-sheet-note {
+  font-size: 0.72rem;
+  line-height: 1.45;
+  color: var(--text-muted);
+  text-align: center;
+  margin: 0.85rem 0.25rem 0;
+}
