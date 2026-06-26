@@ -724,12 +724,17 @@
     return [];
   }
 
+  // Connector-insensitive key so "Jack & Jones" == "Jack and Jones" == "Jack Jones".
+  function kaLooseKey(s) {
+    return norm(s).replace(/\b(und|and|the|by)\b/g, " ").replace(/\s+/g, " ").trim();
+  }
+
   // Does an option's text match a wanted value? Handles "M (38)" vs "M" vs "38".
   function kaOptMatches(optText, want, exactOnly) {
     var o = norm(optText), c = norm(want);
     if (!o || !c) return false;
     if (o === c) return true;
-    if (exactOnly) return false;
+    if (exactOnly) return kaLooseKey(optText) === kaLooseKey(want);
     var pre = norm(String(optText).split("(")[0]);
     if (pre && pre === c) return true;
     var m = String(optText).match(/\(([^)]+)\)/);
@@ -780,6 +785,35 @@
     return true;
   }
 
+  // Marke is special: its listbox holds ~2480 brands. We TYPE the brand to FILTER it
+  // down (KA only filters on a real InputEvent — a plain Event("input") does NOT), then
+  // click the exact (connector-insensitive) match. Filtering also dodges the full-list
+  // render that on mobile left the brand unmatched. Never commits a non-exact brand.
+  async function selectKleinanzeigenBrand(brand) {
+    if (!brand) return false;
+    var control = kaFieldControl("Marke");
+    if (!control || control.tagName !== "INPUT") return false;
+    try { control.scrollIntoView({ block: "center" }); } catch (e) {}
+    try { control.click(); control.focus(); } catch (e) {}
+    setNativeValue(control, String(brand));
+    try { control.dispatchEvent(new InputEvent("input", { bubbles: true, data: String(brand), inputType: "insertText" })); }
+    catch (e) { control.dispatchEvent(new Event("input", { bubbles: true })); }
+    var want = kaLooseKey(brand);
+    var opt = null;
+    for (var i = 0; i < 18 && !opt; i++) {
+      await sleep(200);
+      var pool = Array.prototype.slice.call(document.querySelectorAll("[role='option']")).filter(kaVisible);
+      for (var j = 0; j < pool.length; j++) {
+        if (kaLooseKey(pool[j].textContent) === want) { opt = pool[j]; break; }
+      }
+    }
+    if (!opt) { kaCloseOverlay(control); return false; }
+    try { opt.click(); } catch (e) {}
+    await sleep(200);
+    try { console.log("Velosia KA: Marke '" + brand + "' gesetzt (gefiltert)"); } catch (e) {}
+    return true;
+  }
+
   // Velosia's free-text condition -> the new KA option labels (no "Defekt" any more
   // -> left manual). "Neu" tries the plain option before "Neu mit Etikett".
   function kaConditionCandidates(condition) {
@@ -789,17 +823,37 @@
     return [target];
   }
 
+  // Men's jeans waist -> KA's letter sizing. KA jeans offer ONLY XS…8XL (no waist
+  // field), so "W36" must become "XL" to match. Approximate but the user reviews.
+  function kaWaistToLetter(w) {
+    w = parseInt(w, 10);
+    if (!w) return null;
+    if (w <= 28) return "XS";
+    if (w <= 30) return "S";
+    if (w <= 32) return "M";
+    if (w <= 34) return "L";
+    if (w <= 36) return "XL";
+    if (w <= 38) return "XXL";
+    if (w <= 40) return "XXXL";
+    if (w <= 44) return "4XL";
+    return "5XL";
+  }
+
   // Expand a free-text size into candidates the matcher can hit against options like
-  // "M (38)" / "XS (34)" / "Einheitsgröße" (letter, the DE number, the raw value).
+  // "M (38)" / "XS (34)" / "M" / "Einheitsgröße". Order matters — letter/waist-letter
+  // before the bare number so a waist size resolves to its alpha, not a DE number.
   function kaSizeCandidates(size) {
     var s = String(size || "").trim();
     if (!s) return [];
     var out = [s];
+    var letter = (s.match(/\b(XXXS|XXS|XS|S|M|L|XL|XXL|XXXL|\dXL)\b/i) || [])[0];
+    if (letter) out.push(letter.toUpperCase());
+    // Waist/length like "W36 H34" / "W36/L34" / "36/34" -> letter equivalent.
+    var waist = (s.match(/\bW\s*(\d{2})\b/i) || s.match(/^(\d{2})\s*[\/x]\s*\d{2}/i) || [])[1];
+    if (waist) { var wl = kaWaistToLetter(waist); if (wl) out.push(wl); }
     var num = (s.match(/\d{2,3}/) || [])[0];
     if (num) out.push(num);
-    var letter = (s.match(/\b(XXXS|XXS|XS|S|M|L|XL|XXL|XXXL|\dXL)\b/i) || [])[0];
-    if (letter && out.indexOf(letter.toUpperCase()) === -1) out.push(letter.toUpperCase());
-    return out;
+    return out.filter(function (v, i, a) { return v && a.indexOf(v) === i; });
   }
 
   // ----------------------------------------------------------------------------
@@ -1829,7 +1883,9 @@
       }
       var kaBrand = attrValue(draft, "marke");
       if (kaBrand && !alreadyFilled("marke")) {
-        if (await trySel("Marke", [kaBrand], true)) filled.push("Marke");
+        var brandOkKa = false;
+        try { brandOkKa = await selectKleinanzeigenBrand(kaBrand); } catch (e) {}
+        if (brandOkKa) filled.push("Marke");
         else manual.push("Marke");
       }
     }
