@@ -662,6 +662,146 @@
     return false;
   }
 
+  // --------------------------------------------------------------------------
+  // Kleinanzeigen NEW (2026 React form) attribute fields — Zustand / Größe /
+  // Farbe / Marke. The <select>/pill paths above no-op on this layout, so we drive
+  // the new UI: each field is a <label>Name</label> + a control that opens either a
+  // [role=listbox] (click option = immediate) or a modal with radios + a "Bestätigen"
+  // button. Options are matched by VISIBLE TEXT, never KA's internal value codes.
+  // Verified live: the whole flow (open + select + confirm) runs on synthetic clicks
+  // — the earlier "isTrusted gate" reading was a broken detector (KA uses no
+  // role=dialog), not a real block.
+  // --------------------------------------------------------------------------
+
+  function kaVisible(el) {
+    return !!(el && el.offsetParent !== null && !el.closest("#velosia-backdrop, #velosia-overlay"));
+  }
+
+  function kaFindVisibleButton(text) {
+    var t = norm(text);
+    var btns = document.querySelectorAll("button");
+    for (var i = 0; i < btns.length; i++) {
+      if (kaVisible(btns[i]) && norm(btns[i].textContent) === t) return btns[i];
+    }
+    return null;
+  }
+
+  // The control that opens a field's picker. Most fields expose id === the label's
+  // "for"; Zustand's "for" points at an id with no element, so we fall back to the
+  // first popup-control inside the field row.
+  function kaFieldControl(labelText) {
+    var want = norm(labelText);
+    var labels = document.querySelectorAll("label");
+    for (var i = 0; i < labels.length; i++) {
+      if (norm(labels[i].textContent) !== want) continue;
+      var forId = labels[i].getAttribute("for");
+      if (forId) {
+        var byId = document.getElementById(forId);
+        if (byId && kaVisible(byId)) return byId;
+      }
+      var row = labels[i];
+      for (var k = 0; k < 5 && row.parentElement; k++) {
+        row = row.parentElement;
+        var ctrl = row.querySelector("button[aria-haspopup='dialog'], [role='combobox'], input[role='combobox']");
+        if (ctrl && ctrl !== labels[i] && kaVisible(ctrl)) return ctrl;
+      }
+    }
+    return null;
+  }
+
+  // Visible options of an open picker: listbox options, else (modal pattern) the
+  // radio-labels — but only when a "Bestätigen" button is actually on screen.
+  function kaOptionPool() {
+    var opts = Array.prototype.slice.call(document.querySelectorAll("[role='option']")).filter(kaVisible);
+    if (opts.length) return opts;
+    if (kaFindVisibleButton("bestätigen")) {
+      return Array.prototype.slice.call(document.querySelectorAll("label[for]")).filter(function (l) {
+        if (!kaVisible(l)) return false;
+        var r = document.getElementById(l.getAttribute("for"));
+        return r && r.type === "radio";
+      });
+    }
+    return [];
+  }
+
+  // Does an option's text match a wanted value? Handles "M (38)" vs "M" vs "38".
+  function kaOptMatches(optText, want, exactOnly) {
+    var o = norm(optText), c = norm(want);
+    if (!o || !c) return false;
+    if (o === c) return true;
+    if (exactOnly) return false;
+    var pre = norm(String(optText).split("(")[0]);
+    if (pre && pre === c) return true;
+    var m = String(optText).match(/\(([^)]+)\)/);
+    if (m && norm(m[1]) === c) return true;
+    return (c.length >= 2 && o.length < 30 && o.indexOf(c) !== -1);
+  }
+
+  function kaSelectFromPool(candidates, exactOnly) {
+    var pool = kaOptionPool();
+    for (var c = 0; c < candidates.length; c++) {
+      for (var i = 0; i < pool.length; i++) {
+        if (kaOptMatches(pool[i].textContent, candidates[c], exactOnly)) return pool[i];
+      }
+    }
+    return null;
+  }
+
+  function kaCloseOverlay(control) {
+    try { document.body.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true })); } catch (e) {}
+    try { if (control) control.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true })); } catch (e) {}
+  }
+
+  // Open one new-form picker and pick the option matching `candidates`. exactOnly is
+  // used for Marke (never a wrong brand). Returns true only when an option matched.
+  async function selectKleinanzeigenAttribute(labelText, candidates, exactOnly) {
+    if (!candidates || !candidates.length) return false;
+    var control = kaFieldControl(labelText);
+    if (!control) return false;
+    try { control.scrollIntoView({ block: "center" }); } catch (e) {}
+    try { control.click(); } catch (e) {}
+    if (control.tagName === "INPUT") { try { control.focus(); } catch (e) {} }
+
+    var opt = null;
+    for (var i = 0; i < 12 && !opt; i++) {
+      await sleep(200);
+      opt = kaSelectFromPool(candidates, exactOnly);
+    }
+    if (!opt) { kaCloseOverlay(control); return false; }
+
+    var radioId = (opt.tagName === "LABEL") ? opt.getAttribute("for") : null;
+    var radio = radioId ? document.getElementById(radioId) : null;
+    try { (radio || opt).click(); } catch (e) {}
+    await sleep(200);
+    // Modal pattern: commit with "Bestätigen". Listbox pattern: nothing to confirm.
+    var confirm = kaFindVisibleButton("bestätigen");
+    if (confirm) { try { confirm.click(); } catch (e) {} await sleep(200); }
+    try { console.log("Velosia KA: '" + labelText + "' gesetzt (" + norm(opt.textContent).slice(0, 24) + ")"); } catch (e) {}
+    return true;
+  }
+
+  // Velosia's free-text condition -> the new KA option labels (no "Defekt" any more
+  // -> left manual). "Neu" tries the plain option before "Neu mit Etikett".
+  function kaConditionCandidates(condition) {
+    var target = KA_CONDITION_MAP[norm(condition || "")];
+    if (!target || target === "Defekt") return [];
+    if (target === "Neu") return ["Neu", "Neu mit Etikett"];
+    return [target];
+  }
+
+  // Expand a free-text size into candidates the matcher can hit against options like
+  // "M (38)" / "XS (34)" / "Einheitsgröße" (letter, the DE number, the raw value).
+  function kaSizeCandidates(size) {
+    var s = String(size || "").trim();
+    if (!s) return [];
+    var out = [s];
+    var num = (s.match(/\d{2,3}/) || [])[0];
+    if (num) out.push(num);
+    var letter = (s.match(/\b(XXXS|XXS|XS|S|M|L|XL|XXL|XXXL|\dXL)\b/i) || [])[0];
+    if (letter && out.indexOf(letter.toUpperCase()) === -1) out.push(letter.toUpperCase());
+    return out;
+  }
+
   // ----------------------------------------------------------------------------
   // Vinted category picker (in-DOM dropdown, drilled level by level)
   // ----------------------------------------------------------------------------
@@ -1652,14 +1792,46 @@
       attrCount = dedupAttr.length;
       dedupAttr.forEach(function (lbl) { filled.push(lbl); });
 
-      // Zustand: set it directly from draft.condition (independent of whether the
-      // server backfilled it as an attribute). Skips the select if fillAttributes
-      // already handled it (marked __velosiaKnown). Report it once, either way.
+      // Zustand: set it directly from draft.condition. First the old <select>/pill
+      // layout, then the new 2026 React modal (radios + "Bestätigen"). Report once.
       var zustandDone = filled.some(function (l) { return norm(l).indexOf("zustand") !== -1; });
       if (!zustandDone && draft.condition) {
         if (selectKleinanzeigenCondition(draft)) { filled.push("Zustand"); zustandDone = true; }
       }
+      // trySel: never let one picker's failure abort the rest of the fill.
+      var trySel = async function (label, cands, exact) {
+        try { return await selectKleinanzeigenAttribute(label, cands, exact); }
+        catch (e) { return false; }
+      };
+      if (!zustandDone && draft.condition) {
+        var condCands = kaConditionCandidates(draft.condition);
+        if (condCands.length && await trySel("Zustand", condCands, false)) {
+          filled.push("Zustand"); zustandDone = true;
+        }
+      }
       if (!zustandDone && draft.condition) manual.push("Zustand");
+
+      // New 2026 form: Größe / Farbe / Marke are dialog/listbox/combobox pickers the
+      // old fillAttributes (<select>/text only) can't drive. Values come from the AI
+      // attributes; Marke is EXACT-only (never a wrong brand — leer ist besser als
+      // halluziniert). A field the AI didn't provide is simply skipped.
+      var alreadyFilled = function (word) {
+        return filled.some(function (l) { return norm(l).indexOf(word) !== -1; });
+      };
+      var kaSize = attrValue(draft, "größe");
+      if (kaSize && !alreadyFilled("größe") && !alreadyFilled("grosse")) {
+        if (await trySel("Größe", kaSizeCandidates(kaSize), false)) filled.push("Größe");
+        else manual.push("Größe");
+      }
+      var kaColor = attrValue(draft, "farbe");
+      if (kaColor && !alreadyFilled("farbe")) {
+        if (await trySel("Farbe", [kaColor], false)) filled.push("Farbe");
+      }
+      var kaBrand = attrValue(draft, "marke");
+      if (kaBrand && !alreadyFilled("marke")) {
+        if (await trySel("Marke", [kaBrand], true)) filled.push("Marke");
+        else manual.push("Marke");
+      }
     }
 
     // Vinted: drive the category picker automatically (drilled by catalog id / name),
