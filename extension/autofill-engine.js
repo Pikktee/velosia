@@ -830,14 +830,10 @@
   // reliable signal (typing the filter only ever set the control to the prefix). Lets us
   // report honest success/failure instead of trusting that a click did anything.
   function kaBrandCommitted(brand, control) {
-    var want = kaLooseKey(brand);
-    if (control && kaLooseKey(control.value || "") === want) return true;
-    var hid = document.querySelectorAll("input[name*='brand' i], input[name*='marke' i]");
-    for (var i = 0; i < hid.length; i++) {
-      if (hid[i] === control) continue;
-      if (String(hid[i].value || "").trim()) return true;
-    }
-    return false;
+    // STRICT: the combobox's own displayed value must equal the full brand. The earlier
+    // "any brand-named input is non-empty" heuristic false-positived on the typed filter
+    // prefix ("Jack"), so the engine wrongly reported success while the field was empty.
+    return !!(control && kaLooseKey(control.value || "") === kaLooseKey(brand));
   }
 
   // Type the brand to FILTER the (huge) brand listbox, then click the exact
@@ -905,7 +901,26 @@
       var li = opt.closest && opt.closest("li");
       if (li && li !== opt) { kaCommitClick(li); await sleep(250); }
     }
-    if (kaBrandCommitted(brand, control)) {
+    var committed = kaBrandCommitted(brand, control);
+    // One-shot rich dump (retrievable via GET /api/telemetry/debug/recent) of how KA
+    // backs the brand field on mobile — so we fix the real commit signal instead of
+    // guessing. No listing content beyond the brand name itself.
+    try {
+      var bInputs = Array.prototype.slice.call(
+        document.querySelectorAll("input[name*='brand' i], input[name*='marke' i]")
+      ).slice(0, 5).map(function (x) {
+        return (x.getAttribute("name") || x.type || "?").slice(0, 36) + "=" + String(x.value || "").slice(0, 20);
+      });
+      sendDebug({ event: "ka_brand_dump", committed: committed,
+        ctrlTag: control.tagName, ctrlRole: control.getAttribute("role") || null,
+        ctrlName: (control.getAttribute("name") || "").slice(0, 36),
+        ctrlVal: String(control.value || "").slice(0, 24),
+        ariaActive: control.getAttribute("aria-activedescendant") || null,
+        optCount: lastCount, optText: norm(opt.textContent).slice(0, 24),
+        optHtml: (opt.outerHTML || "").replace(/\s+/g, " ").slice(0, 220),
+        brandInputs: bInputs }, options);
+    } catch (e) {}
+    if (committed) {
       try { console.log("Velosia KA: Marke '" + brand + "' gesetzt (gefiltert)"); } catch (e) {}
       return { ok: true };
     }
