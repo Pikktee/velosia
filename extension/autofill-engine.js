@@ -729,6 +729,16 @@
     return norm(s).replace(/\b(und|and|the|by)\b/g, " ").replace(/\s+/g, " ").trim();
   }
 
+  // What to TYPE into the brand search to filter: only the part before the first
+  // connector (&/+/and/und), because KA's filter is literal — "Jack and Jones" finds
+  // nothing, "Jack" finds the superset that contains "Jack & Jones".
+  function kaBrandFilterText(brand) {
+    var s = String(brand).trim();
+    var m = s.match(/^(.*?)\s*(?:&|\+|\band\b|\bund\b)/i);
+    var key = (m ? m[1] : s).trim();
+    return key.length >= 2 ? key : s;
+  }
+
   // Does an option's text match a wanted value? Handles "M (38)" vs "M" vs "38".
   function kaOptMatches(optText, want, exactOnly) {
     var o = norm(optText), c = norm(want);
@@ -785,26 +795,61 @@
     return true;
   }
 
-  // Marke is special: its listbox holds ~2480 brands. We TYPE the brand to FILTER it
-  // down (KA only filters on a real InputEvent — a plain Event("input") does NOT), then
-  // click the exact (connector-insensitive) match. Filtering also dodges the full-list
-  // render that on mobile left the brand unmatched. Never commits a non-exact brand.
-  async function selectKleinanzeigenBrand(brand) {
+  // After opening the Marke control, find the input that actually filters. Desktop:
+  // the control itself. Mobile: KA (like Vinted) may pop a SEARCH MODAL with its own
+  // autofocused input — so prefer the focused/visible search input in an open overlay.
+  function pickBrandSearchInput(control) {
+    var ae = document.activeElement;
+    if (ae && ae.tagName === "INPUT" && kaVisible(ae)) return ae;
+    var inputs = document.querySelectorAll("input[type='text'], input[type='search'], input[role='combobox'], input:not([type])");
+    for (var i = 0; i < inputs.length; i++) {
+      if (!kaVisible(inputs[i])) continue;
+      if (inputs[i].closest("[role='dialog'], [class*='odal'], [class*='verlay'], [class*='ottomSheet'], [class*='heet'], [class*='earch']")) return inputs[i];
+    }
+    return (control.tagName === "INPUT") ? control : null;
+  }
+
+  // Type the brand to FILTER the (huge) brand listbox, then click the exact
+  // (connector-insensitive) match. KA only filters on a real InputEvent — a plain
+  // Event("input") does NOT — and we also fire key events for keyup-based filters.
+  // Filtering dodges the full-list render that on mobile left the brand unmatched.
+  // Never commits a non-exact brand. `options` is only used for an optional beacon.
+  async function selectKleinanzeigenBrand(brand, options) {
     if (!brand) return false;
     var control = kaFieldControl("Marke");
-    if (!control || control.tagName !== "INPUT") return false;
+    if (!control) return false;
     try { control.scrollIntoView({ block: "center" }); } catch (e) {}
-    try { control.click(); control.focus(); } catch (e) {}
-    setNativeValue(control, String(brand));
-    try { control.dispatchEvent(new InputEvent("input", { bubbles: true, data: String(brand), inputType: "insertText" })); }
-    catch (e) { control.dispatchEvent(new Event("input", { bubbles: true })); }
+    try { control.click(); } catch (e) {}
+    await sleep(350);
+    var input = pickBrandSearchInput(control);
+    if (!input) { kaCloseOverlay(control); return false; }
+    try { input.focus(); } catch (e) {}
+    // Type only the part BEFORE the first connector: KA's own filter is literal and
+    // does NOT treat "and" == "&" (typing "Jack and Jones" filters to nothing), so we
+    // type "Jack", get the superset, and exact-match the full brand in the results.
+    var filterText = kaBrandFilterText(brand);
+    var last = filterText.slice(-1);
+    try { input.dispatchEvent(new KeyboardEvent("keydown", { bubbles: true, key: last })); } catch (e) {}
+    setNativeValue(input, filterText);
+    try { input.dispatchEvent(new InputEvent("input", { bubbles: true, data: filterText, inputType: "insertText" })); }
+    catch (e) { input.dispatchEvent(new Event("input", { bubbles: true })); }
+    try { input.dispatchEvent(new KeyboardEvent("keyup", { bubbles: true, key: last })); } catch (e) {}
+
     var want = kaLooseKey(brand);
-    var opt = null;
-    for (var i = 0; i < 18 && !opt; i++) {
+    var opt = null, probed = false;
+    for (var i = 0; i < 25 && !opt; i++) {
       await sleep(200);
       var pool = Array.prototype.slice.call(document.querySelectorAll("[role='option']")).filter(kaVisible);
       for (var j = 0; j < pool.length; j++) {
         if (kaLooseKey(pool[j].textContent) === want) { opt = pool[j]; break; }
+      }
+      // One-shot diagnostic (no listing content) so we can see the mobile structure.
+      if (!probed && i === 4) {
+        probed = true;
+        try { sendDebug({ event: "ka_brand_probe", optionCount: pool.length,
+          typedInto: input === control ? "control" : "overlay-input",
+          activeTag: (document.activeElement || {}).tagName || null,
+          inputVal: (input.value || "").slice(0, 20) }, options); } catch (e) {}
       }
     }
     if (!opt) { kaCloseOverlay(control); return false; }
@@ -1884,7 +1929,7 @@
       var kaBrand = attrValue(draft, "marke");
       if (kaBrand && !alreadyFilled("marke")) {
         var brandOkKa = false;
-        try { brandOkKa = await selectKleinanzeigenBrand(kaBrand); } catch (e) {}
+        try { brandOkKa = await selectKleinanzeigenBrand(kaBrand, options); } catch (e) {}
         if (brandOkKa) filled.push("Marke");
         else manual.push("Marke");
       }

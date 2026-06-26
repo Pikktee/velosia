@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Velosia Assistant",
-  "version": "2.7.5",
+  "version": "2.7.6",
   "description": "F\u00fclle deine Vinted und Kleinanzeigen Inserate automatisch aus dem Velosia-Dashboard aus.",
   "permissions": [
     "activeTab",
