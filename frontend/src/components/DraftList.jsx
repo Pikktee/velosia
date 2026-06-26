@@ -1,8 +1,8 @@
 import React, { useRef, useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { Tag, Sparkles, Trash2, Calendar, ShoppingBag, Camera, FolderHeart, ChevronRight, Rocket, RefreshCw, AlertTriangle, Clock, Coins, ExternalLink, X } from 'lucide-react';
+import { Tag, Sparkles, Trash2, Calendar, ShoppingBag, Camera, FolderHeart, ChevronRight, Zap, RefreshCw, AlertTriangle, Clock, Coins, ExternalLink, X } from 'lucide-react';
 import { getImageUrl, getAuthToken, setListingStatus } from '../utils/api';
-import { statusMeta, hasListing, listingPlatforms, groupDrafts, draftSection, statusSummary, platformShort, crossPostConflict, listingAgeDays, STALE_DAYS, TERMINAL } from '../utils/listingStatus';
+import { statusMeta, hasListing, listingPlatforms, groupDrafts, draftSection, crossPostConflict, listingAgeDays, STALE_DAYS } from '../utils/listingStatus';
 
 // dd.mm for compact list signals.
 const fmtShort = (iso) => {
@@ -438,17 +438,25 @@ function DraftListItem({ draft, onSelect, onDelete }) {
               {draft.title || 'Unbenanntes Angebot'}
             </h3>
             
-            {(draft.is_turbo || draftSection(draft) !== 'draft') && (
-              <div className="draft-list-item-meta">
-                {draft.is_turbo && (
-                  <span className="draft-list-item-badge turbo-badge">
-                    <Rocket size={11} />
-                    <span>Turbo</span>
-                  </span>
-                )}
-                <ListingStatusMeta draft={draft} />
-              </div>
-            )}
+            {(() => {
+              // Turbo is only relevant while the item is still an unlisted draft —
+              // once it's live the bolt drops out (less relevant than the status).
+              // Reduced to the bolt alone so the row never grows a third line.
+              const section = draftSection(draft);
+              const showTurbo = draft.is_turbo && section === 'draft';
+              const showStatus = section !== 'draft';
+              if (!showTurbo && !showStatus) return null;
+              return (
+                <div className="draft-list-item-meta">
+                  {showTurbo && (
+                    <span className="turbo-bolt" title="Im Turbo-Modus erstellt">
+                      <Zap size={13} />
+                    </span>
+                  )}
+                  {showStatus && <ListingStatusMeta draft={draft} />}
+                </div>
+              );
+            })()}
           </div>
 
           {/* Right Section: Price & Actions */}
@@ -488,60 +496,36 @@ function DraftListItem({ draft, onSelect, onDelete }) {
   );
 }
 
-// Compact, color-coded status for a list row. One chip when both platforms agree
-// (status word + muted platform names); a per-platform split + "Aktion" marker on
-// divergence. Plus a conditional date signal: "verkauft am …" (done) or a gentle
-// "seit X Tagen" stale nudge (active). Progressive disclosure — drafts show none.
+// Compact, wordless per-platform status for a list row: one small letter pill per
+// published platform (V / K), tinted in that platform's status colour — green
+// online, amber reserviert, blue verkauft, red gelöscht. So the Aktiv section
+// answers "where is it live" at a glance. A cross-post conflict (sold here, still
+// live there) adds an amber "Aktion" marker; plus a conditional date signal
+// ("verkauft am …" / a gentle "seit X Tagen" nudge). Progressive disclosure — the
+// full wording lives one level deeper in DraftDetail.
 function ListingStatusMeta({ draft }) {
-  const summary = statusSummary(draft);
-  if (!summary) return null;
+  const platforms = listingPlatforms(draft);
+  if (platforms.length === 0) return null;
   const section = draftSection(draft);
-  const chips = [];
+  const conflict = crossPostConflict(draft);
 
-  if (summary.mode === 'collapsed') {
-    const meta = statusMeta(summary.status);
-    chips.push(
+  const pills = platforms.map((p) => {
+    const meta = statusMeta(p.status);
+    return (
       <span
-        key="s"
-        className="draft-list-item-badge listing-status-badge"
+        key={p.key}
+        className="pp-pill"
         style={{ color: meta.color, background: meta.bg, borderColor: meta.color }}
+        title={`${p.name}: ${meta.label}`}
       >
-        <span className="listing-status-dot" style={{ background: meta.color }} />
-        <span>{meta.label}</span>
+        {p.key === 'kleinanzeigen' ? 'K' : 'V'}
       </span>
     );
-    chips.push(
-      <span key="p" className="listing-platforms-muted">
-        {summary.platforms.map((p) => platformShort(p.key)).join(' · ')}
-      </span>
-    );
-  } else {
-    summary.platforms.forEach((p) => {
-      const meta = statusMeta(p.status);
-      chips.push(
-        <span
-          key={p.key}
-          className="draft-list-item-badge listing-status-badge"
-          style={{ color: meta.color, background: meta.bg, borderColor: meta.color }}
-        >
-          <span className="listing-status-dot" style={{ background: meta.color }} />
-          <span>{meta.label} · {platformShort(p.key)}</span>
-        </span>
-      );
-    });
-    if (summary.conflict) {
-      chips.push(
-        <span key="a" className="draft-list-item-badge listing-action-badge">
-          <AlertTriangle size={11} />
-          <span>Aktion</span>
-        </span>
-      );
-    }
-  }
+  });
 
   let signal = null;
   if (section === 'done') {
-    const sold = summary.platforms.find((p) => p.status === 'verkauft');
+    const sold = platforms.find((p) => p.status === 'verkauft');
     if (sold && sold.at) {
       signal = (
         <span className="listing-meta-signal sold">
@@ -550,7 +534,7 @@ function ListingStatusMeta({ draft }) {
         </span>
       );
     }
-  } else if (section === 'active' && summary.mode === 'collapsed') {
+  } else if (section === 'active' && !conflict) {
     const age = listingAgeDays(draft);
     if (age > STALE_DAYS) {
       signal = (
@@ -562,7 +546,21 @@ function ListingStatusMeta({ draft }) {
     }
   }
 
-  return (<>{chips}{signal}</>);
+  return (
+    <>
+      <span className="pp-pills">{pills}</span>
+      {conflict && (
+        <span
+          className="draft-list-item-badge listing-action-badge"
+          title="Auf einer Plattform verkauft, auf der anderen noch online"
+        >
+          <AlertTriangle size={11} />
+          <span>Aktion</span>
+        </span>
+      )}
+      {signal}
+    </>
+  );
 }
 
 // The cross-platform sell-sync sheet: appears after a refresh detects a sale on

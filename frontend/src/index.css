@@ -2850,11 +2850,12 @@ select.form-control {
   color: var(--primary);
 }
 
-.draft-list-item-badge.turbo-badge {
-  background: linear-gradient(135deg, rgba(236, 72, 153, 0.16), rgba(9, 176, 183, 0.14));
-  border: 1px solid rgba(236, 72, 153, 0.35);
+/* Turbo marker — just the bolt (no word), shown only on still-unlisted drafts so
+   the row never grows a third line. */
+.turbo-bolt {
+  display: inline-flex;
+  align-items: center;
   color: var(--secondary);
-  font-weight: 600;
 }
 
 .draft-list-item-date {
@@ -3816,10 +3817,24 @@ select.form-control {
   justify-content: center;
 }
 
-/* Muted platform names next to a single collapsed status chip */
-.listing-platforms-muted {
-  font-size: 0.7rem;
-  color: var(--text-muted);
+/* Per-platform status pill (V / K) — wordless, status-coloured. Green online,
+   amber reserviert, blue verkauft, red gelöscht (consistent with the whole app). */
+.pp-pills {
+  display: inline-flex;
+  gap: 0.3rem;
+}
+.pp-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.3rem;
+  height: 1.3rem;
+  border-radius: 7px;
+  border: 1px solid;
+  font-family: var(--font-title);
+  font-size: 0.72rem;
+  font-weight: 800;
+  line-height: 1;
 }
 
 /* Cross-post "Aktion" marker (platforms diverge: sold here, live there) */
