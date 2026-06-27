@@ -909,24 +909,6 @@
       if (li && li !== opt) { kaCommitClick(li); await sleep(250); }
     }
     var committed = kaBrandCommitted(brand, control);
-    // One-shot rich dump (retrievable via GET /api/telemetry/debug/recent) of how KA
-    // backs the brand field on mobile — so we fix the real commit signal instead of
-    // guessing. No listing content beyond the brand name itself.
-    try {
-      var bInputs = Array.prototype.slice.call(
-        document.querySelectorAll("input[name*='brand' i], input[name*='marke' i]")
-      ).slice(0, 5).map(function (x) {
-        return (x.getAttribute("name") || x.type || "?").slice(0, 36) + "=" + String(x.value || "").slice(0, 20);
-      });
-      sendDebug({ event: "ka_brand_dump", committed: committed,
-        ctrlTag: control.tagName, ctrlRole: control.getAttribute("role") || null,
-        ctrlName: (control.getAttribute("name") || "").slice(0, 36),
-        ctrlVal: String(control.value || "").slice(0, 24),
-        ariaActive: control.getAttribute("aria-activedescendant") || null,
-        optCount: lastCount, optText: norm(opt.textContent).slice(0, 24),
-        optHtml: (opt.outerHTML || "").replace(/\s+/g, " ").slice(0, 220),
-        brandInputs: bInputs }, options);
-    } catch (e) {}
     if (committed) {
       // Drop focus so the brand field isn't left active/highlighted after the fill
       // (cosmetic). Safe now that the value is verified committed — blurring only ever
@@ -936,8 +918,8 @@
       try { console.log("Velosia KA: Marke '" + brand + "' gesetzt (gefiltert)"); } catch (e) {}
       return { ok: true };
     }
-    // Clicked the right option but KA didn't commit it — report honestly so the overlay
-    // shows "Marke — clicked_no_commit" instead of a false "Alles ausgefüllt".
+    // Clicked the right option but KA didn't commit it — return failure (brand stays
+    // manual) and let the cheap probe record it, rather than a false "Alles ausgefüllt".
     return bail("clicked_no_commit", { optText: norm(opt.textContent).slice(0, 18), ctrlVal: (control.value || "").slice(0, 18) });
   }
 
@@ -2017,17 +1999,14 @@
       }
       var kaBrand = attrValue(draft, "marke");
       if (kaBrand && !alreadyFilled("marke")) {
-        // selectKleinanzeigenBrand returns {ok, reason, detail}. On failure we surface
-        // the reason RIGHT IN THE OVERLAY ("Marke — no_match (optionCount=0 …)") so the
-        // exact mobile bail point is visible without depending on the (flaky) logs.
-        var br = { ok: false, reason: "exception", detail: "" };
-        try { br = await selectKleinanzeigenBrand(kaBrand, options); } catch (e) { br = { ok: false, reason: "throw", detail: String(e && e.message || e).slice(0, 60) }; }
+        // selectKleinanzeigenBrand returns {ok, reason, detail}; on failure the brand
+        // stays manual (the cheap ka_brand_probe beacon still records the bail reason).
+        var br = { ok: false };
+        try { br = await selectKleinanzeigenBrand(kaBrand, options); } catch (e) { br = { ok: false }; }
         if (br && br.ok) filled.push("Marke");
-        else manual.push("Marke — " + ((br && br.reason) || "?") + (br && br.detail ? " (" + br.detail + ")" : ""));
+        else manual.push("Marke");
       } else if (!kaBrand) {
-        // No brand attribute on the draft -> show which keys DID arrive so we can tell
-        // "AI didn't detect a brand" apart from "key normalises differently".
-        manual.push("Marke — kein Attribut [" + Object.keys(parseAttributes(draft)).map(norm).join(",").slice(0, 80) + "]");
+        manual.push("Marke (nicht auf Fotos erkannt)");
       }
     }
 

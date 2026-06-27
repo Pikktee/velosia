@@ -115,7 +115,7 @@ def run_migrations():
 
 run_migrations()
 
-app = FastAPI(title="Velosia API", version="2.7.14")
+app = FastAPI(title="Velosia API", version="2.7.15")
 
 UPLOAD_DIR = "/data/uploads" if os.path.isdir("/data") else "uploads"
 os.makedirs(UPLOAD_DIR, exist_ok=True)
@@ -870,37 +870,17 @@ def check_autofill_anomaly(platform: str):
         db.close()
 
 
-# In-memory ring buffer of recent debug beacons (single-process uvicorn). Retrievable
-# via GET /api/telemetry/debug/recent so diagnostics survive flaky Railway log access.
-# Temporary diagnostic plumbing — remove once the KA brand autofill is fixed.
-_DEBUG_BEACONS: list = []
-
-
 @app.post("/api/telemetry/debug", status_code=status.HTTP_202_ACCEPTED)
 async def telemetry_debug(request: Request):
-    """Temporary, UNAUTHENTICATED diagnostic sink: logs a small engine debug beacon
-    (event tag + structural field info — no listing content beyond brand name) to stdout
-    AND keeps the last ~50 in memory for GET retrieval. Unauthenticated on purpose so it
-    still reports even when the auth token is missing. Best-effort."""
+    """UNAUTHENTICATED diagnostic sink: logs a small engine debug beacon (event tag +
+    structural field info — no listing content beyond brand name) to stdout. Unauthenticated
+    on purpose so it still reports even when the auth token is missing. Best-effort."""
     try:
         payload = await request.json()
     except Exception:
         payload = {}
     print(f"[debug-beacon] {payload}", flush=True)
-    try:
-        _DEBUG_BEACONS.append(payload)
-        if len(_DEBUG_BEACONS) > 50:
-            del _DEBUG_BEACONS[:-50]
-    except Exception:
-        pass
     return {"ok": True}
-
-
-@app.get("/api/telemetry/debug/recent")
-async def telemetry_debug_recent():
-    """Temporary diagnostic readout: the last ~30 debug beacons. Lets us read the KA
-    brand field structure off the device without depending on Railway log access."""
-    return {"count": len(_DEBUG_BEACONS), "beacons": _DEBUG_BEACONS[-30:]}
 
 
 @app.post("/api/telemetry/autofill", status_code=status.HTTP_202_ACCEPTED)
