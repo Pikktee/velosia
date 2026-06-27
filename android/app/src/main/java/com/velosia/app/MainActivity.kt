@@ -4,6 +4,7 @@ import android.Manifest
 import android.annotation.SuppressLint
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.graphics.Bitmap
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
@@ -140,6 +141,21 @@ class MainActivity : AppCompatActivity() {
             override fun doUpdateVisitedHistory(view: WebView, url: String, isReload: Boolean) {
                 super.doUpdateVisitedHistory(view, url, isReload)
                 maybeCapturePublishedListing(url)
+            }
+
+            // Paint the Velosia backdrop the INSTANT a form page starts loading — before
+            // its DOM renders — so the freshly-navigated page (esp. the category -> step-2
+            // full navigation) is never briefly visible un-covered. The engine, injected a
+            // moment later at onPageFinished, ADOPTS this same #velosia-backdrop instead of
+            // creating a second one (see ensureBackdrop in autofill-engine.js).
+            override fun onPageStarted(view: WebView, url: String, favicon: Bitmap?) {
+                super.onPageStarted(view, url, favicon)
+                if (activeDraftJson == null) return
+                val isFormish = url.contains("vinted.de/items/new") ||
+                    url.contains("vinted.fr/items/new") ||
+                    url.contains("kleinanzeigen.de/p-anzeige-aufgeben.html") ||
+                    url.contains("kleinanzeigen.de/p-anzeige-aufgeben-schritt2")
+                if (isFormish) injectEarlyBackdrop()
             }
 
             override fun onPageFinished(view: WebView, url: String) {
@@ -506,6 +522,44 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    // Paints a standalone grey backdrop + Velosia spinner the instant a form page begins
+    // loading, so the page is never briefly visible un-covered during the (full-document)
+    // category -> step-2 navigation. Markup is kept identical to the engine's ensureBackdrop
+    // (same #velosia-backdrop id) so the engine ADOPTS it a moment later rather than drawing
+    // a second one. document.body may not exist yet at onPageStarted, so we poll briefly and
+    // paint exactly once (a long-lived re-paint could re-add the backdrop AFTER the engine
+    // removed it on completion, leaving it stuck).
+    private fun injectEarlyBackdrop() {
+        val snippet = """
+            (function(){
+              try {
+                if (window.__velosiaEarlyBackdrop) return;
+                function paint(){
+                  if (document.getElementById('velosia-backdrop')) { window.__velosiaEarlyBackdrop = true; return true; }
+                  var root = document.body;
+                  if (!root) return false;
+                  if (!document.getElementById('velosia-style')) {
+                    var st = document.createElement('style'); st.id = 'velosia-style';
+                    st.textContent = '@keyframes velosia-spin{to{transform:rotate(360deg)}}@keyframes velosia-breathe{0%,100%{transform:scale(1);opacity:.85}50%{transform:scale(1.08);opacity:1}}@keyframes velosia-fade{from{opacity:0}to{opacity:1}}';
+                    (document.head || document.documentElement).appendChild(st);
+                  }
+                  var bd = document.createElement('div'); bd.id = 'velosia-backdrop';
+                  bd.style.cssText = 'position:fixed;inset:0;z-index:2147483646;background:rgba(8,11,17,.80);-webkit-backdrop-filter:blur(2px);backdrop-filter:blur(2px);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:18px;pointer-events:auto;animation:velosia-fade .2s ease;font-family:-apple-system,BlinkMacSystemFont,sans-serif';
+                  bd.innerHTML = '<div style="font-weight:700;font-size:16px;letter-spacing:.3px;background:linear-gradient(135deg,#09b0b7,#ec4899);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;">✨ Velosia</div><div style="position:relative;width:62px;height:62px;display:flex;align-items:center;justify-content:center;"><div style="position:absolute;inset:8px;border-radius:50%;background:radial-gradient(circle,rgba(9,176,183,.35),transparent 70%);animation:velosia-breathe 1.8s ease-in-out infinite;"></div><div style="width:62px;height:62px;border-radius:50%;background:conic-gradient(from 0deg,rgba(9,176,183,0) 0deg,#09b0b7 130deg,#ec4899 290deg,rgba(236,72,153,0) 360deg);-webkit-mask:radial-gradient(farthest-side,transparent calc(100% - 5px),#000 calc(100% - 5px));mask:radial-gradient(farthest-side,transparent calc(100% - 5px),#000 calc(100% - 5px));animation:velosia-spin .9s linear infinite;"></div></div>';
+                  root.appendChild(bd);
+                  window.__velosiaEarlyBackdrop = true;
+                  return true;
+                }
+                if (!paint()) {
+                  var n = 0;
+                  var iv = setInterval(function(){ if (paint() || ++n > 120) clearInterval(iv); }, 16);
+                }
+              } catch (e) {}
+            })();
+        """.trimIndent()
+        webView.evaluateJavascript(snippet, null)
+    }
+
     // Injects the shared engine and runs the autofill. The engine itself detects
     // the platform and the phase (Kleinanzeigen category picker vs. the real form),
     // fills the fields with a React/Vue-safe native value setter, fetches and injects
@@ -519,6 +573,12 @@ class MainActivity : AppCompatActivity() {
         val token = authToken?.replace("\\", "\\\\")?.replace("'", "\\'") ?: ""
         val engine = readEngineJs()
         if (engine.isEmpty()) {
+            // The early backdrop (onPageStarted) would otherwise stay up forever since the
+            // engine — which owns its removal — never runs. Drop it so the page is usable.
+            webView.evaluateJavascript(
+                "(function(){var b=document.getElementById('velosia-backdrop');if(b)b.remove();})();",
+                null
+            )
             Toast.makeText(this, "Autofill-Engine konnte nicht geladen werden.", Toast.LENGTH_SHORT).show()
             return
         }

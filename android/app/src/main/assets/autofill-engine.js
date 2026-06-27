@@ -1755,41 +1755,48 @@
   var _backdropSync = null;
   function ensureBackdrop() {
     injectStyleOnce();
+    // The native Android shell paints an identical #velosia-backdrop at onPageStarted
+    // (so the freshly-navigated form is never briefly visible un-covered). If one is
+    // already present we ADOPT it instead of creating a second — but we still (re)bind
+    // the viewport sync below so the spinner stays centred on scrolled/zoomed pages.
     var bd = document.getElementById("velosia-backdrop");
-    if (bd) return bd;
-    bd = document.createElement("div");
-    bd.id = "velosia-backdrop";
-    bd.style.cssText = [
-      "position:fixed", "z-index:2147483646",
-      "background:rgba(8,11,17,.80)", "-webkit-backdrop-filter:blur(2px)",
-      "backdrop-filter:blur(2px)", "display:flex", "flex-direction:column",
-      "align-items:center", "justify-content:center", "gap:18px",
-      "pointer-events:auto", "animation:velosia-fade .2s ease",
-      "font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif"
-    ].join(";");
-    // A sleek dual-layer spinner: a gradient conic ring (masked to a thin band) over a
-    // soft "breathing" glow. No progress text — the animation alone signals "working".
-    var spinner =
-      '<div style="position:relative;width:62px;height:62px;display:flex;align-items:center;justify-content:center;">' +
-        '<div style="position:absolute;inset:8px;border-radius:50%;background:radial-gradient(circle,rgba(9,176,183,.35),transparent 70%);animation:velosia-breathe 1.8s ease-in-out infinite;"></div>' +
-        '<div style="width:62px;height:62px;border-radius:50%;' +
-          'background:conic-gradient(from 0deg,rgba(9,176,183,0) 0deg,#09b0b7 130deg,#ec4899 290deg,rgba(236,72,153,0) 360deg);' +
-          '-webkit-mask:radial-gradient(farthest-side,transparent calc(100% - 5px),#000 calc(100% - 5px));' +
-          'mask:radial-gradient(farthest-side,transparent calc(100% - 5px),#000 calc(100% - 5px));' +
-          'animation:velosia-spin .9s linear infinite;"></div>' +
-      '</div>';
-    bd.innerHTML =
-      '<div style="font-weight:700;font-size:16px;letter-spacing:.3px;background:linear-gradient(135deg,#09b0b7,#ec4899);' +
-        '-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;">✨ Velosia</div>' +
-      spinner;
-    document.body.appendChild(bd);
-    _backdropSync = bindViewport(function () {
-      var r = viewportRect();
-      bd.style.left = r.left + "px";
-      bd.style.top = r.top + "px";
-      bd.style.width = r.width + "px";
-      bd.style.height = r.height + "px";
-    });
+    if (!bd) {
+      bd = document.createElement("div");
+      bd.id = "velosia-backdrop";
+      bd.style.cssText = [
+        "position:fixed", "z-index:2147483646",
+        "background:rgba(8,11,17,.80)", "-webkit-backdrop-filter:blur(2px)",
+        "backdrop-filter:blur(2px)", "display:flex", "flex-direction:column",
+        "align-items:center", "justify-content:center", "gap:18px",
+        "pointer-events:auto", "animation:velosia-fade .2s ease",
+        "font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif"
+      ].join(";");
+      // A sleek dual-layer spinner: a gradient conic ring (masked to a thin band) over a
+      // soft "breathing" glow. No progress text — the animation alone signals "working".
+      var spinner =
+        '<div style="position:relative;width:62px;height:62px;display:flex;align-items:center;justify-content:center;">' +
+          '<div style="position:absolute;inset:8px;border-radius:50%;background:radial-gradient(circle,rgba(9,176,183,.35),transparent 70%);animation:velosia-breathe 1.8s ease-in-out infinite;"></div>' +
+          '<div style="width:62px;height:62px;border-radius:50%;' +
+            'background:conic-gradient(from 0deg,rgba(9,176,183,0) 0deg,#09b0b7 130deg,#ec4899 290deg,rgba(236,72,153,0) 360deg);' +
+            '-webkit-mask:radial-gradient(farthest-side,transparent calc(100% - 5px),#000 calc(100% - 5px));' +
+            'mask:radial-gradient(farthest-side,transparent calc(100% - 5px),#000 calc(100% - 5px));' +
+            'animation:velosia-spin .9s linear infinite;"></div>' +
+        '</div>';
+      bd.innerHTML =
+        '<div style="font-weight:700;font-size:16px;letter-spacing:.3px;background:linear-gradient(135deg,#09b0b7,#ec4899);' +
+          '-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;">✨ Velosia</div>' +
+        spinner;
+      (document.body || document.documentElement).appendChild(bd);
+    }
+    if (!_backdropSync) {
+      _backdropSync = bindViewport(function () {
+        var r = viewportRect();
+        bd.style.left = r.left + "px";
+        bd.style.top = r.top + "px";
+        bd.style.width = r.width + "px";
+        bd.style.height = r.height + "px";
+      });
+    }
     return bd;
   }
 
