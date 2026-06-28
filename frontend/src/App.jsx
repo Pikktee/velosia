@@ -538,7 +538,7 @@ export default function App() {
   return (
     <div className={`app-shell ${isAndroidApp ? 'android-app' : ''} ${view === 'capture' ? 'camera-mode' : ''} ${view === 'detail' ? 'detail-mode' : ''} ${view === 'list' && (drafts.length > 0 || loading) ? 'list-mode' : ''} ${view === 'settings' ? 'settings-mode' : ''} ${view === 'specs' ? 'specs-mode' : ''} ${isInputFocused ? 'keyboard-open' : ''}`}>
       {/* Top Header Brand Bar */}
-      {view !== 'detail' && !isAndroidApp && (
+      {!useStickyHeaderLayout && !isAndroidApp && (
         <header className="app-header">
           <div className="header-brand">
             <img src="/favicon.svg" alt="Velosia Logo" className="header-logo" />
@@ -623,6 +623,7 @@ export default function App() {
               onDeleteDraft={handleDeleteDraft}
               onRefreshStatuses={handleRefreshStatuses}
               flashIds={flashDraftIds}
+              onShowBugReport={() => setShowBugReportModal(true)}
             />
           )}
 

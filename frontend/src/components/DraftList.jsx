@@ -1,6 +1,6 @@
 import React, { useRef, useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { Tag, Sparkles, Trash2, Calendar, ShoppingBag, Camera, FolderHeart, ChevronRight, RefreshCw, AlertTriangle, Clock, Coins, ExternalLink, X } from 'lucide-react';
+import { Tag, Sparkles, Trash2, Calendar, ShoppingBag, Camera, FolderHeart, ChevronRight, RefreshCw, AlertTriangle, Clock, Coins, ExternalLink, X, HelpCircle } from 'lucide-react';
 import { getImageUrl, getAuthToken, setListingStatus } from '../utils/api';
 import { statusMeta, hasListing, listingPlatforms, draftSection, crossPostConflict, listingAgeDays, STALE_DAYS } from '../utils/listingStatus';
 
@@ -11,7 +11,7 @@ const fmtShort = (iso) => {
   return d.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit' });
 };
 
-export default function DraftList({ drafts, isLoading, onSelectDraft, onDeleteDraft, onRefreshStatuses, flashIds = [] }) {
+export default function DraftList({ drafts, isLoading, onSelectDraft, onDeleteDraft, onRefreshStatuses, flashIds = [], onShowBugReport }) {
   const [refreshing, setRefreshing] = useState(false);
   const [conflict, setConflict] = useState(null);
   const [pullY, setPullY] = useState(0);
@@ -221,17 +221,41 @@ export default function DraftList({ drafts, isLoading, onSelectDraft, onDeleteDr
                 {drafts.length}
               </span>
             </h2>
-            {anyListing && onRefreshStatuses && (
-              <button
-                className="status-refresh-btn icon-only"
-                onClick={handleRefresh}
-                disabled={refreshing}
-                title="Status aller Angebote aktualisieren"
-                aria-label="Status aller Angebote aktualisieren"
-              >
-                <RefreshCw size={16} className={refreshing ? 'spin' : ''} />
-              </button>
-            )}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+              {anyListing && onRefreshStatuses && (
+                <button
+                  className="status-refresh-btn icon-only"
+                  onClick={handleRefresh}
+                  disabled={refreshing}
+                  title="Status aller Angebote aktualisieren"
+                  aria-label="Status aller Angebote aktualisieren"
+                >
+                  <RefreshCw size={16} className={refreshing ? 'spin' : ''} />
+                </button>
+              )}
+              {onShowBugReport && (
+                <button 
+                  className="help-icon-btn" 
+                  onClick={onShowBugReport} 
+                  title="Problem melden"
+                  style={{
+                    background: 'transparent',
+                    border: 'none',
+                    color: 'var(--text-secondary)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    padding: '8px',
+                    marginRight: '-8px',
+                    cursor: 'pointer',
+                    transition: 'transform 0.1s ease',
+                    outline: 'none'
+                  }}
+                >
+                  <HelpCircle size={18} />
+                </button>
+              )}
+            </div>
           </div>
         </div>
       </div>

@@ -4352,7 +4352,7 @@ select.form-control {
 }
 
 /* Android WebView specific safe-area layout fixes */
-.android-app:not(.detail-mode):not(.camera-mode) .app-main {
+.android-app:not(.detail-mode):not(.list-mode):not(.settings-mode):not(.specs-mode):not(.camera-mode) .app-main {
   padding-top: env(safe-area-inset-top, 24px) !important;
 }
 
