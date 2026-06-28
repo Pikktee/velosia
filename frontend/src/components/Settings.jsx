@@ -202,6 +202,16 @@ export default function Settings({ user, onLogout, onUpdateUser, onShowBugReport
 
                 <button
                   type="button"
+                  onClick={onShowBugReport}
+                  className="btn btn-secondary"
+                  style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem', borderColor: 'var(--glass-border)', minHeight: '44px', marginBottom: '0.75rem', background: 'rgba(255, 255, 255, 0.03)' }}
+                >
+                  <HelpCircle size={18} style={{ color: 'var(--primary)' }} />
+                  Problem melden
+                </button>
+
+                <button
+                  type="button"
                   onClick={onLogout}
                   className="btn btn-secondary"
                   style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem', borderColor: 'var(--glass-border)', minHeight: '44px' }}
@@ -505,28 +515,7 @@ export default function Settings({ user, onLogout, onUpdateUser, onShowBugReport
           </div>
         </form>
 
-        {/* Support & Feedback Section */}
-        <div style={{ marginTop: '2rem', padding: '0 1rem' }}>
-          <button
-            type="button"
-            onClick={onShowBugReport}
-            className="btn btn-secondary"
-            style={{
-              width: '100%',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              gap: '0.5rem',
-              minHeight: '44px',
-              background: 'rgba(255, 255, 255, 0.05)',
-              border: '1px solid var(--glass-border)',
-              borderRadius: '12px'
-            }}
-          >
-            <HelpCircle size={18} style={{ color: 'var(--primary)' }} />
-            <span>Problem melden</span>
-          </button>
-        </div>
+
 
         <div style={{ marginTop: '2.5rem', textAlign: 'center', color: 'var(--text-muted)', fontSize: '0.75rem', letterSpacing: '0.05em', fontFamily: 'var(--font-body)' }}>
           Velosia App v{version}
