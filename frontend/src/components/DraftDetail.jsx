@@ -22,6 +22,10 @@ export default function DraftDetail({ draft, onBack, onUpdateSuccess }) {
   const [refreshingStatus, setRefreshingStatus] = useState(false);
   const [settingStatus, setSettingStatus] = useState(false);
   const [showDetected, setShowDetected] = useState(false); // collapsible "Automatisch erkannt"
+  const [showPublishSheet, setShowPublishSheet] = useState(false);
+  const [startY, setStartY] = useState(0);
+  const [currentY, setCurrentY] = useState(0);
+  const [isDragging, setIsDragging] = useState(false);
   const fileInputRef = useRef(null);
 
   // Attributes (Größe, Marke, Material, Farbe, …) the AI extracted into a JSON
@@ -115,6 +119,9 @@ export default function DraftDetail({ draft, onBack, onUpdateSuccess }) {
 
   const handlePostInApp = (platform) => {
     if (isAndroidApp) {
+      if (navigator.vibrate) {
+        try { navigator.vibrate([15]); } catch (e) { /* ignore */ }
+      }
       // Remember which draft we're publishing so that returning from the platform
       // WebView (back gesture OR after a successful publish) lands back on THIS
       // detail page instead of the list. App.jsx reads this marker on (re)mount.
@@ -721,16 +728,38 @@ export default function DraftDetail({ draft, onBack, onUpdateSuccess }) {
             <h2 className="detail-header-title">Angebot bearbeiten</h2>
             <div className="detail-header-status">
               {saveStatus === 'saving' && (
-                <RefreshCw size={16} className="spin" aria-label="Speichern" />
+                <RefreshCw size={16} className="spin" aria-label="Speichern" style={{ marginRight: isAndroidApp ? '12px' : '0' }} />
               )}
               {saveStatus === 'error' && (
                 <button
                   className="detail-save-error"
                   onClick={saveDraft}
                   title="Erneut versuchen"
+                  style={{ marginRight: isAndroidApp ? '12px' : '0' }}
                 >
                   <AlertCircle size={13} />
-                  <span>Nicht gespeichert</span>
+                  <span>Fehler</span>
+                </button>
+              )}
+              {isAndroidApp && (
+                <button
+                  onClick={() => setShowPublishSheet(true)}
+                  className="detail-header-action-btn"
+                  title="Veröffentlichen / Status"
+                  aria-label="Veröffentlichen / Status"
+                  style={{
+                    background: 'transparent',
+                    border: 'none',
+                    color: 'var(--primary)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    padding: '8px',
+                    marginRight: '-8px',
+                    cursor: 'pointer'
+                  }}
+                >
+                  <Share2 size={20} />
                 </button>
               )}
             </div>
@@ -754,18 +783,7 @@ export default function DraftDetail({ draft, onBack, onUpdateSuccess }) {
       {/* In-app primary action: publish straight to a platform. Sits as a flex
           sibling at the bottom of the column; hidden while the keyboard is open
           (.keyboard-open on app-shell) so it never covers a focused field. */}
-      {isAndroidApp && (
-        <div className={`detail-publish-bar${listingPlatforms(draft).length > 0 ? ' has-published' : ''}`}>
-          {renderPublishControl('vinted', () => handlePostInApp('vinted'), {
-            btnLabel: 'Auf Vinted',
-            btnIcon: <Upload size={16} />,
-          })}
-          {renderPublishControl('kleinanzeigen', () => handlePostInApp('kleinanzeigen'), {
-            btnLabel: 'Kleinanzeigen',
-            btnIcon: <Upload size={16} />,
-          })}
-        </div>
-      )}
+      {/* In-app primary actions bottom bar removed to use Bottom Sheet */}
 
       {/* Image Detail Popup Modal */}
       {selectedModalImage && (
@@ -820,6 +838,63 @@ export default function DraftDetail({ draft, onBack, onUpdateSuccess }) {
         title="Bild löschen?"
         message="Möchtest du dieses Bild wirklich aus dem Angebot löschen?"
       />
+
+      {/* Publish Bottom Sheet Drawer */}
+      {isAndroidApp && (
+        <div className={`bottom-sheet-overlay${showPublishSheet ? ' active' : ''}`} onClick={() => setShowPublishSheet(false)}>
+          <div 
+            className="bottom-sheet-container"
+            onClick={(e) => e.stopPropagation()}
+            style={
+              currentY > 0 
+                ? { transform: `translateY(${currentY}px)`, transition: 'none' } 
+                : {}
+            }
+          >
+            <div 
+              className="bottom-sheet-drag-handle-zone"
+              onTouchStart={(e) => {
+                setStartY(e.touches[0].clientY);
+                setIsDragging(true);
+              }}
+              onTouchMove={(e) => {
+                if (!isDragging) return;
+                const diff = e.touches[0].clientY - startY;
+                if (diff > 0) setCurrentY(diff);
+              }}
+              onTouchEnd={() => {
+                setIsDragging(false);
+                if (currentY > 100) setShowPublishSheet(false);
+                setCurrentY(0);
+              }}
+            >
+              <div className="bottom-sheet-drag-handle" />
+            </div>
+
+            <div className="bottom-sheet-header">
+              <h3 className="bottom-sheet-title">Veröffentlichen & Status</h3>
+            </div>
+
+            <div className="bottom-sheet-content">
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem', paddingBottom: 'calc(1.5rem + env(safe-area-inset-bottom, 0px))' }}>
+                {renderPublishControl('vinted', () => { setShowPublishSheet(false); handlePostInApp('vinted'); }, {
+                  btnLabel: 'Auf Vinted veröffentlichen',
+                  btnIcon: <Upload size={16} />,
+                  btnExtraCls: 'btn-block'
+                })}
+                
+                <div style={{ height: '1px', background: 'var(--glass-border)', margin: '0.25rem 0' }} />
+
+                {renderPublishControl('kleinanzeigen', () => { setShowPublishSheet(false); handlePostInApp('kleinanzeigen'); }, {
+                  btnLabel: 'Auf Kleinanzeigen veröffentlichen',
+                  btnIcon: <Upload size={16} />,
+                  btnExtraCls: 'btn-block'
+                })}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -16,9 +16,11 @@ import { getDrafts, deleteDraft, isAuthenticated, setAuthToken, getMe, uploadAnd
 
 
 export default function App() {
+  const isAndroidApp = typeof window.VelosiaBridge !== 'undefined';
   const [token, setToken] = useState(null);
   const [user, setUser] = useState(null);
   const [view, setView] = useState('list'); // 'capture', 'list', 'detail', 'analyzing'
+  const [adminTab, setAdminTab] = useState('users');
   const [drafts, setDrafts] = useState([]);
   const [selectedDraft, setSelectedDraft] = useState(null);
   // Start in loading state so the very first paint shows the skeleton list,
@@ -149,7 +151,9 @@ export default function App() {
     if (isAuth) {
       if (route === '#/' || route === '#/login') {
         window.location.hash = '#/app';
-      } else if (route === '#/admin/issues') {
+      } else if (route.startsWith('#/admin/')) {
+        const adminRouteMap = { '#/admin/users': 'users', '#/admin/waitlist': 'waitlist', '#/admin/bugs': 'bugs', '#/admin/issues': 'users' };
+        setAdminTab(adminRouteMap[route] || 'users');
         setView('issues');
       }
     } else {
@@ -512,38 +516,40 @@ export default function App() {
   return (
     <div className={`app-shell ${view === 'capture' ? 'camera-mode' : ''} ${view === 'detail' ? 'detail-mode' : ''} ${isInputFocused ? 'keyboard-open' : ''}`}>
       {/* Top Header Brand Bar */}
-      <header className="app-header">
-        <div className="header-brand">
-          <img src="/favicon.svg" alt="Velosia Logo" className="header-logo" />
-          <h1 className="header-title">velosia</h1>
-        </div>
-        <div className="header-actions">
-          {view === 'capture' && (
-            <div className="status-badge">
-              {turboMode ? (
-                <>
-                  <Rocket size={12} style={{ color: 'var(--secondary)' }} />
-                  <span>Turbo: alle Artikel fotografieren</span>
-                </>
-              ) : (
-                <>
-                  <Camera size={12} style={{ color: 'var(--primary)' }} />
-                  <span>Fotos hinzufügen</span>
-                </>
-              )}
-            </div>
-          )}
+      {view !== 'detail' && !isAndroidApp && (
+        <header className="app-header">
+          <div className="header-brand">
+            <img src="/favicon.svg" alt="Velosia Logo" className="header-logo" />
+            <h1 className="header-title">velosia</h1>
+          </div>
+          <div className="header-actions">
+            {view === 'capture' && (
+              <div className="status-badge">
+                {turboMode ? (
+                  <>
+                    <Rocket size={12} style={{ color: 'var(--secondary)' }} />
+                    <span>Turbo: alle Artikel fotografieren</span>
+                  </>
+                ) : (
+                  <>
+                    <Camera size={12} style={{ color: 'var(--primary)' }} />
+                    <span>Fotos hinzufügen</span>
+                  </>
+                )}
+              </div>
+            )}
 
-          
-          <button 
-            className="help-icon-btn" 
-            onClick={() => setShowBugReportModal(true)} 
-            title="Problem melden"
-          >
-            <HelpCircle size={18} />
-          </button>
-        </div>
-      </header>
+            
+            <button 
+              className="help-icon-btn" 
+              onClick={() => setShowBugReportModal(true)} 
+              title="Problem melden"
+            >
+              <HelpCircle size={18} />
+            </button>
+          </div>
+        </header>
+      )}
 
       {/* Main Content Area */}
       <main className="app-main">
@@ -615,12 +621,14 @@ export default function App() {
               user={user}
               onLogout={handleLogout}
               onUpdateUser={(updatedUser) => setUser(updatedUser)}
+              onShowBugReport={() => setShowBugReportModal(true)}
             />
           )}
 
           {view === 'issues' && (
             <IssueManagement
               user={user}
+              initialTab={adminTab}
               onBack={() => {
                 setView('settings');
                 window.location.hash = '#/app';

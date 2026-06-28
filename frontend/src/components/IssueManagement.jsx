@@ -23,10 +23,10 @@ const parseDeviceInfo = (infoStr) => {
   try { return JSON.parse(infoStr); } catch (e) { return null; }
 };
 
-export default function IssueManagement({ user, onBack }) {
+export default function IssueManagement({ user, onBack, initialTab = 'users' }) {
   const isAdmin = !!(user && user.is_admin);
 
-  const [tab, setTab] = useState('bugs'); // 'bugs' | 'waitlist' | 'users'
+  const [tab, setTab] = useState(initialTab); // 'bugs' | 'waitlist' | 'users'
 
   const [issues, setIssues] = useState([]);
   const [bugsLoaded, setBugsLoaded] = useState(false);
@@ -61,6 +61,8 @@ export default function IssueManagement({ user, onBack }) {
     catch (err) { setError(err.message || 'Fehler beim Laden der Benutzer.'); }
     finally { setLoading(false); }
   };
+
+  useEffect(() => { setTab(initialTab); }, [initialTab]);
 
   useEffect(() => {
     if (!isAdmin) return;

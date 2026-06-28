@@ -118,6 +118,10 @@ const CameraCapture = ({
     const video = videoRef.current;
     if (!video || !streamRef.current) return;
 
+    if (navigator.vibrate) {
+      try { navigator.vibrate([15]); } catch (e) { /* ignore */ }
+    }
+
     // Trigger flash animation
     setFlash(true);
     setTimeout(() => setFlash(false), 150);

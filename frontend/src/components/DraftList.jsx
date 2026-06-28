@@ -14,6 +14,38 @@ const fmtShort = (iso) => {
 export default function DraftList({ drafts, isLoading, onSelectDraft, onDeleteDraft, onRefreshStatuses, flashIds = [] }) {
   const [refreshing, setRefreshing] = useState(false);
   const [conflict, setConflict] = useState(null);
+  const [pullY, setPullY] = useState(0);
+  const [isPulling, setIsPulling] = useState(false);
+  const pullStartY = useRef(0);
+
+  const handlePtrStart = (e) => {
+    if (window.scrollY === 0) {
+      pullStartY.current = e.touches[0].clientY;
+      setIsPulling(true);
+    }
+  };
+
+  const handlePtrMove = (e) => {
+    if (!isPulling) return;
+    const currentY = e.touches[0].clientY;
+    const diff = currentY - pullStartY.current;
+    if (diff > 0) {
+      const pullDist = Math.min(100, Math.pow(diff, 0.85));
+      setPullY(pullDist);
+      if (diff > 10 && e.cancelable) {
+        e.preventDefault();
+      }
+    }
+  };
+
+  const handlePtrEnd = () => {
+    if (!isPulling) return;
+    setIsPulling(false);
+    if (pullY >= 60) {
+      handleRefresh();
+    }
+    setPullY(0);
+  };
   const anyListing = drafts.some(hasListing);
 
   const handleRefresh = async () => {
@@ -154,7 +186,25 @@ export default function DraftList({ drafts, isLoading, onSelectDraft, onDeleteDr
   }
 
   return (
-    <div className="fade-in">
+    <div 
+      className="fade-in ptr-container"
+      onTouchStart={handlePtrStart}
+      onTouchMove={handlePtrMove}
+      onTouchEnd={handlePtrEnd}
+    >
+      <div 
+        className={`ptr-indicator${pullY > 0 ? ' visible' : ''}${refreshing ? ' refreshing' : ''}`}
+        style={
+          refreshing 
+            ? { transform: 'translateX(-50%) translateY(50px)', opacity: 1 } 
+            : pullY > 0 
+              ? { transform: `translateX(-50%) translateY(${pullY}px)` } 
+              : {}
+        }
+      >
+        <RefreshCw size={16} />
+      </div>
+
       <div className="drafts-header-row">
         <h2 className="page-title">
           Deine Angebote <span className="drafts-count-badge">{drafts.length}</span>

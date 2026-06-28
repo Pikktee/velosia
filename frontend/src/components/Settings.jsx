@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { User, LogOut, Trash2, AlertTriangle, Save, HelpCircle, Check, Shield, Sparkles, Euro, MapPin, Sliders, Zap } from 'lucide-react';
+import { User, LogOut, Trash2, AlertTriangle, Save, HelpCircle, Check, Shield, Sparkles, Euro, MapPin, Sliders, Zap, Users, ClipboardList, Bug, ChevronRight } from 'lucide-react';
 import { deleteUserAccount, updateMe } from '../utils/api';
 import { version } from '../../package.json';
 
@@ -30,7 +30,7 @@ const presetKeyForText = (text) => {
   return 'custom';
 };
 
-export default function Settings({ user, onLogout, onUpdateUser }) {
+export default function Settings({ user, onLogout, onUpdateUser, onShowBugReport }) {
   const [showConfirm, setShowConfirm] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -421,17 +421,30 @@ export default function Settings({ user, onLogout, onUpdateUser }) {
                     <Shield size={18} style={{ color: 'var(--primary)' }} />
                     <span>Admin-Werkzeuge</span>
                   </h3>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      window.location.hash = '#/admin/issues';
-                    }}
-                    className="btn btn-secondary"
-                    style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem', borderColor: 'var(--primary-glow)', color: 'var(--primary)', minHeight: '44px' }}
-                  >
-                    <Shield size={18} />
-                    Issue Management öffnen
-                  </button>
+                  <div style={{ display: 'flex', flexDirection: 'column', borderRadius: '12px', overflow: 'hidden', border: '1px solid rgba(255,255,255,0.08)' }}>
+                    {[
+                      { icon: Users, label: 'Benutzerverwaltung', hash: '#/admin/users' },
+                      { icon: ClipboardList, label: 'Warteliste', hash: '#/admin/waitlist' },
+                      { icon: Bug, label: 'Bug-Reports', hash: '#/admin/bugs' },
+                    ].map(({ icon: Icon, label, hash }, i, arr) => (
+                      <button
+                        key={hash}
+                        type="button"
+                        onClick={() => { window.location.hash = hash; }}
+                        className="btn-ghost"
+                        style={{
+                          width: '100%', display: 'flex', alignItems: 'center', gap: '0.75rem',
+                          padding: '0.85rem 1rem', background: 'transparent', border: 'none',
+                          borderBottom: i < arr.length - 1 ? '1px solid rgba(255,255,255,0.06)' : 'none',
+                          color: 'var(--text)', cursor: 'pointer', fontSize: '0.95rem', minHeight: '48px',
+                        }}
+                      >
+                        <Icon size={18} style={{ color: 'var(--primary)', flexShrink: 0 }} />
+                        <span style={{ flex: 1, textAlign: 'left' }}>{label}</span>
+                        <ChevronRight size={16} style={{ opacity: 0.4, flexShrink: 0 }} />
+                      </button>
+                    ))}
+                  </div>
                 </div>
               )}
 
@@ -491,6 +504,29 @@ export default function Settings({ user, onLogout, onUpdateUser }) {
 
           </div>
         </form>
+
+        {/* Support & Feedback Section */}
+        <div style={{ marginTop: '2rem', padding: '0 1rem' }}>
+          <button
+            type="button"
+            onClick={onShowBugReport}
+            className="btn btn-secondary"
+            style={{
+              width: '100%',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '0.5rem',
+              minHeight: '44px',
+              background: 'rgba(255, 255, 255, 0.05)',
+              border: '1px solid var(--glass-border)',
+              borderRadius: '12px'
+            }}
+          >
+            <HelpCircle size={18} style={{ color: 'var(--primary)' }} />
+            <span>Problem melden / Feedback geben</span>
+          </button>
+        </div>
 
         <div style={{ marginTop: '2.5rem', textAlign: 'center', color: 'var(--text-muted)', fontSize: '0.75rem', letterSpacing: '0.05em', fontFamily: 'var(--font-body)' }}>
           Velosia App v{version}

@@ -34,8 +34,10 @@ export default function AnalysisLoader({ isFinished = false, turbo = false, onCo
           });
         }, 250); // Fast-forward speed for satisfying checklist complete
         return () => clearInterval(interval);
-      } else {
         const timeout = setTimeout(() => {
+          if (navigator.vibrate) {
+            try { navigator.vibrate([20, 50, 20]); } catch (e) { /* ignore */ }
+          }
           onComplete();
         }, 600); // Satisfying pause on all-completed
         return () => clearTimeout(timeout);
