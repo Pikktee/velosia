@@ -4281,3 +4281,13 @@ select.form-control {
   border-radius: 28px !important;
 }
 
+/* Android WebView specific safe-area layout fixes */
+.android-app:not(.detail-mode):not(.camera-mode) .app-main {
+  padding-top: env(safe-area-inset-top, 24px) !important;
+}
+
+.android-app.detail-mode .detail-sticky-header {
+  padding-top: env(safe-area-inset-top, 24px) !important;
+}
+
+

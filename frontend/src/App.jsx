@@ -514,7 +514,7 @@ export default function App() {
   }
 
   return (
-    <div className={`app-shell ${view === 'capture' ? 'camera-mode' : ''} ${view === 'detail' ? 'detail-mode' : ''} ${isInputFocused ? 'keyboard-open' : ''}`}>
+    <div className={`app-shell ${isAndroidApp ? 'android-app' : ''} ${view === 'capture' ? 'camera-mode' : ''} ${view === 'detail' ? 'detail-mode' : ''} ${isInputFocused ? 'keyboard-open' : ''}`}>
       {/* Top Header Brand Bar */}
       {view !== 'detail' && !isAndroidApp && (
         <header className="app-header">
