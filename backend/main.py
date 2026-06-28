@@ -62,6 +62,22 @@ def run_migrations():
         print(f"Migration note: is_turbo column might already exist. ({e})", flush=True)
 
     try:
+        db.execute(text("ALTER TABLE drafts ADD COLUMN user_id INTEGER REFERENCES users(id) ON DELETE CASCADE"))
+        db.commit()
+        print("Successfully ran migrations: added user_id column to drafts.", flush=True)
+    except Exception as e:
+        db.rollback()
+        print(f"Migration note: user_id column might already exist. ({e})", flush=True)
+
+    try:
+        db.execute(text("ALTER TABLE drafts ADD COLUMN sources VARCHAR"))
+        db.commit()
+        print("Successfully ran migrations: added sources column to drafts.", flush=True)
+    except Exception as e:
+        db.rollback()
+        print(f"Migration note: sources column might already exist. ({e})", flush=True)
+
+    try:
         db.execute(text("ALTER TABLE drafts ADD COLUMN vinted_category VARCHAR(300)"))
         db.commit()
         print("Successfully ran migrations: added vinted_category column to drafts.", flush=True)
@@ -115,7 +131,7 @@ def run_migrations():
 
 run_migrations()
 
-app = FastAPI(title="Velosia API", version="2.7.24")
+app = FastAPI(title="Velosia API", version="2.7.25")
 
 UPLOAD_DIR = "/data/uploads" if os.path.isdir("/data") else "uploads"
 os.makedirs(UPLOAD_DIR, exist_ok=True)
