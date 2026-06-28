@@ -1026,7 +1026,7 @@ select.form-control {
 .app-header-inner {
   max-width: 1000px;
   margin: 0 auto;
-  padding: 0 1.25rem;
+  padding: 0 1.5rem;
 }
 
 .app-header-bar {
@@ -1060,7 +1060,7 @@ select.form-control {
 
 @media (max-width: 480px) {
   .app-header-inner {
-    padding: 0 0.75rem;
+    padding: 0 1rem;
   }
   .app-content-container {
     padding: 1rem 0.75rem;
@@ -1080,7 +1080,7 @@ select.form-control {
 .detail-header-inner {
   max-width: 1000px;
   margin: 0 auto;
-  padding: 0 1.25rem;
+  padding: 0 1.5rem;
 }
 
 .detail-header-bar {
@@ -1215,7 +1215,7 @@ select.form-control {
 
 @media (max-width: 480px) {
   .detail-header-inner {
-    padding: 0 0.75rem;
+    padding: 0 1rem;
   }
   .detail-content-container {
     padding: 1rem 0.75rem;
