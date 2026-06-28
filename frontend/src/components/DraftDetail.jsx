@@ -872,7 +872,7 @@ export default function DraftDetail({ draft, onBack, onUpdateSuccess }) {
             </div>
 
             <div className="bottom-sheet-header">
-              <h3 className="bottom-sheet-title">Veröffentlichen & Status</h3>
+              <h3 className="bottom-sheet-title">Veröffentlichen</h3>
             </div>
 
             <div className="bottom-sheet-content">
