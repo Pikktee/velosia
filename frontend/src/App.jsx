@@ -623,7 +623,6 @@ export default function App() {
               onDeleteDraft={handleDeleteDraft}
               onRefreshStatuses={handleRefreshStatuses}
               flashIds={flashDraftIds}
-              onShowBugReport={() => setShowBugReportModal(true)}
             />
           )}
 
