@@ -36,7 +36,7 @@
   // and in the extension it is a persistent content script — never redefine.
   if (window.__velosia && window.__velosia.__loaded) return;
 
-  var VERSION = "2.7.41";
+  var VERSION = "2.7.42";
 
   // ----------------------------------------------------------------------------
   // Low level helpers
@@ -1645,11 +1645,13 @@
   function findSubmitButton(platform) {
     if (platform === "vinted") {
       return document.querySelector("button[data-testid*='submit']") ||
-             findButtonByText(["hochladen", "einstellen", "veröffentlichen", "veroffentlichen"]) ||
+             document.querySelector("button[data-testid*='add']") ||
+             document.querySelector("button[data-testid*='publish']") ||
+             findButtonByText(["hinzufügen", "ajouter", "add", "hochladen", "einstellen", "veröffentlichen", "veroffentlichen"]) ||
              document.querySelector("button[type='submit']");
     }
     return document.querySelector("#pstad-submit") ||
-           findButtonByText(["anzeige aufgeben", "veröffentlichen", "veroffentlichen", "einstellen"]) ||
+           findButtonByText(["anzeige aufgeben", "veröffentlichen", "veroffentlichen", "einstellen", "hochladen"]) ||
            document.querySelector("button[type='submit']");
   }
 
@@ -1689,7 +1691,7 @@
         "@keyframes velosia-pulse{0%,100%{box-shadow:0 0 0 4px rgba(9,176,183,.6) !important}50%{box-shadow:0 0 0 10px rgba(9,176,183,.12) !important}}" +
         "@keyframes velosia-breathe{0%,100%{transform:scale(1);opacity:.85}50%{transform:scale(1.08);opacity:1}}" +
         "@keyframes velosia-fade{from{opacity:0}to{opacity:1}}" +
-        "[data-velosia-pulsing='true']{animation:velosia-pulse 1.4s infinite !important;border-radius:8px !important;overflow:visible !important;}";
+        "body [data-velosia-pulsing='true'],body [data-velosia-pulsing='true']:disabled,body [data-velosia-pulsing='true']:hover,body [data-velosia-pulsing='true']:active,[data-velosia-pulsing='true']{animation:velosia-pulse 1.4s infinite !important;border-radius:8px !important;overflow:visible !important;}";
       (document.head || document.documentElement).appendChild(s);
     } catch (e) {}
   }
