@@ -36,7 +36,7 @@
   // and in the extension it is a persistent content script — never redefine.
   if (window.__velosia && window.__velosia.__loaded) return;
 
-  var VERSION = "2.7.40";
+  var VERSION = "2.7.41";
 
   // ----------------------------------------------------------------------------
   // Low level helpers
@@ -1689,7 +1689,7 @@
         "@keyframes velosia-pulse{0%,100%{box-shadow:0 0 0 4px rgba(9,176,183,.6) !important}50%{box-shadow:0 0 0 10px rgba(9,176,183,.12) !important}}" +
         "@keyframes velosia-breathe{0%,100%{transform:scale(1);opacity:.85}50%{transform:scale(1.08);opacity:1}}" +
         "@keyframes velosia-fade{from{opacity:0}to{opacity:1}}" +
-        "[data-velosia-pulsing='true']{animation:velosia-pulse 1.4s infinite !important;border-radius:8px !important;}";
+        "[data-velosia-pulsing='true']{animation:velosia-pulse 1.4s infinite !important;border-radius:8px !important;overflow:visible !important;}";
       (document.head || document.documentElement).appendChild(s);
     } catch (e) {}
   }
@@ -1808,7 +1808,8 @@
     injectStyleOnce();
     try { btn.scrollIntoView({ behavior: "smooth", block: "center" }); } catch (e) {}
     
-    // Periodically re-find and apply pulsing style/attribute to ensure it persists if React re-renders/replaces the button.
+    // Periodically re-find and apply pulsing attribute to ensure it persists if React re-renders/replaces the button.
+    // We only set the attribute when it is missing to avoid restarting the animation timeline on every tick.
     var count = 0;
     var interval = setInterval(function () {
       var currentBtn = findSubmitButton(platform) || btn;
@@ -1816,9 +1817,6 @@
         try {
           if (currentBtn.getAttribute("data-velosia-pulsing") !== "true") {
             currentBtn.setAttribute("data-velosia-pulsing", "true");
-          }
-          if (currentBtn.style.animation !== "velosia-pulse 1.4s infinite") {
-            currentBtn.style.setProperty("animation", "velosia-pulse 1.4s infinite", "important");
             currentBtn.style.borderRadius = currentBtn.style.borderRadius || "8px";
           }
         } catch (e) {}
