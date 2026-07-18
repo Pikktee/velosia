@@ -1767,7 +1767,12 @@
       bd.innerHTML =
         '<div style="font-weight:700;font-size:16px;letter-spacing:.3px;background:linear-gradient(135deg,#09b0b7,#ec4899);' +
           '-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;">✨ Velosia</div>' +
-        spinner;
+        spinner +
+        // Progress line — setBackdrop() writes the current step here. Without this
+        // element every setBackdrop() call is a silent no-op and the field diagnostic
+        // ("Kategorie 3/4 …", "Fotos werden übertragen …") is invisible.
+        '<div id="velosia-backdrop-text" style="margin-top:14px;font-size:13px;font-weight:500;' +
+          'color:rgba(255,255,255,.82);text-align:center;max-width:80vw;min-height:18px;letter-spacing:.2px;"></div>';
       (document.body || document.documentElement).appendChild(bd);
     }
     if (!_backdropSync) {
@@ -1930,6 +1935,10 @@
     var manual = [];
     var categoryOk = null;   // null = not applicable here, bool = picker result
     var attrCount = 0;
+    // Per-attribute picker outcomes for telemetry. A key is only set when the AI
+    // actually had a value for it (so a `false` means "had a value, picker failed"
+    // — a likely selector break — not "no value to set").
+    var fields = {};
 
     // Poll for the title field — both forms render asynchronously.
     setBackdrop("Formular wird gelesen …");
@@ -1943,10 +1952,16 @@
     var priceEl = findField(map.price);
 
     setBackdrop("Titel, Beschreibung & Preis …");
+    // A core field that HAS a value but couldn't be filled (selector didn't match)
+    // must land in `manual` — otherwise the overlay stays silent and the user can
+    // publish an empty listing without noticing.
     if (fillField(titleEl, draft.title)) filled.push("Titel");
+    else if (draft.title) manual.push("Titel");
     if (fillField(descEl, draft.description)) filled.push("Beschreibung");
+    else if (draft.description) manual.push("Beschreibung");
     if (draft.price !== undefined && draft.price !== null) {
       if (fillField(priceEl, String(Math.round(draft.price)))) filled.push("Preis");
+      else manual.push("Preis");
     }
     if (titleEl) titleEl.__velosiaKnown = true;
     if (descEl) descEl.__velosiaKnown = true;
@@ -2021,6 +2036,7 @@
           filled.push("Zustand"); zustandDone = true;
         }
       }
+      if (draft.condition) fields.condition = zustandDone;
       if (!zustandDone && draft.condition) manual.push("Zustand");
 
       // New 2026 form: Größe / Farbe / Marke are dialog/listbox/combobox pickers the
@@ -2032,12 +2048,16 @@
       };
       var kaSize = attrValue(draft, "größe");
       if (kaSize && !alreadyFilled("größe") && !alreadyFilled("grosse")) {
-        if (await trySel("Größe", kaSizeCandidates(kaSize), false)) filled.push("Größe");
+        var kaSizeOk = await trySel("Größe", kaSizeCandidates(kaSize), false);
+        fields.size = kaSizeOk;
+        if (kaSizeOk) filled.push("Größe");
         else manual.push("Größe");
       }
       var kaColor = attrValue(draft, "farbe");
       if (kaColor && !alreadyFilled("farbe")) {
-        if (await trySel("Farbe", [kaColor], false)) filled.push("Farbe");
+        var kaColorOk = await trySel("Farbe", [kaColor], false);
+        fields.color = kaColorOk;
+        if (kaColorOk) filled.push("Farbe");
       }
       var kaBrand = attrValue(draft, "marke");
       if (kaBrand && !alreadyFilled("marke")) {
@@ -2045,6 +2065,7 @@
         // stays manual (the cheap ka_brand_probe beacon still records the bail reason).
         var br = { ok: false };
         try { br = await selectKleinanzeigenBrand(kaBrand, options); } catch (e) { br = { ok: false }; }
+        fields.brand = !!(br && br.ok);
         if (br && br.ok) filled.push("Marke");
         else manual.push("Marke");
       } else if (!kaBrand) {
@@ -2070,6 +2091,7 @@
       if (draft.condition) {
         try { condOk = await selectVintedCondition(draft); } catch (e) { condOk = false; }
       }
+      if (draft.condition) fields.condition = condOk;
       if (condOk) filled.push("Zustand");
       else if (draft.condition) manual.push("Zustand");
 
@@ -2105,6 +2127,10 @@
         try { brandOk = await selectVintedBrand(draft); } catch (e) {}
       }
 
+      if (sizeVal) fields.size = sizeOk;
+      if (colorVal) fields.color = colorOk;
+      if (materialVal) fields.material = materialOk;
+      if (brandVal) fields.brand = brandOk;
       if (sizeOk) filled.push("Größe");
       if (colorOk) filled.push("Farbe");
       if (materialOk) filled.push("Material");
@@ -2122,7 +2148,7 @@
     return {
       filled: filled, manual: manual, photos: photos,
       found: { title: !!titleEl, description: !!descEl, price: !!priceEl },
-      categoryOk: categoryOk, attrCount: attrCount
+      categoryOk: categoryOk, attrCount: attrCount, fields: fields
     };
   }
 
@@ -2441,12 +2467,17 @@
       filled: r.filled, manual: r.manual, photos: r.photos, submitted: false
     };
 
+    var rf = r.fields || {};
     sendTelemetry({
       platform: platform, phase: phase,
       title_found: r.found ? r.found.title : null,
       description_found: r.found ? r.found.description : null,
       price_found: r.found ? r.found.price : null,
       category_ok: r.categoryOk,
+      // Attribute pickers: undefined keys are dropped by JSON.stringify -> stored as
+      // NULL (= "not attempted"), so the anomaly monitor only counts real attempts.
+      condition_ok: rf.condition, size_ok: rf.size, color_ok: rf.color,
+      material_ok: rf.material, brand_ok: rf.brand,
       photos: r.photos, attributes_count: r.attrCount
     }, options);
 

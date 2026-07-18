@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { User, LogOut, Trash2, AlertTriangle, Save, HelpCircle, Check, Shield, Sparkles, Euro, MapPin, Sliders, Zap, Users, ClipboardList, Bug, ChevronRight, RefreshCw, AlertCircle } from 'lucide-react';
 import { deleteUserAccount, updateMe } from '../utils/api';
 import { version } from '../../package.json';
@@ -146,6 +146,32 @@ export default function Settings({ user, onLogout, onUpdateUser, onShowBugReport
     const delayDebounceFn = setTimeout(saveSettings, 1000); // save 1 second after last change
     return () => clearTimeout(delayDebounceFn);
   }, [aiTone, aiIntro, aiCustomTone, aiCustomFooter, pricingOffset, defaultZip, defaultShipping, autoSubmit, hasChanges]);
+
+  // Latest settings values, reachable from the unmount cleanup below.
+  const latestRef = useRef({});
+  latestRef.current = { aiTone, aiIntro, aiCustomTone, aiCustomFooter, pricingOffset, defaultZip, defaultShipping, autoSubmit, hasChanges };
+
+  // Flush a still-pending debounced save on unmount — e.g. the user leaves Settings
+  // within the 1s debounce window, which clears the timer and loses the last change.
+  // Fire-and-forget: the request outlives the component, so no state is touched after.
+  useEffect(() => {
+    return () => {
+      const l = latestRef.current;
+      if (l.hasChanges) {
+        updateMe({
+          ai_tone: l.aiTone,
+          ai_intro: l.aiIntro,
+          ai_custom_tone: l.aiCustomTone,
+          ai_custom_footer: l.aiCustomFooter,
+          pricing_offset: Number(l.pricingOffset),
+          default_zip: l.defaultZip,
+          default_city: '',
+          default_shipping: l.defaultShipping,
+          auto_submit: l.autoSubmit,
+        }).catch(() => {});
+      }
+    };
+  }, []);
 
   const handleDeleteAccount = async () => {
     setDeleting(true);

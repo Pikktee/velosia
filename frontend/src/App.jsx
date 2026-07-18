@@ -27,6 +27,9 @@ export default function App() {
   // Start in loading state so the very first paint shows the skeleton list,
   // not a flash of the empty-state onboarding screen before drafts arrive.
   const [loading, setLoading] = useState(isAuthenticated());
+  // True when the last drafts fetch failed (network/server), so the list shows a
+  // retry state instead of the misleading new-user onboarding screen.
+  const [draftsError, setDraftsError] = useState(false);
   const [analysisError, setAnalysisError] = useState(null);
   const [isInputFocused, setIsInputFocused] = useState(false);
   const [route, setRoute] = useState(window.location.hash || '#/');
@@ -221,17 +224,26 @@ export default function App() {
       localStorage.setItem('velosia_user_email', u.email);
     } catch (err) {
       console.error(err);
-      handleLogout();
+      // Only force a logout on a genuine auth rejection. A network blip (offline,
+      // 5xx, gateway timeout — common on mobile) must NOT wipe the token and bounce
+      // the user back to the login screen.
+      if (err && (err.status === 401 || err.status === 403)) {
+        handleLogout();
+      }
     }
   };
 
   const fetchDrafts = async () => {
     setLoading(true);
+    setDraftsError(false);
     try {
       const data = await getDrafts();
       setDrafts(data);
     } catch (err) {
       console.error("Error fetching drafts:", err);
+      // Distinguish "load failed" from "genuinely empty" so the list can show a
+      // retry state instead of the new-user onboarding screen (see DraftList).
+      setDraftsError(true);
     } finally {
       setLoading(false);
     }
@@ -616,6 +628,8 @@ export default function App() {
             <DraftList
               drafts={drafts}
               isLoading={loading}
+              loadError={draftsError}
+              onRetry={fetchDrafts}
               onSelectDraft={(draft) => {
                 setSelectedDraft(draft);
                 setView('detail');

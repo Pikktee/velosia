@@ -8,7 +8,18 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # JWT configuration
-SECRET_KEY = os.getenv("SECRET_KEY", "velosia_default_secret_key_change_me_in_production")
+# SECRET_KEY MUST come from the environment. There is deliberately no usable
+# fallback: a hardcoded default would be public in the source tree, and since
+# admin rights are derived purely from the JWT `sub` (e-mail), anyone could then
+# forge an admin token. Fail fast at import time instead of booting insecure.
+_INSECURE_DEFAULT = "velosia_default_secret_key_change_me_in_production"
+SECRET_KEY = os.getenv("SECRET_KEY")
+if not SECRET_KEY or SECRET_KEY == _INSECURE_DEFAULT:
+    raise RuntimeError(
+        "SECRET_KEY environment variable is missing or set to the insecure default. "
+        "Set a strong random SECRET_KEY (e.g. `python -c \"import secrets; print(secrets.token_urlsafe(48))\"`) "
+        "before starting the server."
+    )
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "1440")) # 1440 minutes = 24 hours
 

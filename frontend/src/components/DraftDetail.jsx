@@ -112,6 +112,30 @@ export default function DraftDetail({ draft, onBack, onUpdateSuccess }) {
     return () => clearTimeout(delayDebounceFn);
   }, [title, description, condition, price, hasChanges]);
 
+  // Latest field values, reachable from the unmount cleanup without re-subscribing
+  // it on every keystroke.
+  const latestRef = useRef({});
+  latestRef.current = { title, description, condition, price, hasChanges, saveStatus, draftId: draft.id };
+
+  // Flush a still-pending debounced save on unmount — e.g. the user taps "Zurück"
+  // within the 1.2s debounce window, which otherwise clears the timer and loses the
+  // last edit. Fire-and-forget: the request outlives the component, so we touch no
+  // state afterwards. Idempotent PUT, so a possible overlap with an in-flight save
+  // is harmless.
+  useEffect(() => {
+    return () => {
+      const l = latestRef.current;
+      if (l.hasChanges && l.saveStatus !== 'saved') {
+        updateDraft(l.draftId, {
+          title: l.title,
+          description: l.description,
+          condition: l.condition,
+          price: parseFloat(l.price) || 0,
+        }).catch(() => {});
+      }
+    };
+  }, []);
+
   // Tooltip onboarding for first-time Android app users
   useEffect(() => {
     if (!isAndroidApp) return;

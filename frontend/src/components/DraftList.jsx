@@ -11,7 +11,7 @@ const fmtShort = (iso) => {
   return d.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit' });
 };
 
-export default function DraftList({ drafts, isLoading, onSelectDraft, onDeleteDraft, onRefreshStatuses, flashIds = [] }) {
+export default function DraftList({ drafts, isLoading, loadError = false, onRetry, onSelectDraft, onDeleteDraft, onRefreshStatuses, flashIds = [] }) {
   const [refreshing, setRefreshing] = useState(false);
   const [conflict, setConflict] = useState(null);
   const [pullY, setPullY] = useState(0);
@@ -107,6 +107,29 @@ export default function DraftList({ drafts, isLoading, onSelectDraft, onDeleteDr
               </li>
             ))}
           </ul>
+        </div>
+      </div>
+    );
+  }
+
+  // A failed load must NOT masquerade as "no drafts yet" — a returning user with a
+  // full list would otherwise see the new-user onboarding screen when merely offline.
+  if (loadError && drafts.length === 0) {
+    return (
+      <div className="fade-in onboarding-wrapper">
+        <div className="onboarding-content-layout">
+          <div className="onboarding-info" style={{ textAlign: 'center' }}>
+            <AlertTriangle size={40} style={{ color: 'var(--primary)', marginBottom: 16 }} />
+            <h2 className="onboarding-title">Angebote konnten nicht geladen werden</h2>
+            <p className="onboarding-subtitle">
+              Bitte prüfe deine Internetverbindung. Deine Angebote sind sicher gespeichert.
+            </p>
+            {onRetry && (
+              <button className="btn-primary" style={{ marginTop: 20 }} onClick={onRetry}>
+                <RefreshCw size={16} /> Erneut versuchen
+              </button>
+            )}
+          </div>
         </div>
       </div>
     );

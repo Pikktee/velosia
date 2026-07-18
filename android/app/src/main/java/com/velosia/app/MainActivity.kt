@@ -11,6 +11,7 @@ import android.os.Bundle
 import android.util.Base64
 import android.util.Log
 import android.view.View
+import android.view.ViewGroup
 import android.webkit.*
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
@@ -79,6 +80,61 @@ class MainActivity : AppCompatActivity() {
 
     private val okHttpClient = OkHttpClient()
 
+    // True only on a debuggable (non-Play-release) build. Gates WebView remote
+    // inspection and console-log forwarding so neither ships in the released app.
+    private val isDebuggable: Boolean
+        get() = (applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE) != 0
+
+    // Hosts the JS bridge trusts. Sensitive, state-changing bridge methods are only
+    // honoured while the WebView is on the Velosia frontend; the photo/capture helpers
+    // additionally work on the two platform hosts the autofill engine drives. Every
+    // other origin (OAuth redirects, ad/analytics domains embedded by the platforms)
+    // gets no native capabilities.
+    private val trustedFrontendHosts = listOf("velosia.henrikheil.net", "localhost", "10.0.2.2")
+    private val trustedPlatformHosts = listOf("vinted.de", "vinted.fr", "kleinanzeigen.de")
+    // Latest committed main-frame URL, so the synchronous photo getters can check the
+    // origin without touching webView.url off the UI thread.
+    @Volatile private var currentPageUrl: String = ""
+
+    private fun hostOf(url: String?): String = try {
+        Uri.parse(url ?: "").host?.lowercase() ?: ""
+    } catch (e: Exception) { "" }
+
+    private fun isTrustedFrontend(url: String?): Boolean {
+        val h = hostOf(url)
+        return trustedFrontendHosts.any { h == it || h.endsWith(".$it") }
+    }
+
+    private fun isTrustedPlatformOrFrontend(url: String?): Boolean {
+        if (isTrustedFrontend(url)) return true
+        val h = hostOf(url)
+        return trustedPlatformHosts.any { h == it || h.endsWith(".$it") }
+    }
+
+    // Branded offline fallback shown by onReceivedError when the dashboard load fails.
+    // Self-contained; the retry button reloads via the (harmless) reloadApp bridge.
+    private val OFFLINE_HTML = """
+        <!DOCTYPE html><html><head><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+        <style>
+          *{margin:0;padding:0;box-sizing:border-box}html,body{height:100%}
+          body{background:#0a0f14;color:#e5eef0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;
+            display:flex;align-items:center;justify-content:center;text-align:center;padding:32px}
+          .wrap{max-width:340px}
+          .logo{font-size:22px;font-weight:800;letter-spacing:.3px;background:linear-gradient(135deg,#09b0b7,#ec4899);
+            -webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;margin-bottom:24px}
+          h1{font-size:18px;font-weight:700;margin-bottom:10px}
+          p{font-size:14px;line-height:1.5;color:#9fb0b5;margin-bottom:28px}
+          button{border:0;cursor:pointer;width:100%;padding:14px;background:linear-gradient(135deg,#09b0b7,#ec4899);
+            color:#fff;font-weight:700;font-size:15px;border-radius:12px;font-family:inherit}
+        </style></head>
+        <body><div class="wrap">
+          <div class="logo">✨ Velosia</div>
+          <h1>Keine Verbindung</h1>
+          <p>Velosia konnte nicht geladen werden. Bitte prüfe deine Internetverbindung und versuche es erneut.</p>
+          <button onclick="if(window.VelosiaBridge&&VelosiaBridge.reloadApp)VelosiaBridge.reloadApp();else location.reload();">Erneut versuchen</button>
+        </div></body></html>
+    """.trimIndent()
+
     // Google Play In-App Updates. Replaces the former self-download/-install OTA
     // mechanism: when distributed via Play, Play itself performs the download and
     // install — we only detect availability and prompt the user (flexible flow).
@@ -108,10 +164,13 @@ class MainActivity : AppCompatActivity() {
         fabClose = findViewById(R.id.fabClose)
 
         // Enable remote inspection of the WebView (chrome://inspect) and route the
-        // engine's console logs to Logcat. Invaluable for diagnosing autofill on the
-        // live Play build during the internal-test phase.
-        // TODO: gate behind BuildConfig.DEBUG (or remove) before the public production release.
-        WebView.setWebContentsDebuggingEnabled(true)
+        // engine's console logs to Logcat — but ONLY on a debuggable build. On the
+        // released Play build this would let anyone with USB debugging attach to the
+        // WebView, read the in-page JWT from localStorage, and run arbitrary JS in the
+        // logged-in vinted.de / kleinanzeigen.de session.
+        if (isDebuggable) {
+            WebView.setWebContentsDebuggingEnabled(true)
+        }
 
         // Configure WebView settings
         val settings = webView.settings
@@ -140,7 +199,34 @@ class MainActivity : AppCompatActivity() {
             // — for both Vinted (SPA) and Kleinanzeigen (full nav) — and capture it.
             override fun doUpdateVisitedHistory(view: WebView, url: String, isReload: Boolean) {
                 super.doUpdateVisitedHistory(view, url, isReload)
+                currentPageUrl = url
                 maybeCapturePublishedListing(url)
+            }
+
+            // Renderer died (OOM on image-heavy vinted/KA pages, or a system reclaim).
+            // Without handling this, Android kills our whole process and the app just
+            // vanishes — often mid-publish. Returning true keeps the app alive; we drop
+            // the dead WebView and rebuild via a clean activity restart.
+            override fun onRenderProcessGone(view: WebView, detail: RenderProcessGoneDetail): Boolean {
+                if (view == webView) {
+                    Log.w("Velosia", "WebView renderer gone (crashed=${detail.didCrash()}) — recovering")
+                    try { (webView.parent as? ViewGroup)?.removeView(webView) } catch (e: Exception) {}
+                    try { webView.destroy() } catch (e: Exception) {}
+                    Toast.makeText(this@MainActivity, "Die Seite wurde neu geladen.", Toast.LENGTH_SHORT).show()
+                    recreate()
+                    return true
+                }
+                return false
+            }
+
+            // Main-frame load failure (offline / DNS / timeout). Show a branded retry
+            // page instead of the raw net::ERR_ Chrome screen — the whole UI is remote,
+            // so a cold start on a bad connection would otherwise be a dead white screen.
+            override fun onReceivedError(view: WebView, request: WebResourceRequest, error: WebResourceError) {
+                super.onReceivedError(view, request, error)
+                if (request.isForMainFrame && request.url.toString().startsWith(frontendUrl)) {
+                    view.loadDataWithBaseURL(null, OFFLINE_HTML, "text/html", "UTF-8", null)
+                }
             }
 
             // Paint the Velosia backdrop the INSTANT a form page starts loading — before
@@ -150,6 +236,7 @@ class MainActivity : AppCompatActivity() {
             // creating a second one (see ensureBackdrop in autofill-engine.js).
             override fun onPageStarted(view: WebView, url: String, favicon: Bitmap?) {
                 super.onPageStarted(view, url, favicon)
+                currentPageUrl = url
                 if (activeDraftJson == null) return
                 val isFormish = url.contains("vinted.de/items/new") ||
                     url.contains("vinted.fr/items/new") ||
@@ -231,7 +318,11 @@ class MainActivity : AppCompatActivity() {
             // ("Velosia …") are visible via `adb logcat -s VelosiaWeb` even without
             // chrome://inspect.
             override fun onConsoleMessage(msg: ConsoleMessage): Boolean {
-                Log.d("VelosiaWeb", "${msg.message()} @${msg.sourceId()}:${msg.lineNumber()}")
+                // Debug builds only — engine logs can carry field/error detail we don't
+                // want in a release device's Logcat.
+                if (isDebuggable) {
+                    Log.d("VelosiaWeb", "${msg.message()} @${msg.sourceId()}:${msg.lineNumber()}")
+                }
                 return true
             }
 
@@ -259,6 +350,9 @@ class MainActivity : AppCompatActivity() {
         @JavascriptInterface
         fun postToPlatform(draftId: Int, platform: String, token: String) {
             runOnUiThread {
+                // Only the Velosia frontend may start a platform post. A platform page,
+                // ad frame or OAuth redirect calling this is ignored.
+                if (!isTrustedFrontend(webView.url)) return@runOnUiThread
                 Toast.makeText(this@MainActivity, "Lade Angebot #$draftId...", Toast.LENGTH_SHORT).show()
                 hasAutoFilled = false
                 hasAutoCategory = false
@@ -275,8 +369,16 @@ class MainActivity : AppCompatActivity() {
         @JavascriptInterface
         fun loginWithGoogle(clientId: String) {
             runOnUiThread {
+                if (!isTrustedFrontend(webView.url)) return@runOnUiThread
                 startGoogleSignIn(clientId)
             }
+        }
+
+        // Harmless: only reloads the dashboard. Used by the offline fallback's retry
+        // button, so it must work from the data: page too (no origin gate).
+        @JavascriptInterface
+        fun reloadApp() {
+            runOnUiThread { webView.loadUrl(frontendUrl) }
         }
 
         // The engine calls this the moment Vinted's item-creation API returns the new
@@ -285,6 +387,7 @@ class MainActivity : AppCompatActivity() {
         @JavascriptInterface
         fun onListingPublished(platform: String, listingId: String, listingUrl: String) {
             runOnUiThread {
+                if (!isTrustedPlatformOrFrontend(webView.url)) return@runOnUiThread
                 if (hasCaptured || activeDraftId < 0 || listingId.isBlank()) return@runOnUiThread
                 val token = authToken ?: return@runOnUiThread
                 hasCaptured = true
@@ -301,6 +404,16 @@ class MainActivity : AppCompatActivity() {
         @JavascriptInterface
         fun deleteOnPlatform(draftId: Int, platform: String, listingUrl: String, token: String) {
             runOnUiThread {
+                // Frontend-only trigger, and the URL must be a real https platform ad —
+                // never an attacker-supplied redirect that would hijack the logged-in
+                // WebView (open-redirect) or overwrite the session fields below.
+                if (!isTrustedFrontend(webView.url)) return@runOnUiThread
+                val h = hostOf(listingUrl)
+                val okHost = trustedPlatformHosts.any { h == it || h.endsWith(".$it") }
+                if (!listingUrl.startsWith("https://") || !okHost) {
+                    Toast.makeText(this@MainActivity, "Ungültige Anzeigen-URL.", Toast.LENGTH_SHORT).show()
+                    return@runOnUiThread
+                }
                 authToken = token
                 activeDraftId = draftId
                 Toast.makeText(
@@ -308,20 +421,21 @@ class MainActivity : AppCompatActivity() {
                     "Anzeige öffnen – du bestätigst das Löschen selbst.",
                     Toast.LENGTH_LONG
                 ).show()
-                if (listingUrl.isNotBlank()) {
-                    webView.loadUrl(listingUrl)
-                }
+                webView.loadUrl(listingUrl)
             }
         }
 
         // The autofill engine pulls the prepared draft photos (data: URLs) from here
-        // and injects all of them — no file chooser, no cross-origin fetch.
+        // and injects all of them — no file chooser, no cross-origin fetch. Only served
+        // while the WebView is on a trusted host, so an arbitrary page can't harvest the
+        // user's draft photos.
         @JavascriptInterface
-        fun getDraftImageCount(): Int = draftImageDataUrls.size
+        fun getDraftImageCount(): Int =
+            if (isTrustedPlatformOrFrontend(currentPageUrl)) draftImageDataUrls.size else 0
 
         @JavascriptInterface
         fun getDraftImageDataUrl(index: Int): String =
-            draftImageDataUrls.getOrNull(index) ?: ""
+            if (isTrustedPlatformOrFrontend(currentPageUrl)) (draftImageDataUrls.getOrNull(index) ?: "") else ""
     }
 
     // Fetch draft metadata from the backend, then navigate to the platform form.

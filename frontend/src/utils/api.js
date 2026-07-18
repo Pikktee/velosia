@@ -146,7 +146,15 @@ export const getMe = async () => {
   });
 
   if (!response.ok) {
-    throw new Error('Sitzung abgelaufen.');
+    // Attach the status so callers can distinguish a real auth rejection (401/403 —
+    // token invalid/expired → log out) from a transient server error (5xx → keep session).
+    const err = new Error(
+      response.status === 401 || response.status === 403
+        ? 'Sitzung abgelaufen.'
+        : 'Profil konnte nicht geladen werden.'
+    );
+    err.status = response.status;
+    throw err;
   }
 
   return response.json();

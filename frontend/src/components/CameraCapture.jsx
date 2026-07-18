@@ -28,7 +28,7 @@ const CameraCapture = ({
   const streamRef = useRef(null);
   const fileInputRef = useRef(null);
 
-  const startCamera = async () => {
+  const startCamera = async (isCancelled = () => false) => {
     stopCamera(); // Make sure previous stream is stopped
     setError(null);
     try {
@@ -41,11 +41,19 @@ const CameraCapture = ({
         audio: false
       };
       const stream = await navigator.mediaDevices.getUserMedia(constraints);
+      // If the component unmounted / facingMode changed while getUserMedia was
+      // pending, the cleanup already ran against a null streamRef. Stop this
+      // now-orphaned stream ourselves, or the camera stays on (LED + battery).
+      if (isCancelled()) {
+        stream.getTracks().forEach(track => track.stop());
+        return;
+      }
       streamRef.current = stream;
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
       }
     } catch (err) {
+      if (isCancelled()) return;
       console.error("Kamera-Zugriffsfehler:", err);
       setError("Kamera konnte nicht gestartet werden. Bitte erteile die Berechtigung.");
     }
@@ -72,8 +80,10 @@ const CameraCapture = ({
 
   // Start stream on mount or when facingMode changes
   useEffect(() => {
-    startCamera();
+    let cancelled = false;
+    startCamera(() => cancelled);
     return () => {
+      cancelled = true;
       stopCamera();
     };
   }, [facingMode]);

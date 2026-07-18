@@ -126,12 +126,24 @@ def run_migrations():
         except Exception as e:
             db.rollback()
             print(f"Migration note: {col_name} column might already exist. ({e})", flush=True)
-            
+
+    # Per-attribute telemetry columns (added V2.7.18) — let the anomaly monitor
+    # watch the fragile React attribute pickers (Zustand/Größe/Farbe/Material/Marke),
+    # not just the core text fields + category.
+    for col_name in ("condition_ok", "size_ok", "color_ok", "material_ok", "brand_ok"):
+        try:
+            db.execute(text(f"ALTER TABLE autofill_events ADD COLUMN {col_name} BOOLEAN"))
+            db.commit()
+            print(f"Successfully ran migrations: added {col_name} column to autofill_events.", flush=True)
+        except Exception as e:
+            db.rollback()
+            print(f"Migration note: {col_name} column might already exist. ({e})", flush=True)
+
     db.close()
 
 run_migrations()
 
-app = FastAPI(title="Velosia API", version="2.7.17")
+app = FastAPI(title="Velosia API", version="2.7.37")
 
 UPLOAD_DIR = "/data/uploads" if os.path.isdir("/data") else "uploads"
 os.makedirs(UPLOAD_DIR, exist_ok=True)
@@ -838,6 +850,17 @@ _TELEMETRY_SIGNALS = [
     ("Beschreibung", "description_found", 0.6),
     ("Preis", "price_found", 0.6),
     ("Kategorie", "category_ok", 0.9),  # category can legitimately fall to manual -> only alert on near-total failure
+    # Attribute pickers: only counted when the AI actually had a value (see engine),
+    # so a False means "we had a value and the picker couldn't set it" — a likely
+    # selector break. Conservative thresholds because a value can also be legitimately
+    # absent from the site's option list.
+    ("Zustand", "condition_ok", 0.85),
+    ("Größe", "size_ok", 0.9),
+    ("Farbe", "color_ok", 0.9),
+    ("Material", "material_ok", 0.9),
+    # Brand is intentionally NOT alerted on: it is exact-match-only ("leer ist besser
+    # als halluziniert"), so a high miss rate is normal, not a break. brand_ok is
+    # still stored for manual analysis.
 ]
 
 

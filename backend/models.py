@@ -133,6 +133,14 @@ class AutofillEvent(Base):
     description_found = Column(Boolean, nullable=True)
     price_found = Column(Boolean, nullable=True)
     category_ok = Column(Boolean, nullable=True)
+    # Per-attribute picker outcomes (the fragile React dropdowns/modals). None =
+    # not attempted this run (the AI had no value for it, so a miss isn't a
+    # structural break); True/False = the picker was driven and (in)succeeded.
+    condition_ok = Column(Boolean, nullable=True)
+    size_ok = Column(Boolean, nullable=True)
+    color_ok = Column(Boolean, nullable=True)
+    material_ok = Column(Boolean, nullable=True)
+    brand_ok = Column(Boolean, nullable=True)
     photos = Column(Integer, nullable=True)
     attributes_count = Column(Integer, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow, index=True)

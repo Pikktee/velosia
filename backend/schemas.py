@@ -123,6 +123,11 @@ class AutofillEventCreate(BaseModel):
     description_found: Optional[bool] = None
     price_found: Optional[bool] = None
     category_ok: Optional[bool] = None
+    condition_ok: Optional[bool] = None
+    size_ok: Optional[bool] = None
+    color_ok: Optional[bool] = None
+    material_ok: Optional[bool] = None
+    brand_ok: Optional[bool] = None
     photos: Optional[int] = None
     attributes_count: Optional[int] = None
 
