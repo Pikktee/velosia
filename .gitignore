@@ -37,3 +37,6 @@ android/keystore.properties
 
 # Google Play Service-Account-Key (NIEMALS committen)
 android/play-deploy-key.json
+
+# Java heap dumps (from crashed Gradle/JVM runs)
+*.hprof

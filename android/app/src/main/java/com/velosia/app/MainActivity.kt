@@ -200,6 +200,12 @@ class MainActivity : AppCompatActivity() {
             override fun doUpdateVisitedHistory(view: WebView, url: String, isReload: Boolean) {
                 super.doUpdateVisitedHistory(view, url, isReload)
                 currentPageUrl = url
+                // Vinted routes login -> /items/new as an SPA navigation (no document
+                // reload), so onPageFinished never fires for the form after a fresh login
+                // and the autofill wouldn't start until the user reopened. This hook fires
+                // on SPA history changes too, so trigger here as well (the hasAutoFilled
+                // guard keeps it a single run).
+                maybeTriggerAutofill(url)
                 maybeCapturePublishedListing(url)
             }
 
@@ -252,31 +258,7 @@ class MainActivity : AppCompatActivity() {
                 val isDashboard = url.startsWith(frontendUrl)
                 fabClose.visibility = if (isDashboard) View.GONE else View.VISIBLE
 
-                val isVintedForm = url.contains("vinted.de/items/new") ||
-                    url.contains("vinted.fr/items/new")
-                // Kleinanzeigen step 1 is only the category picker; the real form lives on
-                // p-anzeige-aufgeben-schritt2.html, so we treat that as the fillable page.
-                val isKleinanzeigenCategory = url.contains("kleinanzeigen.de/p-anzeige-aufgeben.html")
-                val isKleinanzeigenForm = url.contains("kleinanzeigen.de/p-anzeige-aufgeben-schritt2")
-                val isFormPage = isVintedForm || isKleinanzeigenForm
-
-                if (activeDraftJson != null && (isFormPage || isKleinanzeigenCategory)) {
-                    // On the actual form, fill once it has loaded. Whether it ALSO
-                    // submits depends on the user's "publish automatically" setting
-                    // (default off -> the user reviews and clicks publish himself).
-                    if (isFormPage && !hasAutoFilled) {
-                        hasAutoFilled = true
-                        // The forms render dynamically; give them a brief moment before
-                        // injecting (the engine then polls for the fields itself).
-                        webView.postDelayed({ injectAutofill(autoSubmit = autoSubmitSetting) }, 600)
-                    }
-                    // On the category picker, let the engine pre-select the category via
-                    // the keyword suggestion field so the user reaches the form hands-free.
-                    if (isKleinanzeigenCategory && !hasAutoCategory) {
-                        hasAutoCategory = true
-                        webView.postDelayed({ injectAutofill(autoSubmit = false) }, 600)
-                    }
-                }
+                maybeTriggerAutofill(url)
             }
         }
 
@@ -720,6 +702,36 @@ class MainActivity : AppCompatActivity() {
 
         webView.evaluateJavascript(engine) {
             webView.evaluateJavascript(caller, null)
+        }
+    }
+
+    // Fire the autofill once we land on a fillable form URL — called from BOTH
+    // onPageFinished (full loads) and doUpdateVisitedHistory (SPA navigations, e.g.
+    // Vinted's login -> /items/new route). The hasAutoFilled / hasAutoCategory guards
+    // make it a single run regardless of how many times the URL is (re)visited.
+    private fun maybeTriggerAutofill(url: String) {
+        if (activeDraftJson == null) return
+        val isVintedForm = url.contains("vinted.de/items/new") ||
+            url.contains("vinted.fr/items/new")
+        // Kleinanzeigen step 1 is only the category picker; the real form lives on
+        // p-anzeige-aufgeben-schritt2.html, so we treat that as the fillable page.
+        val isKleinanzeigenCategory = url.contains("kleinanzeigen.de/p-anzeige-aufgeben.html")
+        val isKleinanzeigenForm = url.contains("kleinanzeigen.de/p-anzeige-aufgeben-schritt2")
+        val isFormPage = isVintedForm || isKleinanzeigenForm
+
+        // On the actual form, fill once it has loaded. Whether it ALSO submits depends
+        // on the user's "publish automatically" setting (default off -> the user
+        // reviews and clicks publish himself). The forms render dynamically, so give
+        // them a brief moment before injecting (the engine then polls for the fields).
+        if (isFormPage && !hasAutoFilled) {
+            hasAutoFilled = true
+            webView.postDelayed({ injectAutofill(autoSubmit = autoSubmitSetting) }, 600)
+        }
+        // On the category picker, let the engine pre-select the category via the
+        // keyword suggestion field so the user reaches the form hands-free.
+        if (isKleinanzeigenCategory && !hasAutoCategory) {
+            hasAutoCategory = true
+            webView.postDelayed({ injectAutofill(autoSubmit = false) }, 600)
         }
     }
 
