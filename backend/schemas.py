@@ -1,6 +1,9 @@
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, field_serializer
 from datetime import datetime
 from typing import Optional, List, Any
+import json as _json
+
+import signed_urls
 
 # Auth Token Schemas
 class Token(BaseModel):
@@ -90,6 +93,31 @@ class DraftResponse(DraftBase):
     class Config:
         from_attributes = True
 
+    # Photo paths leave the API signed (see signed_urls.py). Signing here rather
+    # than in each endpoint means every client — frontend <img>, Android okhttp,
+    # autofill engine — keeps working untouched. The database keeps the raw path.
+    @field_serializer("image_path")
+    def _sign_image_path(self, value: Optional[str]) -> Optional[str]:
+        return signed_urls.sign_path(value)
+
+    @field_serializer("image_paths")
+    def _sign_image_paths(self, value: Optional[str]) -> Optional[str]:
+        """`image_paths` is a JSON list stored as a string — sign each entry and
+        hand back the same string shape the clients already parse."""
+        if not value:
+            return value
+        try:
+            paths = _json.loads(value)
+        except Exception:
+            # Legacy rows may hold a Python list repr with single quotes.
+            try:
+                paths = _json.loads(value.replace("'", '"'))
+            except Exception:
+                return value
+        if not isinstance(paths, list):
+            return value
+        return _json.dumps([signed_urls.sign_path(p) for p in paths])
+
 
 # Listing capture — the engine reports the public id + URL after publishing.
 class ListingPublishedCreate(BaseModel):
@@ -151,6 +179,12 @@ class BugReportResponse(BaseModel):
 
     class Config:
         from_attributes = True
+
+    # Bug screenshots are the most sensitive thing on the volume — they show
+    # whatever was on a user's screen. Same signed-URL treatment as draft photos.
+    @field_serializer("screenshot_path")
+    def _sign_screenshot_path(self, value: Optional[str]) -> Optional[str]:
+        return signed_urls.sign_path(value)
 
 
 # Tester waitlist (public landing-page sign-up)

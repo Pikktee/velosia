@@ -1,6 +1,6 @@
 from fastapi import FastAPI, Depends, HTTPException, File, UploadFile, status, Form, BackgroundTasks, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.orm import Session
 import os
@@ -10,11 +10,13 @@ import json
 import time
 import asyncio
 from datetime import datetime, timedelta
-from typing import List
+from typing import List, Optional
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import models
 import schemas
+import rate_limit
+import signed_urls
 from database import engine, get_db
 from services.gemini_service import analyze_item_image, group_images_by_offer
 from services.notifications import send_email
@@ -117,7 +119,10 @@ def run_migrations():
         # physical column in older DBs is left in place, inert and unreferenced.
         ("default_shipping", "VARCHAR(200)"),
         ("auto_submit", "BOOLEAN DEFAULT 0"),
-        ("is_blocked", "BOOLEAN DEFAULT 0")
+        ("is_blocked", "BOOLEAN DEFAULT 0"),
+        # Rolling 24h AI image quota (cost control, added V2.7.39)
+        ("ai_images_used", "INTEGER DEFAULT 0"),
+        ("ai_quota_reset_at", "DATETIME")
     ]:
         try:
             db.execute(text(f"ALTER TABLE users ADD COLUMN {col_name} {col_type}"))
@@ -143,7 +148,7 @@ def run_migrations():
 
 run_migrations()
 
-app = FastAPI(title="Velosia API", version="2.7.38")
+app = FastAPI(title="Velosia API", version="2.7.39")
 
 UPLOAD_DIR = "/data/uploads" if os.path.isdir("/data") else "uploads"
 os.makedirs(UPLOAD_DIR, exist_ok=True)
@@ -166,8 +171,40 @@ async def add_app_version_header(request: Request, call_next):
     return response
 
 
-# Mount static uploads directory
-app.mount("/uploads", StaticFiles(directory=UPLOAD_DIR), name="uploads")
+# Uploaded photos are served through a signature check rather than a bare
+# StaticFiles mount, which handed every image to anyone who had the URL — bug
+# report screenshots included. See signed_urls.py for why signed URLs and not an
+# Authorization header (none of the three clients can send one for images).
+@app.get("/uploads/{filename}")
+def serve_upload(
+    filename: str,
+    request: Request,
+    e: Optional[str] = None,
+    s: Optional[str] = None,
+):
+    # Never let a crafted name escape the upload directory.
+    safe_name = os.path.basename(filename)
+    if not safe_name or safe_name != filename:
+        raise HTTPException(status_code=404, detail="Datei nicht gefunden.")
+
+    authorized = signed_urls.PUBLIC or signed_urls.verify(safe_name, e, s)
+    if not authorized:
+        # Fallback for authenticated callers (e.g. tooling): a valid bearer token
+        # grants access even without a signature.
+        auth_header = request.headers.get("authorization", "")
+        if auth_header.lower().startswith("bearer "):
+            authorized = bool(decode_access_token(auth_header[7:].strip()))
+    if not authorized:
+        raise HTTPException(status_code=403, detail="Kein Zugriff auf diese Datei.")
+
+    file_path = os.path.join(UPLOAD_DIR, safe_name)
+    if not os.path.isfile(file_path):
+        raise HTTPException(status_code=404, detail="Datei nicht gefunden.")
+
+    # Filenames are UUIDs and their content never changes, so let clients cache
+    # aggressively; the day-rounded expiry keeps the URL stable enough to hit.
+    return FileResponse(file_path, headers={"Cache-Control": "private, max-age=86400"})
+
 
 # Auth token extractor
 security = HTTPBearer()
@@ -205,7 +242,14 @@ def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(securit
 # --- AUTH ENDPOINTS ---
 
 @app.post("/api/auth/register", response_model=schemas.UserResponse, status_code=status.HTTP_201_CREATED)
-def register(user_in: schemas.UserCreate, db: Session = Depends(get_db)):
+def register(request: Request, user_in: schemas.UserCreate, db: Session = Depends(get_db)):
+    # Every registration costs us storage + an AI quota; cap how fast one source
+    # can create accounts.
+    rate_limit.enforce(
+        "register", rate_limit.client_ip(request), rate_limit.REGISTER_IP,
+        "Zu viele Registrierungen von dieser Verbindung. Bitte versuche es später erneut.",
+    )
+
     # Check if user already exists
     existing_user = db.query(models.User).filter(models.User.email == user_in.email).first()
     if existing_user:
@@ -225,15 +269,30 @@ def register(user_in: schemas.UserCreate, db: Session = Depends(get_db)):
     return db_user
 
 @app.post("/api/auth/login", response_model=schemas.Token)
-def login(user_in: schemas.UserCreate, db: Session = Depends(get_db)):
+def login(request: Request, user_in: schemas.UserCreate, db: Session = Depends(get_db)):
+    # Brute-force protection. Only FAILED attempts are counted (see rate_limit),
+    # so someone logging in repeatedly on purpose is never locked out. Two keys:
+    # the IP (one attacker, many accounts) and the account (many IPs, one account).
+    ip = rate_limit.client_ip(request)
+    account = (user_in.email or "").strip().lower()
+    too_many = "Zu viele fehlgeschlagene Anmeldeversuche. Bitte warte einen Moment."
+    rate_limit.check("login_ip", ip, rate_limit.LOGIN_IP, too_many)
+    rate_limit.check("login_account", account, rate_limit.LOGIN_ACCOUNT, too_many)
+
     db_user = db.query(models.User).filter(models.User.email == user_in.email).first()
     if not db_user or not verify_password(user_in.password, db_user.hashed_password):
+        rate_limit.record("login_ip", ip)
+        rate_limit.record("login_account", account)
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Ungültige E-Mail-Adresse oder Passwort."
         )
     if getattr(db_user, "is_blocked", False):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Dieses Konto wurde gesperrt.")
+
+    # Correct credentials: forget this account's failure history so a later typo
+    # streak starts from zero.
+    rate_limit.reset("login_account", account)
 
     access_token = create_access_token(data={"sub": db_user.email})
     return {"access_token": access_token, "token_type": "bearer"}
@@ -292,7 +351,13 @@ def get_auth_config():
     }
 
 @app.post("/api/auth/google", response_model=schemas.Token)
-def login_google(login_in: schemas.GoogleLogin, db: Session = Depends(get_db)):
+def login_google(request: Request, login_in: schemas.GoogleLogin, db: Session = Depends(get_db)):
+    # Each call verifies a token against Google and may create an account.
+    rate_limit.enforce(
+        "login_google", rate_limit.client_ip(request), rate_limit.GOOGLE_IP,
+        "Zu viele Anmeldeversuche. Bitte warte einen Moment.",
+    )
+
     credential = login_in.credential
     client_id = os.getenv("GOOGLE_CLIENT_ID")
     if not client_id:
@@ -351,6 +416,71 @@ def login_google(login_in: schemas.GoogleLogin, db: Session = Depends(get_db)):
 from typing import Optional, List
 import json
 
+# --- AI usage quota (cost control) -------------------------------------------
+# Every image sent to Gemini costs real money and nothing else caps it: one
+# account could otherwise loop /api/upload and run up an unbounded bill. The
+# quota is a rolling 24h window per user, counted in images (the unit the cost
+# estimate in the admin panel already uses). 0 disables it.
+DAILY_IMAGE_QUOTA = int(os.getenv("DAILY_IMAGE_QUOTA", "150"))
+# Storage guard: /api/drafts/{id}/images runs no AI, so the quota doesn't apply,
+# but it would otherwise accept unlimited photos onto the volume.
+MAX_IMAGES_PER_DRAFT = int(os.getenv("MAX_IMAGES_PER_DRAFT", "24"))
+
+
+def _strip_signatures_in_json_list(raw: str) -> str:
+    """Remove URL signatures from a JSON list of upload paths (see signed_urls)."""
+    try:
+        paths = json.loads(raw)
+    except Exception:
+        return raw
+    if not isinstance(paths, list):
+        return raw
+    return json.dumps([signed_urls.strip_signature(p) for p in paths])
+
+
+def consume_ai_quota(db: Session, user: models.User, images: int) -> None:
+    """Charge `images` against the user's rolling 24h AI quota, or raise 429.
+
+    Called BEFORE the Gemini request. A failed analysis still consumes the
+    quota — by then the API call has usually already been billed, and a cost
+    guard that refunds on error is trivially farmable.
+    """
+    if images <= 0 or DAILY_IMAGE_QUOTA <= 0 or user.is_admin:
+        return
+
+    now = datetime.utcnow()
+    used = user.ai_images_used or 0
+    reset_at = user.ai_quota_reset_at
+    if reset_at is None or reset_at <= now:
+        used = 0
+        reset_at = now + timedelta(hours=24)
+
+    if used + images > DAILY_IMAGE_QUOTA:
+        hours = max(1, round((reset_at - now).total_seconds() / 3600))
+        remaining = max(0, DAILY_IMAGE_QUOTA - used)
+        if remaining == 0:
+            detail = (
+                f"Dein Tageslimit für KI-Analysen ist aufgebraucht "
+                f"({DAILY_IMAGE_QUOTA} Bilder). Es wird in ca. {hours} Std. zurückgesetzt."
+            )
+        else:
+            # Enough quota left for *some* images, just not this many — say so,
+            # otherwise "0 von N" reads like a bug to someone who has used none.
+            detail = (
+                f"Heute sind noch {remaining} von {DAILY_IMAGE_QUOTA} KI-Analysen frei, "
+                f"diese Anfrage benötigt {images} Bilder. "
+                f"Das Limit wird in ca. {hours} Std. zurückgesetzt."
+            )
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail=detail,
+            headers={"Retry-After": str(max(1, int((reset_at - now).total_seconds())))},
+        )
+
+    user.ai_images_used = used + images
+    user.ai_quota_reset_at = reset_at
+    db.commit()
+
 @app.post("/api/upload", response_model=schemas.DraftResponse, status_code=status.HTTP_201_CREATED)
 def upload_and_analyze(
     file: Optional[UploadFile] = File(None), 
@@ -368,6 +498,8 @@ def upload_and_analyze(
 
     if not uploaded_files:
         raise HTTPException(status_code=400, detail="Es wurden keine Bilder hochgeladen.")
+
+    consume_ai_quota(db, current_user, len(uploaded_files))
 
     saved_paths = []
     local_paths = []
@@ -460,6 +592,10 @@ def upload_turbo(
     """
     if not files:
         raise HTTPException(status_code=400, detail="Es wurden keine Bilder hochgeladen.")
+
+    # Turbo sends every photo through grouping AND one analysis per group, so it
+    # is the most expensive path per request.
+    consume_ai_quota(db, current_user, len(files))
 
     def _cleanup(paths):
         for p in paths:
@@ -598,6 +734,10 @@ def update_draft(
         raise HTTPException(status_code=404, detail="Angebot wurde nicht gefunden.")
     
     update_data = updated_draft.dict(exclude_unset=True)
+    # Photo paths leave the API signed; if a client ever echoes them back, store
+    # the raw path so the signature never gets baked into the database.
+    if update_data.get("image_paths"):
+        update_data["image_paths"] = _strip_signatures_in_json_list(update_data["image_paths"])
     for key, value in update_data.items():
         setattr(db_draft, key, value)
 
@@ -662,6 +802,13 @@ def add_draft_images(
             if db_draft.image_path:
                 existing_paths = [db_draft.image_path]
 
+    # No AI here (photos are only stored), so this is a storage cap, not a quota.
+    if MAX_IMAGES_PER_DRAFT > 0 and len(existing_paths) + len(files) > MAX_IMAGES_PER_DRAFT:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Ein Angebot kann höchstens {MAX_IMAGES_PER_DRAFT} Bilder enthalten.",
+        )
+
     saved_paths = []
     local_paths = []
     for f in files:
@@ -716,6 +863,10 @@ def delete_draft_image(
     ).first()
     if not db_draft:
         raise HTTPException(status_code=404, detail="Angebot wurde nicht gefunden.")
+
+    # The client hands back the path it received, which is signed — compare
+    # against the raw path the database stores.
+    image_path = signed_urls.strip_signature(image_path)
 
     existing_paths = []
     if db_draft.image_paths:
@@ -775,6 +926,8 @@ def regenerate_draft_field_endpoint(
 
     if not image_paths:
         raise HTTPException(status_code=400, detail="Keine Bilder im Angebot vorhanden, um KI-Generierung auszuführen.")
+
+    consume_ai_quota(db, current_user, len(image_paths))
 
     from services.gemini_service import regenerate_draft_field
     try:
@@ -1143,6 +1296,12 @@ def create_bug_report(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user)
 ):
+    # Each report can carry a base64 screenshot straight onto the volume.
+    rate_limit.enforce(
+        "bugreport", str(current_user.id), rate_limit.BUGREPORT_USER,
+        "Zu viele Fehlerberichte in kurzer Zeit. Bitte warte einen Moment.",
+    )
+
     screenshot_path = None
     if bug_in.screenshot_base64 and "," in bug_in.screenshot_base64:
         try:
@@ -1178,10 +1337,16 @@ def create_bug_report(
 
 # --- Tester waitlist (public sign-up from the landing page) -------------------
 @app.post("/api/waitlist", response_model=schemas.WaitlistResponse, status_code=status.HTTP_201_CREATED)
-def join_waitlist(entry_in: schemas.WaitlistCreate, db: Session = Depends(get_db)):
+def join_waitlist(request: Request, entry_in: schemas.WaitlistCreate, db: Session = Depends(get_db)):
     """Public endpoint — anyone can sign up to be considered as a Play Store
     tester. Idempotent: re-submitting the same e-mail returns the existing entry
     instead of erroring. Notifies the maintainer by e-mail when configured."""
+    # Unauthenticated and it sends us an e-mail per new entry — prime spam target.
+    rate_limit.enforce(
+        "waitlist", rate_limit.client_ip(request), rate_limit.WAITLIST_IP,
+        "Zu viele Anmeldungen von dieser Verbindung. Bitte versuche es später erneut.",
+    )
+
     email = entry_in.email.strip().lower()
     existing = db.query(models.WaitlistEntry).filter(models.WaitlistEntry.email == email).first()
     if existing:

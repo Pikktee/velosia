@@ -84,6 +84,18 @@ Aufbauend auf dem Status-Tracking (V2.5) gliedert `DraftList` die Angebote jetzt
 
 ---
 
+## Missbrauchs- & Kostenschutz (V2.7.39)
+
+Drei serverseitige Ebenen — die Clients ändern sich dafür **nicht**.
+
+**Rate-Limiting (`backend/rate_limit.py`):** In-Memory Sliding-Window; der API-Prozess ist ein einzelner uvicorn-Worker (Railway-Startbefehl ohne `--workers`, SQLite-Volume schließt Replicas aus), deshalb sind prozesslokale Zähler autoritativ — bei mehreren Workern müsste das nach Redis wandern. Client-IP = **letzter** `X-Forwarded-For`-Eintrag (den hängt der Railway-Edge an; der erste ist fälschbar). Policies an einer Stelle: Login **8 Fehlversuche/15 min je Konto** — das ist die eigentliche Brute-Force-Abwehr, weil sie am angegriffenen Konto hängt und IP-Rotation nichts nützt — plus **40/5 min je IP**, bewusst locker, weil Mobilfunk-CGNAT Tausende Nutzer hinter eine IP setzt und ein enges IP-Limit Unbeteiligte aussperren würde. Es zählen **nur fehlgeschlagene** Logins (sonst sperrt sich ein Vielnutzer selbst aus), ein erfolgreicher Login löscht die Konto-Historie. Dazu Registrierung 5/h, Google-Login 30/5 min, Warteliste 5/h, Bug-Reports 12/h je Nutzer. `RATE_LIMIT_DISABLED=1` für lokale Tests.
+
+**KI-Kontingent (`consume_ai_quota` in `main.py`):** rollierendes 24h-Fenster pro Nutzer, gezählt in **Bildern** (dieselbe Einheit wie die Kostenschätzung im Admin-Panel), additive Spalten `users.ai_images_used` + `ai_quota_reset_at`. Greift in `/api/upload`, `/api/upload/turbo` und `/api/drafts/{id}/regenerate` **vor** dem Gemini-Call; Admins sind ausgenommen. Env `DAILY_IMAGE_QUOTA` (Default 150, 0 = aus). `/api/drafts/{id}/images` ruft keine KI, bekam aber ein Speicherlimit `MAX_IMAGES_PER_DRAFT` (24).
+
+**Signierte Upload-URLs (`backend/signed_urls.py`):** `/uploads` war ein offener `StaticFiles`-Mount — jedes Foto und **jeder Bug-Report-Screenshot** war ohne Auth abrufbar (UUID-Namen sind unerraten, aber nicht geschützt). Jetzt liefert ein eigener Endpunkt die Datei nur gegen HMAC-Signatur (`?e=<Ablauf>&s=<sig>`, Secret = `SECRET_KEY`) oder gültiges Bearer-Token. **Warum Signatur statt Header:** keiner der drei Clients kann bei Bildern einen Header senden — das Frontend rendert `<img src>`, Android lädt per okhttp-GET ohne Auth, die Engine holt sie aus der Plattform-Seite heraus. Deshalb werden die Pfade **in der API-Antwort** signiert (`field_serializer` in `DraftResponse`/`BugReportResponse`) und alle Clients laufen unverändert weiter — **kein App-Release nötig**. Die DB speichert weiter den rohen Pfad; zurückgereichte Pfade normalisiert `strip_signature` (`DELETE /api/drafts/{id}/images`, `PUT /api/drafts/{id}`). Ablaufzeiten sind **auf volle Tage gerundet**, damit dieselbe Datei stets dieselbe URL bekommt — mit sekundengenauem Ablauf würde jeder Draft-Abruf den Bild-Cache entwerten und alle Thumbnails neu über Mobilfunk laden. Notschalter `UPLOADS_PUBLIC=1`, TTL `UPLOAD_URL_TTL_S` (14 Tage). **Folge:** eine Rotation von `SECRET_KEY` entwertet alle ausgelieferten Bild-URLs — heilt beim nächsten Draft-Abruf von selbst.
+
+---
+
 ## Project Structure
 ```
 /Users/henrik/Dev/vintamie/

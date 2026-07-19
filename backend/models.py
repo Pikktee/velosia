@@ -30,6 +30,11 @@ class User(Base):
     # When True the account is suspended: login + all authenticated requests are
     # rejected. Set/cleared by an admin via /api/admin/users/{id}/block.
     is_blocked = Column(Boolean, default=False, nullable=True)
+    # Rolling 24h Gemini quota (cost control): images charged since
+    # `ai_quota_reset_at`, which is when the counter next falls back to zero.
+    # Both maintained exclusively by consume_ai_quota() in main.py.
+    ai_images_used = Column(Integer, default=0, nullable=True)
+    ai_quota_reset_at = Column(DateTime, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
 
     # Relationships
