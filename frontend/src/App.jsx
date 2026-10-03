@@ -16,6 +16,16 @@ import { getDrafts, deleteDraft, isAuthenticated, setAuthToken, getMe, uploadAnd
 import { version } from '../package.json';
 
 
+// fetch() rejects with a raw TypeError ("Failed to fetch", "Load failed") when
+// the network is gone — never show that verbatim. Server errors arrive as
+// Error(detail) with an already user-friendly German text.
+const analysisErrorMessage = (err, fallback) => {
+  if (err instanceof TypeError) {
+    return 'Keine Verbindung zum Server. Prüfe deine Internetverbindung und versuche es erneut.';
+  }
+  return err?.message || fallback;
+};
+
 export default function App() {
   const isAndroidApp = typeof window.VelosiaBridge !== 'undefined';
   const [token, setToken] = useState(null);
@@ -377,7 +387,7 @@ export default function App() {
         setView('capture');
       } else {
         console.error("Turbo analysis failed:", err);
-        setAnalysisError(err.message || 'Die Turbo-Analyse ist fehlgeschlagen. Versuche es erneut.');
+        setAnalysisError(analysisErrorMessage(err, 'Die Turbo-Analyse ist fehlgeschlagen. Bitte versuche es erneut.'));
         setView('capture');
       }
       setAbortController(null);
@@ -408,8 +418,7 @@ export default function App() {
         setView('capture');
       } else {
         console.error("Analysis failed:", err);
-        const errMsg = err.message || 'Die Analyse ist fehlgeschlagen. Versuche es erneut.';
-        setAnalysisError(errMsg);
+        setAnalysisError(analysisErrorMessage(err, 'Die Analyse ist fehlgeschlagen. Bitte versuche es erneut.'));
         setView('capture');
       }
       setAbortController(null);

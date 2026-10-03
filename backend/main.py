@@ -148,7 +148,7 @@ def run_migrations():
 
 run_migrations()
 
-app = FastAPI(title="Velosia API", version="2.7.39")
+app = FastAPI(title="Velosia API", version="2.7.40")
 
 UPLOAD_DIR = "/data/uploads" if os.path.isdir("/data") else "uploads"
 os.makedirs(UPLOAD_DIR, exist_ok=True)
@@ -438,6 +438,41 @@ def _strip_signatures_in_json_list(raw: str) -> str:
     return json.dumps([signed_urls.strip_signature(p) for p in paths])
 
 
+# Gemini billing/quota failures ("prepayment credits are depleted" comes back as
+# 402/429 RESOURCE_EXHAUSTED). Users can't fix these and must not see provider
+# internals; the maintainer gets one e-mail per cooldown window instead.
+_AI_BILLING_MARKERS = ("credits are depleted", "exhausted", "quota", "billing")
+_AI_ALERT_COOLDOWN_H = 6
+
+
+def ai_failure(db: Session, err: Exception, action: str) -> HTTPException:
+    """Log the technical AI error and turn it into a user-facing 502 with a
+    plain-language message. Billing/quota problems also alert the maintainer."""
+    raw = str(err)
+    print(f"Velosia: {action} fehlgeschlagen: {raw}", flush=True)
+    if any(m in raw.lower() for m in _AI_BILLING_MARKERS):
+        signal = "gemini:billing"
+        last = (
+            db.query(models.AlertLog)
+            .filter(models.AlertLog.signal == signal)
+            .order_by(models.AlertLog.created_at.desc())
+            .first()
+        )
+        if not last or (datetime.utcnow() - last.created_at) >= timedelta(hours=_AI_ALERT_COOLDOWN_H):
+            db.add(models.AlertLog(signal=signal, detail=raw[:500]))
+            db.commit()
+            send_email(
+                "⚠️ Velosia: KI-Analysen schlagen fehl (Guthaben/Kontingent)",
+                f"Gemini lehnt Anfragen ab — vermutlich ist das Prepaid-Guthaben in AI Studio "
+                f"aufgebraucht oder ein Kontingent erschöpft.\n\nAktion: {action}\nFehler: {raw}\n\n"
+                f"Aufladen: https://ai.studio/projects",
+            )
+        detail = "Die KI-Analyse ist gerade nicht verfügbar. Wir kümmern uns darum – bitte versuche es später noch einmal."
+    else:
+        detail = "Deine Fotos konnten gerade nicht analysiert werden. Bitte versuche es gleich noch einmal."
+    return HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=detail)
+
+
 def consume_ai_quota(db: Session, user: models.User, images: int) -> None:
     """Charge `images` against the user's rolling 24h AI quota, or raise 429.
 
@@ -543,10 +578,7 @@ def upload_and_analyze(
                     os.remove(p)
                 except Exception:
                     pass
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail=f"KI-Analyse fehlgeschlagen: {str(e)}"
-        )
+        raise ai_failure(db, e, "KI-Analyse")
 
     # Save to SQLite database linked to the current user
     db_draft = models.Draft(
@@ -649,7 +681,7 @@ def upload_turbo(
                 results[idx] = future.result()
             except Exception as e:
                 print(f"Velosia Turbo: Analyse von Gruppe {idx} fehlgeschlagen: {e}", flush=True)
-                errors.append(str(e))
+                errors.append(e)
 
     # 4. Persist one draft per successfully analyzed group
     created_drafts = []
@@ -677,8 +709,7 @@ def upload_turbo(
 
     if not created_drafts:
         _cleanup(local_paths)
-        detail = f"Turbo-Analyse fehlgeschlagen: {errors[0]}" if errors else "KI-Analyse fehlgeschlagen."
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=detail)
+        raise ai_failure(db, errors[0] if errors else RuntimeError("keine Gruppe analysiert"), "Turbo-Analyse")
 
     # Remove images that belong to failed groups (no draft references them)
     _cleanup([p for j, p in enumerate(local_paths) if j not in used_indices])
@@ -933,7 +964,7 @@ def regenerate_draft_field_endpoint(
     try:
         new_val = regenerate_draft_field(image_paths, req.field, user=current_user)
     except Exception as e:
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=f"KI-Regeneration fehlgeschlagen: {str(e)}")
+        raise ai_failure(db, e, "KI-Regeneration")
 
     if req.field == "title":
         db_draft.title = new_val

@@ -32,30 +32,41 @@ def pick_vinted_category(title: str, description: str = "", search_query: str = 
     ctx = ". ".join([p for p in [search_query, title, description] if p and p.strip()]).strip()
     if not ctx:
         return None
-    try:
+    models_to_try = _get_models_to_try(model_name)
+
+    def ask(intro: str, lines: str) -> Optional[str]:
         prompt = (
             "Du ordnest einen Second-Hand-Artikel der passenden VINTED-Kategorie zu.\n"
             f"Artikel: {ctx}\n\n"
-            "Wähle die EXAKT passende Kategorie aus der folgenden Liste. Jede Zeile ist ein "
-            "vollständiger Pfad (Hauptkategorie > ... > Unterkategorie). Antworte AUSSCHLIESSLICH "
-            "mit einer WORTWÖRTLICH kopierten Zeile aus der Liste, ohne weitere Worte:\n"
-            f"{vtax.selection_prompt()}"
+            f"{intro} Jede Zeile ist ein vollständiger Pfad (Hauptkategorie > ... > Unterkategorie). "
+            "Antworte AUSSCHLIESSLICH mit einer WORTWÖRTLICH kopierten Zeile aus der Liste, ohne weitere Worte:\n"
+            f"{lines}"
         )
-        models_to_try = []
-        for m in [model_name, GEMINI_MODEL, "gemini-2.5-flash", "gemini-2.0-flash"]:
-            if m and m not in models_to_try:
-                models_to_try.append(m)
-        resp = None
         for mn in models_to_try:
             try:
                 resp = genai.GenerativeModel(mn).generate_content(prompt)
-                break
             except Exception as e:
                 print(f"Velosia Vinted-Kategorie: Modell '{mn}' fehlgeschlagen: {e}", flush=True)
-        if not resp or not getattr(resp, "text", None):
+                continue
+            text = getattr(resp, "text", None)
+            if not text:
+                return None
+            return text.strip().strip('"').strip("'").splitlines()[0].strip()
+        return None
+
+    try:
+        # Stage 1: the level-2 group, stage 2: a leaf within it (see vinted_taxonomy).
+        group = vtax.resolve_group(ask("Wähle den passenden BEREICH aus der folgenden Liste.", vtax.group_prompt()))
+        if not group:
             return None
-        pick = resp.text.strip().strip('"').strip("'").splitlines()[0].strip()
-        node = vtax.resolve(pick)
+        group_leaves = vtax.GROUP_LEAVES[group]
+        if len(group_leaves) == 1:
+            node = group_leaves[0]
+        else:
+            pick = ask("Wähle die EXAKT passende Kategorie aus der folgenden Liste.", vtax.leaves_prompt(group))
+            node = vtax.resolve(pick, candidates=group_leaves) if pick else None
+            if node and vtax._group_path(node["path"]) != group:
+                node = None
         if node:
             print(f"Velosia: Vinted-Kategorie -> {node['breadcrumb']}", flush=True)
             return node["breadcrumb"]
@@ -140,12 +151,15 @@ def description_framing_instruction(user) -> str:
     )
     return " " + " ".join(bits)
 
-def _get_models_to_try() -> List[str]:
+# Fallbacks if GEMINI_MODEL fails. gemini-2.0-flash was retired by Google (404)
+# and is gone; gemini-flash-latest is Google's moving alias for the current Flash.
+FALLBACK_MODELS = ["gemini-2.5-flash", "gemini-flash-latest"]
+
+
+def _get_models_to_try(preferred: Optional[str] = None) -> List[str]:
     models_to_try = []
-    if GEMINI_MODEL:
-        models_to_try.append(GEMINI_MODEL)
-    for m in ["gemini-2.5-flash", "gemini-2.0-flash"]:
-        if m not in models_to_try:
+    for m in [preferred, GEMINI_MODEL, *FALLBACK_MODELS]:
+        if m and m not in models_to_try:
             models_to_try.append(m)
     return models_to_try
 
@@ -303,12 +317,7 @@ def analyze_item_image(image_paths: List[str], user = None, user_condition: str 
         if user_details and user_details.strip():
             identify_prompt += f"\nZusätzliche Angaben des Benutzers zum Artikel: '{user_details}'"
 
-        models_to_try = []
-        if GEMINI_MODEL:
-            models_to_try.append(GEMINI_MODEL)
-        for m in ["gemini-2.5-flash", "gemini-2.0-flash"]:
-            if m not in models_to_try:
-                models_to_try.append(m)
+        models_to_try = _get_models_to_try()
 
         working_model_name = None
         id_response = None
@@ -512,12 +521,7 @@ def regenerate_draft_field(image_paths: List[str], field: str, user = None) -> s
         else:
             raise ValueError(f"Ungültiges Feld zur Regeneration: {field}")
 
-        models_to_try = []
-        if GEMINI_MODEL:
-            models_to_try.append(GEMINI_MODEL)
-        for m in ["gemini-2.5-flash", "gemini-2.0-flash"]:
-            if m not in models_to_try:
-                models_to_try.append(m)
+        models_to_try = _get_models_to_try()
 
         response = None
         last_error = None

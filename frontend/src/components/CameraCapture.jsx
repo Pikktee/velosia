@@ -223,49 +223,55 @@ const CameraCapture = ({
 
   return (
     <div className="camera-container">
-      {/* Analysis Error Banner */}
+      {/* Analysis Error Banner — opaque, high-contrast: it sits on the live
+          camera feed, so translucency/blur made it unreadable on bright scenes. */}
       {analysisError && (
-        <div style={{
-          position: 'absolute',
-          top: 'calc(12px + env(safe-area-inset-top, 0px))',
-          left: '50%',
-          transform: 'translateX(-50%)',
-          width: 'calc(100% - 2.5rem)',
-          maxWidth: '360px',
-          background: 'rgba(239, 68, 68, 0.2)',
-          backdropFilter: 'blur(16px)',
-          WebkitBackdropFilter: 'blur(16px)',
-          border: '1px solid rgba(239, 68, 68, 0.35)',
-          borderRadius: 'var(--radius-sm)',
-          padding: '0.75rem 1rem',
-          display: 'flex',
-          alignItems: 'center',
-          gap: '0.5rem',
-          color: '#fca5a5',
-          fontSize: '0.85rem',
-          zIndex: 140,
-          boxShadow: '0 8px 32px rgba(0, 0, 0, 0.5)'
-        }}>
-          <AlertCircle size={16} style={{ flexShrink: 0, color: '#f87171' }} />
-          <span style={{ flexGrow: 1, lineHeight: '1.3' }}>{analysisError}</span>
-          <button 
+        <div
+          role="alert"
+          aria-live="assertive"
+          style={{
+            position: 'absolute',
+            top: 'calc(12px + env(safe-area-inset-top, 0px))',
+            left: '50%',
+            transform: 'translateX(-50%)',
+            width: 'calc(100% - 2rem)',
+            maxWidth: '380px',
+            background: '#1c1013',
+            border: '1px solid #7f1d1d',
+            borderLeft: '4px solid #ef4444',
+            borderRadius: 'var(--radius-sm)',
+            padding: '0.75rem 0.5rem 0.75rem 0.9rem',
+            display: 'flex',
+            alignItems: 'flex-start',
+            gap: '0.6rem',
+            color: '#ffffff',
+            fontSize: '0.95rem',
+            zIndex: 140,
+            boxShadow: '0 8px 32px rgba(0, 0, 0, 0.6)'
+          }}
+        >
+          <AlertCircle size={20} aria-hidden="true" style={{ flexShrink: 0, color: '#f87171', marginTop: '0.1rem' }} />
+          <span style={{ flexGrow: 1, lineHeight: '1.4' }}>{analysisError}</span>
+          <button
+            type="button"
             onClick={onClearError}
+            aria-label="Hinweis schließen"
             style={{
               background: 'transparent',
               border: 'none',
-              color: '#fca5a5',
+              color: '#ffffff',
               cursor: 'pointer',
-              padding: '0.2rem',
+              width: '40px',
+              height: '40px',
+              margin: '-0.5rem 0',
+              flexShrink: 0,
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              borderRadius: '50%',
-              transition: 'background 0.2s'
+              borderRadius: '50%'
             }}
-            onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(255,255,255,0.08)'}
-            onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
           >
-            <X size={14} />
+            <X size={18} aria-hidden="true" />
           </button>
         </div>
       )}

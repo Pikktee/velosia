@@ -121,11 +121,43 @@ def resolve(ai_category: Optional[str], candidates: Optional[List[Dict]] = None)
 
 
 # ---------------------------------------------------------------------------
-# AI selection list — every LEAF breadcrumb (Vinted's tree is small enough that
-# we can offer all 2498 leaves; no branch needs collapsing like KA's car tree).
+# AI selection — two stages. Offering all 2498 leaf breadcrumbs in one prompt
+# cost ~50k input tokens per draft (84% of a whole analysis). Instead the AI
+# first picks one of the 73 level-2 groups ("Damen > Kleidung", ~700 tokens),
+# then a leaf among that group's leaves only (median 23, max 227 lines).
 # ---------------------------------------------------------------------------
-SELECTION_NODES: List[Dict] = LEAVES
+GROUP_DEPTH = 2
 
 
-def selection_prompt() -> str:
-    return "\n".join(n["breadcrumb"] for n in SELECTION_NODES)
+def _group_path(path: str) -> str:
+    return "/".join(path.split("/")[:GROUP_DEPTH])
+
+
+GROUP_LEAVES: Dict[str, List[Dict]] = {}
+for _n in LEAVES:
+    GROUP_LEAVES.setdefault(_group_path(_n["path"]), []).append(_n)
+
+GROUPS: List[Dict] = [BY_PATH[p] for p in GROUP_LEAVES]
+_GROUP_BY_BREADCRUMB_LOWER: Dict[str, str] = {g["breadcrumb"].lower(): g["path"] for g in GROUPS}
+
+
+def group_prompt() -> str:
+    return "\n".join(g["breadcrumb"] for g in GROUPS)
+
+
+def resolve_group(text: Optional[str]) -> Optional[str]:
+    """Map the stage-1 pick to a group path. Tolerates the AI answering with a
+    deeper breadcrumb (or a leaf) by falling back to that node's group."""
+    if not text:
+        return None
+    t = text.strip().lower()
+    if t in _GROUP_BY_BREADCRUMB_LOWER:
+        return _GROUP_BY_BREADCRUMB_LOWER[t]
+    p = path_for_breadcrumb(text)
+    if p and _group_path(p) in GROUP_LEAVES:
+        return _group_path(p)
+    return None
+
+
+def leaves_prompt(group_path: str) -> str:
+    return "\n".join(n["breadcrumb"] for n in GROUP_LEAVES.get(group_path, []))
