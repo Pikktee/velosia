@@ -14,7 +14,13 @@ GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 if GEMINI_API_KEY:
     genai.configure(api_key=GEMINI_API_KEY)
 
-GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
+GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-3.8-flash")
+
+# Fallback chain if the primary model fails (shut down, overloaded, no access).
+# gemini-2.0-flash was shut down on 2026-06-01 and Google restricts gemini-2.5-*
+# to projects that used it before — keep only current models up front.
+# Override the primary via env GEMINI_MODEL without a code change.
+FALLBACK_MODELS = ["gemini-3.8-flash", "gemini-3.5-flash", "gemini-3.5-flash-lite", "gemini-2.5-flash"]
 
 from typing import List, Optional
 
@@ -41,10 +47,7 @@ def pick_vinted_category(title: str, description: str = "", search_query: str = 
             "mit einer WORTWÖRTLICH kopierten Zeile aus der Liste, ohne weitere Worte:\n"
             f"{vtax.selection_prompt()}"
         )
-        models_to_try = []
-        for m in [model_name, GEMINI_MODEL, "gemini-2.5-flash", "gemini-2.0-flash"]:
-            if m and m not in models_to_try:
-                models_to_try.append(m)
+        models_to_try = _get_models_to_try(model_name)
         resp = None
         for mn in models_to_try:
             try:
@@ -140,12 +143,10 @@ def description_framing_instruction(user) -> str:
     )
     return " " + " ".join(bits)
 
-def _get_models_to_try() -> List[str]:
+def _get_models_to_try(preferred: Optional[str] = None) -> List[str]:
     models_to_try = []
-    if GEMINI_MODEL:
-        models_to_try.append(GEMINI_MODEL)
-    for m in ["gemini-2.5-flash", "gemini-2.0-flash"]:
-        if m not in models_to_try:
+    for m in [preferred, GEMINI_MODEL, *FALLBACK_MODELS]:
+        if m and m not in models_to_try:
             models_to_try.append(m)
     return models_to_try
 
@@ -303,12 +304,7 @@ def analyze_item_image(image_paths: List[str], user = None, user_condition: str 
         if user_details and user_details.strip():
             identify_prompt += f"\nZusätzliche Angaben des Benutzers zum Artikel: '{user_details}'"
 
-        models_to_try = []
-        if GEMINI_MODEL:
-            models_to_try.append(GEMINI_MODEL)
-        for m in ["gemini-2.5-flash", "gemini-2.0-flash"]:
-            if m not in models_to_try:
-                models_to_try.append(m)
+        models_to_try = _get_models_to_try()
 
         working_model_name = None
         id_response = None
@@ -512,12 +508,7 @@ def regenerate_draft_field(image_paths: List[str], field: str, user = None) -> s
         else:
             raise ValueError(f"Ungültiges Feld zur Regeneration: {field}")
 
-        models_to_try = []
-        if GEMINI_MODEL:
-            models_to_try.append(GEMINI_MODEL)
-        for m in ["gemini-2.5-flash", "gemini-2.0-flash"]:
-            if m not in models_to_try:
-                models_to_try.append(m)
+        models_to_try = _get_models_to_try()
 
         response = None
         last_error = None
