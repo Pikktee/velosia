@@ -4493,3 +4493,29 @@ textarea:focus {
 
 
 
+
+.detected-row-editable {
+  align-items: center;
+}
+
+.detected-row-input {
+  flex: 1;
+  min-width: 0;
+  padding: 0.45rem 0.6rem;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--glass-border);
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--text-primary);
+  font-size: 0.85rem;
+  font-family: inherit;
+}
+
+.detected-row-input::placeholder {
+  color: var(--text-muted);
+  font-style: italic;
+}
+
+.detected-row-input:focus {
+  outline: none;
+  border-color: var(--primary);
+}

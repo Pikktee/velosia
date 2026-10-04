@@ -36,7 +36,7 @@
   // and in the extension it is a persistent content script — never redefine.
   if (window.__velosia && window.__velosia.__loaded) return;
 
-  var VERSION = "2.7.50";
+  var VERSION = "2.7.51";
 
   // ----------------------------------------------------------------------------
   // Low level helpers
@@ -1165,7 +1165,7 @@
   // onClick and NO role/tabindex). Returns the DEEPEST element whose normalized own
   // text equals the name. CRITICAL: it never returns a navigating link or anything in
   // the page nav/header — only true in-picker option rows — so we never leave the form.
-  function vintedRowMatch(root, name) {
+  function vintedRowMatch(root, name, exactOnly) {
     var target = norm(name);
     if (!target) return null;
     var nodes = root.querySelectorAll("button, li, div, span, p, [role='button'], [role='option'], [role='menuitem']");
@@ -1186,7 +1186,7 @@
       exact.sort(function (a, b) { return a.getElementsByTagName("*").length - b.getElementsByTagName("*").length; });
       return exact[0];
     }
-    return partial;
+    return exactOnly ? null : partial;
   }
 
   async function vintedClickLevel(id, name) {
@@ -1547,7 +1547,11 @@
     } catch (e) {}
   }
 
-  async function selectVintedDropdownValue(fieldLabel, testidHints, candidates, logName, avoidWords) {
+  // opts.exact: only an exact option text counts (spec values — "Apple M4" must never
+  // land on "Apple M4 Pro"). opts.search: the picker is a long list with its own search
+  // box (Prozessor); type the candidate there so the row actually renders.
+  async function selectVintedDropdownValue(fieldLabel, testidHints, candidates, logName, avoidWords, opts) {
+    opts = opts || {};
     candidates = (candidates || []).filter(Boolean);
     if (!candidates.length) return false;
     var opener = vintedDropdownOpener(fieldLabel, testidHints, avoidWords);
@@ -1557,7 +1561,7 @@
     function findOptionRow() {
       var root = vintedPickerContainer() || document.body;
       for (var k = 0; k < candidates.length; k++) {
-        var row = vintedRowMatch(root, candidates[k]);
+        var row = vintedRowMatch(root, candidates[k], opts.exact);
         if (row) return { row: row, label: candidates[k] };
       }
       return null;
@@ -1573,6 +1577,14 @@
       for (var s = 0; s < 8 && !picked; s++) {
         await sleep(300);
         picked = findOptionRow();
+        if (!picked && opts.search && s === 1) {
+          var sb = vintedPickerSearchInput();
+          if (sb) {
+            try { sb.focus(); } catch (e) {}
+            setNativeValue(sb, candidates[0]);
+            sb.dispatchEvent(new Event("input", { bubbles: true }));
+          }
+        }
       }
     }
     if (!picked) {
@@ -1599,6 +1611,85 @@
     console.log("Velosia Vinted: " + logName + " Kandidat='" + picked.label + "' Zeile='" + rowText +
       "' -> " + (verified ? "übernommen" : "Klick OHNE Übernahme (Feld unverändert)"));
     return !!verified;
+  }
+
+  // The search box INSIDE an open option picker ("Suche nach einem Prozessor") —
+  // never the page's own "Suche Artikel" box in the header.
+  function vintedPickerSearchInput() {
+    var inputs = document.querySelectorAll("input[type='text'], input[type='search'], input:not([type])");
+    for (var i = 0; i < inputs.length; i++) {
+      var inp = inputs[i];
+      if (!isInteractable(inp)) continue;
+      if (inp.closest("header, nav, [role='navigation'], #velosia-backdrop, #velosia-overlay")) continue;
+      var txt = norm(inp.placeholder || "") + " " + norm(inp.getAttribute("aria-label") || "");
+      if (txt.indexOf("suche nach") !== -1 || txt.indexOf("search for") !== -1 ||
+          inp.closest("[role='dialog'], [aria-modal='true']")) return inp;
+    }
+    return null;
+  }
+
+  // Computer specs (Desktop-Computer / Laptops). Vinted spells capacities "256 GB",
+  // "1 TB", "2,5 TB" and CPUs "Apple M4"; normalise the AI/user value to that.
+  function vintedCapacityCandidates(v) {
+    var raw = String(v || "").trim();
+    if (!raw) return [];
+    var m = raw.replace(",", ".").match(/(\d+(?:\.\d+)?)\s*(tb|gb)/i);
+    if (!m) return [raw];
+    var n = parseFloat(m[1]), unit = m[2].toUpperCase();
+    if (unit === "GB" && n >= 1000 && (n % 1024 === 0 || n % 1000 === 0)) {
+      n = n % 1024 === 0 ? n / 1024 : n / 1000;
+      unit = "TB";
+    }
+    var out = [String(n).replace(".", ",") + " " + unit];
+    if (out.indexOf(raw) === -1) out.push(raw);
+    return out;
+  }
+
+  function vintedCpuCandidates(v) {
+    var raw = String(v || "").trim().replace(/\s+/g, " ");
+    if (!raw) return [];
+    // "M4 Pro" / "m4" -> "Apple M4 Pro" / "Apple M4"
+    if (/^m\d/i.test(raw)) return ["Apple " + raw.replace(/^m(\d)/i, "M$1"), raw];
+    return [raw];
+  }
+
+  function vintedOsCandidates(v) {
+    var t = norm(v);
+    if (!t) return [];
+    if (/mac ?os|os x|osx/.test(t)) return ["macOS"];
+    if (t.indexOf("windows") !== -1) return ["Windows"];
+    if (t.indexOf("chrome") !== -1) return ["Chrome OS"];
+    if (/linux|ubuntu/.test(t)) return ["Linux"];
+    if (/ohne|kein/.test(t)) return ["Ohne Betriebssystem"];
+    return [String(v).trim()];
+  }
+
+  // Fill the optional spec pickers that only exist in computer categories. Exact
+  // matches only; a field the category doesn't have is skipped silently, and nothing
+  // is ever nagged about — these are "empfohlen", not required.
+  async function selectVintedComputerSpecs(draft) {
+    var specs = [
+      { label: "speicherkapazität", name: "Speicherkapazität",
+        value: attrValue(draft, "speicherkapazität") || attrValue(draft, "speicher"), cands: vintedCapacityCandidates },
+      { label: "arbeitsspeicher", name: "Arbeitsspeicher",
+        value: attrValue(draft, "arbeitsspeicher") || attrValue(draft, "ram"), cands: vintedCapacityCandidates },
+      { label: "prozessor", name: "Prozessor",
+        value: attrValue(draft, "prozessor"), cands: vintedCpuCandidates, search: true },
+      { label: "betriebssystem", name: "Betriebssystem",
+        value: attrValue(draft, "betriebssystem"), cands: vintedOsCandidates }
+    ];
+    var done = [];
+    for (var i = 0; i < specs.length; i++) {
+      var sp = specs[i];
+      if (!sp.value || !vintedDropdownOpener(sp.label, [])) continue;
+      var ok = false;
+      try {
+        ok = await selectVintedDropdownValue(sp.label, [], sp.cands(sp.value), sp.name, null,
+          { exact: true, search: !!sp.search });
+      } catch (e) { ok = false; }
+      if (ok) done.push(sp.name);
+    }
+    return done;
   }
 
   async function selectVintedCondition(draft) {
@@ -2223,6 +2314,10 @@
       if (brandVal) {
         try { brandOk = await selectVintedBrand(draft); } catch (e) {}
       }
+      // Computer categories: Speicher / RAM / Prozessor / Betriebssystem.
+      var specsDone = [];
+      try { specsDone = await selectVintedComputerSpecs(draft); } catch (e) { specsDone = []; }
+      specsDone.forEach(function (n) { filled.push(n); });
 
       if (sizeVal) fields.size = sizeOk;
       if (colorVal) fields.color = colorOk;

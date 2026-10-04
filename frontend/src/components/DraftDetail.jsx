@@ -46,6 +46,51 @@ export default function DraftDetail({ draft, onBack, onUpdateSuccess }) {
     return [];
   }, [draft.attributes]);
 
+  // Computer drafts get four EDITABLE spec fields. The AI only fills them when it
+  // can be sure (a Mac mini's storage/RAM aren't visible on a photo), so the user
+  // must be able to enter them; the engine then picks them on Vinted. Suggestions
+  // use Vinted's own spelling ("256 GB", "Apple M4", "macOS").
+  const TECH_FIELDS = [
+    { key: 'Speicherkapazität', label: 'Speicher', placeholder: 'z. B. 256 GB', options: ['128 GB', '256 GB', '512 GB', '1 TB', '2 TB'] },
+    { key: 'Arbeitsspeicher', label: 'RAM', placeholder: 'z. B. 16 GB', options: ['8 GB', '16 GB', '24 GB', '32 GB', '64 GB'] },
+    { key: 'Prozessor', label: 'Prozessor', placeholder: 'z. B. Apple M4', options: ['Apple M1', 'Apple M2', 'Apple M3', 'Apple M4', 'Apple M4 Pro', 'Intel Core i5', 'Intel Core i7'] },
+    { key: 'Betriebssystem', label: 'System', placeholder: 'z. B. macOS', options: ['macOS', 'Windows', 'Linux', 'Chrome OS'] },
+  ];
+  const isComputer = /desktop-computer|laptops|notebooks|> pcs\b/i.test(
+    `${draft.vinted_category || ''} | ${draft.category || ''}`
+  );
+  const techKeys = TECH_FIELDS.map((f) => f.key.toLowerCase());
+  const attrValue = (key) => {
+    const hit = detectedAttributes.find(([k]) => k.toLowerCase() === key.toLowerCase());
+    return hit ? String(hit[1]) : '';
+  };
+  const [techValues, setTechValues] = useState({});
+  useEffect(() => {
+    const init = {};
+    TECH_FIELDS.forEach((f) => { init[f.key] = attrValue(f.key); });
+    setTechValues(init);
+    // Re-seed only when another draft is opened or its attributes change on the server.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [draft.id, draft.attributes]);
+
+  const saveTechValue = async (key) => {
+    const value = (techValues[key] || '').trim();
+    if (value === attrValue(key)) return;
+    let attrs = {};
+    try { attrs = JSON.parse(draft.attributes || '{}') || {}; } catch (e) { attrs = {}; }
+    Object.keys(attrs).forEach((k) => { if (k.toLowerCase() === key.toLowerCase()) delete attrs[k]; });
+    if (value) attrs[key] = value;
+    setSaveStatus('saving');
+    try {
+      const updated = await updateDraft(draft.id, { attributes: JSON.stringify(attrs) });
+      setSaveStatus('saved');
+      onUpdateSuccess(updated);
+    } catch (err) {
+      console.error(err);
+      setSaveStatus('error');
+    }
+  };
+
   // Parse multiple images
   const allImages = React.useMemo(() => {
     if (draft.image_paths) {
@@ -703,16 +748,20 @@ export default function DraftDetail({ draft, onBack, onUpdateSuccess }) {
     );
   };
 
-  // Collapsible "Automatisch erkannt" panel — read-only category + attributes.
+  // Collapsible "Weitere Angaben" panel — read-only category + attributes, plus
+  // the editable spec fields for computers (see TECH_FIELDS).
   // Categories stay read-only by design: the AI resolves an exact taxonomy
   // breadcrumb that drives the autofill; a free-text edit would break the path.
   const renderDetectedInfo = () => {
     const rows = [
       { key: 'ka', name: 'Kategorie', sub: 'Kleinanzeigen', value: draft.category },
       { key: 'vinted', name: 'Kategorie', sub: 'Vinted', value: draft.vinted_category },
-      ...detectedAttributes.map(([k, v]) => ({ key: `attr-${k}`, name: k, value: String(v) })),
+      ...detectedAttributes
+        .filter(([k]) => !(isComputer && techKeys.includes(k.toLowerCase())))
+        .map(([k, v]) => ({ key: `attr-${k}`, name: k, value: String(v) })),
     ];
-    const filledCount = rows.filter((r) => r.value).length;
+    const filledCount = rows.filter((r) => r.value).length +
+      (isComputer ? TECH_FIELDS.filter((f) => (techValues[f.key] || '').trim()).length : 0);
 
     return (
       <div className={`detected-panel ${showDetected ? 'is-open' : ''}`}>
@@ -745,6 +794,24 @@ export default function DraftDetail({ draft, onBack, onUpdateSuccess }) {
                 ) : (
                   <span className="detected-row-empty">wird beim Einstellen manuell gewählt</span>
                 )}
+              </div>
+            ))}
+            {isComputer && TECH_FIELDS.map((f) => (
+              <div key={`tech-${f.key}`} className="detected-row detected-row-editable">
+                <label className="detected-row-label" htmlFor={`tech-${f.key}`}>{f.label}</label>
+                <input
+                  id={`tech-${f.key}`}
+                  className="detected-row-input"
+                  list={`tech-list-${f.key}`}
+                  value={techValues[f.key] || ''}
+                  placeholder={f.placeholder}
+                  onChange={(e) => setTechValues((v) => ({ ...v, [f.key]: e.target.value }))}
+                  onBlur={() => saveTechValue(f.key)}
+                  onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur(); }}
+                />
+                <datalist id={`tech-list-${f.key}`}>
+                  {f.options.map((o) => <option key={o} value={o} />)}
+                </datalist>
               </div>
             ))}
           </div>
