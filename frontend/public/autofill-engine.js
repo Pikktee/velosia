@@ -36,7 +36,7 @@
   // and in the extension it is a persistent content script — never redefine.
   if (window.__velosia && window.__velosia.__loaded) return;
 
-  var VERSION = "2.7.46";
+  var VERSION = "2.7.47";
 
   // ----------------------------------------------------------------------------
   // Low level helpers
@@ -287,27 +287,79 @@
     } catch (e) {}
   }
 
-  // Inject the prepared files into the page's upload input. The 'change' event is what
-  // both Vinted and Kleinanzeigen (react-dropzone) normally read. On Kleinanzeigen we
-  // additionally fire a dropzone 'drop' — but ONLY if 'change' did not consume the files
-  // (react-dropzone empties input.files once it ingests them). That guard means we never
-  // upload every photo twice while still covering a missed 'change'.
+  // Structural photo-step diagnostics (no content) — sent as a ka_photo_probe beacon
+  // by the form flow, so a failed upload on a phone shows up in the Railway logs.
+  var lastPhotoDiag = null;
+
+  // The photo section around the upload input: climb until the ancestor carries the
+  // section heading ("Bilder"/"Fotos"), so previews rendered NEXT to the dropzone count.
+  function photoSection(input) {
+    var el = input;
+    for (var k = 0; k < 8 && el && el.parentElement; k++) {
+      el = el.parentElement;
+      if (/bilder|fotos/i.test(el.textContent || "") && el.querySelectorAll("*").length > 6) {
+        return el.parentElement || el;
+      }
+    }
+    return input.parentElement || document.body;
+  }
+
+  // How many photo previews are visible: uploaded KA CDN thumbnails / local blob
+  // previews document-wide, plus any <img> inside the photo section.
+  function photoPreviewCount(section) {
+    var cdn = document.querySelectorAll(
+      "img[src*='prod-ads/images'], img[src^='blob:'], img[src^='data:image']"
+    ).length;
+    var local = section ? section.querySelectorAll("img").length : 0;
+    return cdn + local;
+  }
+
+  async function waitForPreviewGrowth(section, before, ms) {
+    for (var t = 0; t < ms; t += 400) {
+      await sleep(400);
+      if (photoPreviewCount(section) > before) return true;
+    }
+    return false;
+  }
+
+  // On Kleinanzeigen (allowDrop) the upload is VERIFIED: success only once a preview
+  // actually appears. If 'change' produced none, we fire a dropzone 'drop' with the
+  // same files and verify again. Returns false when nothing landed, so the overlay
+  // honestly asks the user to add the photos instead of claiming success.
   async function commitFilesToInput(input, dt, allowDrop) {
+    var section = allowDrop ? photoSection(input) : null;
+    var before = allowDrop ? photoPreviewCount(section) : 0;
+    lastPhotoDiag = {
+      files: dt.files.length,
+      fileInputs: document.querySelectorAll("input[type='file']").length,
+      accept: String(input.accept || "").slice(0, 60),
+      previewsBefore: before
+    };
     try {
       input.files = dt.files;
       input.dispatchEvent(new Event("input", { bubbles: true }));
       input.dispatchEvent(new Event("change", { bubbles: true }));
-    } catch (e) { return false; }
-    if (allowDrop) {
-      await sleep(500);
-      try {
-        if (input.files && input.files.length > 0) {
-          var zone = input.closest("[class*='dashed'], [class*='drop'], [class*='Drop'], [class*='upload'], [class*='Upload']") || input.parentElement;
-          fireDropEvent(zone, dt);
-        }
-      } catch (e) {}
+    } catch (e) { lastPhotoDiag.error = "set_files"; return false; }
+    if (!allowDrop) return true;
+
+    await sleep(300);
+    lastPhotoDiag.filesLeft = input.files ? input.files.length : -1;
+    if (await waitForPreviewGrowth(section, before, 6000)) {
+      lastPhotoDiag.via = "change";
+      return true;
     }
-    return true;
+    try {
+      var zone = input.closest("[class*='dashed'], [class*='drop'], [class*='Drop'], [class*='upload'], [class*='Upload']") || input.parentElement;
+      fireDropEvent(zone, dt);
+      lastPhotoDiag.dropFired = true;
+    } catch (e) {}
+    if (await waitForPreviewGrowth(section, before, 6000)) {
+      lastPhotoDiag.via = "drop";
+      return true;
+    }
+    lastPhotoDiag.via = "none";
+    lastPhotoDiag.previewsAfter = photoPreviewCount(section);
+    return false;
   }
 
   // Fetch each photo and inject ALL of them into the file input via a DataTransfer
@@ -714,6 +766,24 @@
       }
     }
     return null;
+  }
+
+  // Does the form have this attribute field at all? Looser than kaFieldControl (no
+  // visibility requirement): a matching <label> or the hidden attributeMap[<cat>.<attr>]
+  // input is enough. Used to tell "category has no such field" apart from "picker broke".
+  function kaHasField(labelText, hiddenNameRe) {
+    var want = norm(labelText);
+    var labels = document.querySelectorAll("label");
+    for (var i = 0; i < labels.length; i++) {
+      if (norm(labels[i].textContent) === want) return true;
+    }
+    if (hiddenNameRe) {
+      var named = document.querySelectorAll("input[name^='attributeMap']");
+      for (var j = 0; j < named.length; j++) {
+        if (hiddenNameRe.test(named[j].name)) return true;
+      }
+    }
+    return false;
   }
 
   // Visible options of an open picker: listbox options, else (modal pattern) the
@@ -1973,6 +2043,7 @@
     // draft photos and needs no user gesture); the native chooser is only a fallback
     // for environments without DataTransfer or resolvable URLs.
     setBackdrop("Fotos werden übertragen …");
+    lastPhotoDiag = null;
     var photos = 0;
     // Kleinanzeigen's new react-dropzone uploader also accepts a 'drop' fallback.
     var allowDrop = platform === "kleinanzeigen";
@@ -1989,6 +2060,10 @@
     // 3) Last-resort native file chooser.
     if (photos === 0 && options.imageMode === "native") photos = triggerNativeFileChooser();
     try { console.log("Velosia: Fotos übertragen -> " + photos + " (Modus " + options.imageMode + ")"); } catch (e) {}
+    if (platform === "kleinanzeigen") {
+      sendDebug(Object.assign({ event: "ka_photo_probe", photos: photos, bridged: bridged },
+        lastPhotoDiag || { fileInputs: document.querySelectorAll("input[type='file']").length }), options);
+    }
 
     if (platform === "kleinanzeigen") {
       selectKleinanzeigenOffer();
@@ -2060,7 +2135,12 @@
         if (kaColorOk) filled.push("Farbe");
       }
       var kaBrand = attrValue(draft, "marke");
-      if (kaBrand && !alreadyFilled("marke")) {
+      // Many KA categories simply have NO Marke field (e.g. "Elektronik > PCs" only
+      // has Zustand + Versand). Then there is nothing to fill — don't report it as
+      // open, and don't count a failure in telemetry (it would look like a broken picker).
+      if (!kaHasField("Marke", /\.(brand|marke)\]?$/i)) {
+        // nothing to do
+      } else if (kaBrand && !alreadyFilled("marke")) {
         // selectKleinanzeigenBrand returns {ok, reason, detail}; on failure the brand
         // stays manual (the cheap ka_brand_probe beacon still records the bail reason).
         var br = { ok: false };

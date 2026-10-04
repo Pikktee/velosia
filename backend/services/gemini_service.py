@@ -312,7 +312,10 @@ def analyze_item_image(image_paths: List[str], user = None, user_condition: str 
         identify_prompt = (
             "Analysiere diese Fotos eines Artikels. Identifiziere den Gegenstand, die Marke (falls sichtbar) und "
             "den genauen Typ. Gib mir eine kurze Suchanfrage (3-6 Wörter auf Deutsch), die ich auf einem Marktplatz eingeben kann, "
-            "um vergleichbare Angebote zu finden. Antworte AUSSCHLIESSLICH mit der Suchanfrage."
+            "um vergleichbare Angebote zu finden. Nenne Marke und Modell so konkret, wie du sie sicher erkennst; "
+            "lass Unsicheres weg statt mehrere Varianten aufzuzählen (also 'Apple Mac mini', nicht 'Mac mini M1 M2'). "
+            "Keine Zustands- oder Füllwörter wie 'gebraucht', 'neu', 'kaufen' oder 'günstig'. "
+            "Antworte AUSSCHLIESSLICH mit der Suchanfrage."
         )
         if user_details and user_details.strip():
             identify_prompt += f"\nZusätzliche Angaben des Benutzers zum Artikel: '{user_details}'"
@@ -346,12 +349,28 @@ def analyze_item_image(image_paths: List[str], user = None, user_condition: str 
         # --- STEP 2: Live Price Comparison ---
         comparison = search_marketplace_prices(search_query)
         print(f"Velosia: Preisvergleich abgeschlossen. Medianpreis: {comparison['median_price']} EUR, {len(comparison['listings'])} Angebote gefunden.")
+        has_market_data = comparison["median_price"] is not None
 
         # --- STEP 3: Final Listing Generation ---
         sources_str = json.dumps(comparison["listings"])
         
         tone_instruction = get_tone_instruction(user)
         framing_instruction = description_framing_instruction(user)
+
+        if has_market_data:
+            market_context = (
+                "Nutze als zusätzlichen Kontext diese echten Markt-Vergleichsdaten aus einer aktuellen Kleinanzeigen-Suche:\n"
+                f"- Gefundener Medianpreis für ähnliche Artikel: {comparison['median_price']} EUR\n"
+                f"- Preisspanne aktiver Angebote: {comparison['min_price']} EUR - {comparison['max_price']} EUR\n"
+                f"- Vergleichsangebote: {sources_str}\n"
+                "Prüfe, ob die Vergleichsangebote wirklich dem Artikel entsprechen (Modell, Ausstattung) und "
+                "gewichte abweichende Angebote entsprechend weniger."
+            )
+            price_instruction = "orientiere dich eng an den wirklich vergleichbaren Angeboten."
+        else:
+            market_context = "Für diesen Artikel liegen keine aktuellen Markt-Vergleichsdaten vor."
+            price_instruction = ("schätze ihn anhand deines Wissens über typische Gebrauchtpreise dieses "
+                                 "konkreten Modells in Deutschland.")
 
         selection_prompt = katax.selection_prompt()
         condition_prompt = "- 'condition': Eine Einschätzung des Zustands. Wähle exakt einen dieser Werte: 'Neu', 'Sehr gut', 'Gut', 'In Ordnung'."
@@ -364,11 +383,8 @@ def analyze_item_image(image_paths: List[str], user = None, user_condition: str 
 
         final_prompt = (
             "Du bist Velosia, eine visionäre Verkaufs-Assistentin für Second-Hand-Plattformen wie Vinted und Kleinanzeigen.\n"
-            "Analysiere die Fotos dieses Artikels und erstelle eine Verkaufsanzeige. Nutze als zusätzlichen Kontext "
-            "diese echten Markt-Vergleichsdaten aus einer aktuellen Suche:\n"
-            f"- Gefundener Medianpreis für ähnliche Artikel: {comparison['median_price']} EUR\n"
-            f"- Preisspanne aktiver Angebote: {comparison['min_price']} EUR - {comparison['max_price']} EUR\n"
-            f"- Vergleichsangebote: {sources_str}\n\n"
+            "Analysiere die Fotos dieses Artikels und erstelle eine Verkaufsanzeige. "
+            f"{market_context}\n\n"
             "Wähle die EXAKT passende Kleinanzeigen-Kategorie aus dieser Liste. Jede Zeile ist ein vollständiger "
             "Kategorie-Pfad (Hauptkategorie > Unterkategorie > Art). Kopiere die zutreffende Zeile WORTWÖRTLICH "
             "(inklusive der ' > '-Trenner) als Wert für 'category'. Erfinde keine eigenen Kategorien:\n"
@@ -386,7 +402,8 @@ def analyze_item_image(image_paths: List[str], user = None, user_condition: str 
             "Eine fehlende Marke/Größe ist viel besser als eine falsche. "
             "Beispiel: {\"Marke\": \"Nike\", \"Größe\": \"M\", \"Farbe\": \"Schwarz\", \"Versand\": \"Versand möglich\"}.\n"
             f"{condition_prompt}\n"
-            "- 'price': Ein realistischer, geschätzter Verkaufspreis in Euro als ganze Zahl (Integer), orientiere dich eng an dem Medianpreis der Vergleichsangebote.\n\n"
+            "- 'price': Ein realistischer, geschätzter Verkaufspreis in Euro als ganze Zahl (Integer), "
+            f"{price_instruction}\n\n"
             "Gib ausschließlich das JSON-Objekt zurück. Verwende kein Markdown-Formatting wie ```json."
         )
 
@@ -411,7 +428,7 @@ def analyze_item_image(image_paths: List[str], user = None, user_condition: str 
         data = json.loads(response.text)
         
         # Apply pricing offset if specified
-        raw_price = float(data.get("price", comparison["median_price"]))
+        raw_price = float(data.get("price") or comparison["median_price"] or 0)
         if user and getattr(user, "pricing_offset", 0.0) is not None:
             offset = getattr(user, "pricing_offset", 0.0)
             if offset != 0.0:
