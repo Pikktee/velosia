@@ -36,7 +36,7 @@
   // and in the extension it is a persistent content script — never redefine.
   if (window.__velosia && window.__velosia.__loaded) return;
 
-  var VERSION = "2.7.51";
+  var VERSION = "2.7.52";
 
   // ----------------------------------------------------------------------------
   // Low level helpers
@@ -1559,10 +1559,15 @@
     var beforeText = norm(opener.textContent || opener.value || "");
 
     function findOptionRow() {
-      var root = vintedPickerContainer() || document.body;
-      for (var k = 0; k < candidates.length; k++) {
-        var row = vintedRowMatch(root, candidates[k], opts.exact);
-        if (row) return { row: row, label: candidates[k] };
+      // Prefer the sheet that is open for THIS field; fall back to the old wider search
+      // so pickers whose sheet we can't pin down keep working as before.
+      var roots = [vintedOpenPickerFor(fieldLabel), vintedPickerContainer() || document.body];
+      for (var r = 0; r < roots.length; r++) {
+        if (!roots[r]) continue;
+        for (var k = 0; k < candidates.length; k++) {
+          var row = vintedRowMatch(roots[r], candidates[k], opts.exact);
+          if (row) return { row: row, label: candidates[k] };
+        }
       }
       return null;
     }
@@ -1611,6 +1616,26 @@
     console.log("Velosia Vinted: " + logName + " Kandidat='" + picked.label + "' Zeile='" + rowText +
       "' -> " + (verified ? "übernommen" : "Klick OHNE Übernahme (Feld unverändert)"));
     return !!verified;
+  }
+
+  // The option sheet that is open RIGHT NOW for this field: on screen and titled with
+  // the field label. Vinted keeps closed sheets mounted, so a document-wide search for
+  // "16 GB" in the RAM sheet would also hit the (closed) Speicherkapazität sheet's row.
+  function vintedOpenPickerFor(labelNeedle) {
+    var sel = "[role='dialog'], [aria-modal='true'], [class*='odal'], [class*='heet'], [class*='ialog']";
+    var nodes = document.querySelectorAll(sel), best = null, bestKids = 1e9;
+    for (var i = 0; i < nodes.length; i++) {
+      var el = nodes[i];
+      if (!isInteractable(el)) continue;
+      if (el.closest("#velosia-backdrop, #velosia-overlay")) continue;
+      var r = el.getBoundingClientRect();
+      if (r.width < 50 || r.height < 50 || r.bottom <= 0 || r.top >= window.innerHeight) continue;
+      if (norm(el.textContent || "").indexOf(labelNeedle) === -1) continue;
+      var kids = el.getElementsByTagName("*").length;
+      // The smallest such container is the sheet itself, not the page around it.
+      if (kids > 3 && kids < bestKids) { best = el; bestKids = kids; }
+    }
+    return best;
   }
 
   // The search box INSIDE an open option picker ("Suche nach einem Prozessor") —
