@@ -36,7 +36,7 @@
   // and in the extension it is a persistent content script — never redefine.
   if (window.__velosia && window.__velosia.__loaded) return;
 
-  var VERSION = "2.7.49";
+  var VERSION = "2.7.50";
 
   // ----------------------------------------------------------------------------
   // Low level helpers
@@ -2236,8 +2236,14 @@
       // Only nag about the two key fashion fields, and only when they were NOT set.
       // "(nicht erkannt)" tells the user it's blank because the AI couldn't read it
       // off the photos (so they add it), vs. a picker that simply didn't match.
-      if (!brandOk) manual.push("Marke" + (brandVal ? "" : " (nicht auf Fotos erkannt)"));
-      if (!sizeOk) manual.push("Größe" + (sizeVal ? "" : " (nicht auf Fotos erkannt)"));
+      // ...and only when the category HAS that field: electronics (e.g. Desktop-Computer)
+      // has no Größe, so nagging about it there is a false alarm.
+      var sizeAvoid = ["versand", "paket", "pushen", "schneller", "sichtbarkeit", "spotlight"];
+      var hasBrandField = !!vintedDropdownOpener("marke", ["[data-testid='brand-select-dropdown-input']"]);
+      var hasSizeField = !!vintedDropdownOpener("größe",
+        ["[data-testid='size-select-dropdown-input']"], sizeAvoid);
+      if (!brandOk && hasBrandField) manual.push("Marke" + (brandVal ? "" : " (nicht auf Fotos erkannt)"));
+      if (!sizeOk && hasSizeField) manual.push("Größe" + (sizeVal ? "" : " (nicht auf Fotos erkannt)"));
     } else if (!draft.category) {
       manual.push("Kategorie");
     }
@@ -2255,14 +2261,22 @@
     for (var ci = 0; ci < core.length; ci++) {
       var want = core[ci][2];
       if (want === undefined || want === null || want === "") continue;
+      var label = core[ci][0];
       var el = findField(core[ci][1]);
-      if (!el || String(el.value || "").trim() !== "") continue;
-      fillField(el, want);
-      el.__velosiaKnown = true;
-      await sleep(150);
-      if (String(el.value || "").trim() === "" && manual.indexOf(core[ci][0]) === -1) {
-        manual.push(core[ci][0]);
-        filled = filled.filter(function (l) { return l !== core[ci][0]; });
+      if (!el) continue;
+      if (String(el.value || "").trim() === "") {
+        fillField(el, want);
+        el.__velosiaKnown = true;
+        await sleep(150);
+      }
+      if (String(el.value || "").trim() === "") {
+        if (manual.indexOf(label) === -1) manual.push(label);
+        filled = filled.filter(function (l) { return l !== label; });
+      } else if (manual.indexOf(label) !== -1) {
+        // The field rendered late (Vinted's price only appears once the category is
+        // set) and is filled now — withdraw the earlier "still open" report.
+        manual = manual.filter(function (l) { return l !== label; });
+        if (filled.indexOf(label) === -1) filled.push(label);
       }
     }
 
