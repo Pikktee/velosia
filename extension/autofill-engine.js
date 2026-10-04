@@ -36,7 +36,7 @@
   // and in the extension it is a persistent content script — never redefine.
   if (window.__velosia && window.__velosia.__loaded) return;
 
-  var VERSION = "2.7.52";
+  var VERSION = "2.7.53";
 
   // ----------------------------------------------------------------------------
   // Low level helpers
@@ -1478,6 +1478,10 @@
       var el = cands[i];
       if (!isInteractable(el)) continue;
       if (el.closest("a[href], header, nav, [role='navigation'], [role='tablist'], [role='tab'], #velosia-backdrop, #velosia-overlay")) continue;
+      // The form field never lives inside an option sheet. Vinted keeps closed sheets
+      // mounted, and their title ("Arbeitsspeicher (RAM)") would otherwise win as the
+      // smallest match — clicking it opens nothing.
+      if (el.closest("[role='dialog'], [aria-modal='true'], [class*='BottomSheet'], [class*='odal']")) continue;
       if (el.querySelector("input, textarea")) continue;
       var t = norm(el.textContent || el.getAttribute("placeholder") || el.value || "");
       if (t === labelNeedle || (t.indexOf(labelNeedle) !== -1 && t.length <= labelNeedle.length + 14)) {
@@ -1486,6 +1490,8 @@
           var ctx = norm((el.closest("fieldset, section, [class*='Cell'], [class*='ield'], [class*='ow']") || el.parentElement || el).textContent || "");
           for (var a = 0; a < avoidWords.length; a++) { if (ctx.indexOf(avoidWords[a]) !== -1) { penalty = 1; break; } }
         }
+        var box = el.getBoundingClientRect();
+        if (box.width === 0 || box.height === 0) continue;
         var kids = el.getElementsByTagName("*").length;
         if (penalty < bestPenalty || (penalty === bestPenalty && kids < bestKids)) {
           best = el; bestPenalty = penalty; bestKids = kids;
@@ -1594,6 +1600,18 @@
     }
     if (!picked) {
       vintedDiagPicker(logName);
+      if (opts.exact) {
+        var openSheet = vintedOpenPickerFor(fieldLabel);
+        try {
+          sendDebug({
+            event: "vinted_spec_probe", field: logName, reason: "no_option",
+            opener: (opener.tagName || "") + ":" + norm(opener.textContent || "").slice(0, 40),
+            sheet: !!openSheet,
+            sheetText: openSheet ? norm(openSheet.textContent || "").slice(0, 160) : null,
+            cands: candidates.join("|")
+          }, lastAutofillOptions);
+        } catch (e) {}
+      }
       console.log("Velosia Vinted: " + logName + "-Option (" + candidates.join("/") + ") nicht gefunden");
       return false;
     }
@@ -1617,6 +1635,9 @@
       "' -> " + (verified ? "übernommen" : "Klick OHNE Übernahme (Feld unverändert)"));
     return !!verified;
   }
+
+  // Options of the running autofill, so deep helpers can send a diagnostic beacon.
+  var lastAutofillOptions = null;
 
   // The option sheet that is open RIGHT NOW for this field: on screen and titled with
   // the field label. Vinted keeps closed sheets mounted, so a document-wide search for
@@ -2672,6 +2693,7 @@
   // ----------------------------------------------------------------------------
 
   async function autofill(draft, options) {
+    lastAutofillOptions = options || null;
     options = options || {};
     if (typeof draft === "string") {
       try { draft = JSON.parse(draft); } catch (e) { draft = {}; }
