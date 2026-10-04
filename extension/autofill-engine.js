@@ -36,7 +36,7 @@
   // and in the extension it is a persistent content script — never redefine.
   if (window.__velosia && window.__velosia.__loaded) return;
 
-  var VERSION = "2.7.47";
+  var VERSION = "2.7.48";
 
   // ----------------------------------------------------------------------------
   // Low level helpers
@@ -745,6 +745,13 @@
     return null;
   }
 
+  // Field labels carry category-dependent suffixes: "Zustand (optional)" in
+  // Elektronik > PCs vs. plain "Zustand" in fashion, sometimes a required "*".
+  // Compare on the bare field name so the pickers find the field either way.
+  function kaLabelKey(text) {
+    return norm(String(text || "").replace(/\(\s*optional\s*\)/gi, "").replace(/\*/g, ""));
+  }
+
   // The control that opens a field's picker. Most fields expose id === the label's
   // "for"; Zustand's "for" points at an id with no element, so we fall back to the
   // first popup-control inside the field row.
@@ -752,7 +759,7 @@
     var want = norm(labelText);
     var labels = document.querySelectorAll("label");
     for (var i = 0; i < labels.length; i++) {
-      if (norm(labels[i].textContent) !== want) continue;
+      if (kaLabelKey(labels[i].textContent) !== want) continue;
       var forId = labels[i].getAttribute("for");
       if (forId) {
         var byId = document.getElementById(forId);
@@ -775,7 +782,7 @@
     var want = norm(labelText);
     var labels = document.querySelectorAll("label");
     for (var i = 0; i < labels.length; i++) {
-      if (norm(labels[i].textContent) === want) return true;
+      if (kaLabelKey(labels[i].textContent) === want) return true;
     }
     if (hiddenNameRe) {
       var named = document.querySelectorAll("input[name^='attributeMap']");
@@ -832,6 +839,11 @@
   function kaSelectFromPool(candidates, exactOnly) {
     var pool = kaOptionPool();
     for (var c = 0; c < candidates.length; c++) {
+      // Exact text first across ALL options — otherwise the substring fallback lets
+      // "Sehr Gut" (listed earlier) win for the wanted "Gut".
+      for (var x = 0; x < pool.length; x++) {
+        if (norm(pool[x].textContent) === norm(candidates[c])) return pool[x];
+      }
       for (var i = 0; i < pool.length; i++) {
         if (kaOptMatches(pool[i].textContent, candidates[c], exactOnly)) return pool[i];
       }
