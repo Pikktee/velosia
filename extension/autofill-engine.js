@@ -36,7 +36,7 @@
   // and in the extension it is a persistent content script — never redefine.
   if (window.__velosia && window.__velosia.__loaded) return;
 
-  var VERSION = "2.7.53";
+  var VERSION = "2.7.54";
 
   // ----------------------------------------------------------------------------
   // Low level helpers
@@ -1717,7 +1717,9 @@
     var specs = [
       { label: "speicherkapazität", name: "Speicherkapazität",
         value: attrValue(draft, "speicherkapazität") || attrValue(draft, "speicher"), cands: vintedCapacityCandidates },
-      { label: "arbeitsspeicher", name: "Arbeitsspeicher",
+      // Full label: the placeholder "Wähle einen Arbeitsspeicher (RAM)" is too long for
+      // the opener's length window around a bare "arbeitsspeicher".
+      { label: "arbeitsspeicher ram", name: "Arbeitsspeicher",
         value: attrValue(draft, "arbeitsspeicher") || attrValue(draft, "ram"), cands: vintedCapacityCandidates },
       { label: "prozessor", name: "Prozessor",
         value: attrValue(draft, "prozessor"), cands: vintedCpuCandidates, search: true },
