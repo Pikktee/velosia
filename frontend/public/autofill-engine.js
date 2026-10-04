@@ -36,7 +36,7 @@
   // and in the extension it is a persistent content script — never redefine.
   if (window.__velosia && window.__velosia.__loaded) return;
 
-  var VERSION = "2.7.48";
+  var VERSION = "2.7.49";
 
   // ----------------------------------------------------------------------------
   // Low level helpers
@@ -2030,30 +2030,12 @@
       if (!titleEl) await sleep(500);
     }
 
-    var descEl = findField(map.description);
-    var priceEl = findField(map.price);
-
-    setBackdrop("Titel, Beschreibung & Preis …");
-    // A core field that HAS a value but couldn't be filled (selector didn't match)
-    // must land in `manual` — otherwise the overlay stays silent and the user can
-    // publish an empty listing without noticing.
-    if (fillField(titleEl, draft.title)) filled.push("Titel");
-    else if (draft.title) manual.push("Titel");
-    if (fillField(descEl, draft.description)) filled.push("Beschreibung");
-    else if (draft.description) manual.push("Beschreibung");
-    if (draft.price !== undefined && draft.price !== null) {
-      if (fillField(priceEl, String(Math.round(draft.price)))) filled.push("Preis");
-      else manual.push("Preis");
-    }
-    if (titleEl) titleEl.__velosiaKnown = true;
-    if (descEl) descEl.__velosiaKnown = true;
-    if (priceEl) priceEl.__velosiaKnown = true;
-
-    // Photos first — injecting them early (before the slower attribute / category
-    // steps) makes the upload feel instant and gives the page the most time to
-    // render the previews. Prefer the DataTransfer path everywhere (it uploads ALL
-    // draft photos and needs no user gesture); the native chooser is only a fallback
-    // for environments without DataTransfer or resolvable URLs.
+    // Photos FIRST, before any text field: on Kleinanzeigen a successful upload
+    // re-initialises the form and wipes title/description/price typed before it
+    // (seen live on Android, 2026-10 — PLZ filled afterwards survived). It also
+    // gives the page the most time to render the previews. Prefer the DataTransfer
+    // path everywhere (it uploads ALL draft photos and needs no user gesture); the
+    // native chooser is only a fallback for environments without DataTransfer.
     setBackdrop("Fotos werden übertragen …");
     lastPhotoDiag = null;
     var photos = 0;
@@ -2076,6 +2058,29 @@
       sendDebug(Object.assign({ event: "ka_photo_probe", photos: photos, bridged: bridged },
         lastPhotoDiag || { fileInputs: document.querySelectorAll("input[type='file']").length }), options);
     }
+
+    // Look the fields up again AFTER the photo step — the form may have re-mounted
+    // its inputs, leaving references from before the upload detached.
+    titleEl = findField(map.title) || titleEl;
+    var descEl = findField(map.description);
+    var priceEl = findField(map.price);
+    var priceValue = (draft.price !== undefined && draft.price !== null) ? String(Math.round(draft.price)) : null;
+
+    setBackdrop("Titel, Beschreibung & Preis …");
+    // A core field that HAS a value but couldn't be filled (selector didn't match)
+    // must land in `manual` — otherwise the overlay stays silent and the user can
+    // publish an empty listing without noticing.
+    if (fillField(titleEl, draft.title)) filled.push("Titel");
+    else if (draft.title) manual.push("Titel");
+    if (fillField(descEl, draft.description)) filled.push("Beschreibung");
+    else if (draft.description) manual.push("Beschreibung");
+    if (priceValue !== null) {
+      if (fillField(priceEl, priceValue)) filled.push("Preis");
+      else manual.push("Preis");
+    }
+    if (titleEl) titleEl.__velosiaKnown = true;
+    if (descEl) descEl.__velosiaKnown = true;
+    if (priceEl) priceEl.__velosiaKnown = true;
 
     if (platform === "kleinanzeigen") {
       selectKleinanzeigenOffer();
@@ -2235,6 +2240,30 @@
       if (!sizeOk) manual.push("Größe" + (sizeVal ? "" : " (nicht auf Fotos erkannt)"));
     } else if (!draft.category) {
       manual.push("Kategorie");
+    }
+
+    // Final check of the core text fields: something later in the flow (late photo
+    // processing, a picker re-render) may still have reset them. Re-find and refill
+    // anything that lost its value; if it still won't stick, say so honestly instead
+    // of "Alles ausgefüllt" over an empty title.
+    await sleep(600);
+    var core = [
+      ["Titel", map.title, draft.title],
+      ["Beschreibung", map.description, draft.description],
+      ["Preis", map.price, priceValue]
+    ];
+    for (var ci = 0; ci < core.length; ci++) {
+      var want = core[ci][2];
+      if (want === undefined || want === null || want === "") continue;
+      var el = findField(core[ci][1]);
+      if (!el || String(el.value || "").trim() !== "") continue;
+      fillField(el, want);
+      el.__velosiaKnown = true;
+      await sleep(150);
+      if (String(el.value || "").trim() === "" && manual.indexOf(core[ci][0]) === -1) {
+        manual.push(core[ci][0]);
+        filled = filled.filter(function (l) { return l !== core[ci][0]; });
+      }
     }
 
     return {
