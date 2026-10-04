@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
+import { showError } from '../utils/toast';
 import {
   ArrowLeft, Trash2, Calendar, Monitor, Mail, ExternalLink, ShieldAlert, Check, X,
   Users, Bug, ClipboardList, Ban, ShieldCheck, Copy, Package, Euro
@@ -77,7 +78,7 @@ export default function IssueManagement({ user, onBack, initialTab = 'users' }) 
     message: 'Möchtest du diesen Bug Report wirklich dauerhaft löschen?',
     onConfirm: async () => {
       try { await deleteBugReport(id); setIssues(prev => prev.filter(i => i.id !== id)); }
-      catch (err) { alert(err.message || 'Fehler beim Löschen.'); }
+      catch (err) { showError(err.message || 'Fehler beim Löschen.'); }
     }
   });
 
@@ -86,7 +87,7 @@ export default function IssueManagement({ user, onBack, initialTab = 'users' }) 
       const updated = await setUserBlocked(u.id, !u.is_blocked);
       setUsers(prev => prev.map(x => x.id === u.id ? updated : x));
     } catch (err) {
-      alert(err.message || 'Aktion fehlgeschlagen.');
+      showError(err.message || 'Aktion fehlgeschlagen.');
     }
   };
 
@@ -95,7 +96,7 @@ export default function IssueManagement({ user, onBack, initialTab = 'users' }) 
     message: `„${u.email}" und alle ${u.draft_count} zugehörigen Entwürfe werden unwiderruflich gelöscht.`,
     onConfirm: async () => {
       try { await deleteUser(u.id); setUsers(prev => prev.filter(x => x.id !== u.id)); }
-      catch (err) { alert(err.message || 'Löschen fehlgeschlagen.'); }
+      catch (err) { showError(err.message || 'Löschen fehlgeschlagen.'); }
     }
   });
 

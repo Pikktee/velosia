@@ -12,6 +12,8 @@ import TesterPage from './components/TesterPage';
 import LegalPage from './components/LegalPage';
 import BugReportModal from './components/BugReportModal';
 import IssueManagement from './components/IssueManagement';
+import Toaster from './components/Toaster';
+import { showError } from './utils/toast';
 import { getDrafts, deleteDraft, isAuthenticated, setAuthToken, getMe, uploadAndAnalyze, uploadTurbo, refreshAllListings } from './utils/api';
 import { version } from '../package.json';
 
@@ -296,7 +298,7 @@ export default function App() {
       }
     } catch (err) {
       console.error(err);
-      alert('Das Angebot konnte nicht gelöscht werden.');
+      showError('Das Angebot konnte nicht gelöscht werden.', () => handleDeleteDraft(id));
     }
   };
 
@@ -814,6 +816,8 @@ export default function App() {
           </button>
         </div>
       )}
+
+      <Toaster />
 
       {showBugReportModal && (
         <BugReportModal

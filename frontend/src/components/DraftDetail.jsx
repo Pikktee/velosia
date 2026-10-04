@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
-import { ArrowLeft, Copy, Check, ExternalLink, Monitor, RefreshCw, AlertCircle, Trash2, Plus, Sparkles, Upload, Share2, Camera, TrendingUp, ChevronDown, Tag, Coins } from 'lucide-react';
+import { ArrowLeft, Copy, Check, ExternalLink, Monitor, RefreshCw, AlertCircle, Trash2, Plus, Sparkles, Upload, Share2, Camera, TrendingUp, ChevronDown, ChevronLeft, ChevronRight, Star, Tag, Coins } from 'lucide-react';
 import { updateDraft, getImageUrl, getAuthToken, uploadDraftImages, deleteDraftImage, regenerateDraftField, refreshListingStatus, setListingStatus } from '../utils/api';
 import { statusMeta, listingPlatforms, TERMINAL } from '../utils/listingStatus';
+import { showError } from '../utils/toast';
 
 export default function DraftDetail({ draft, onBack, onUpdateSuccess }) {
   const [title, setTitle] = useState(draft.title || '');
@@ -107,6 +108,9 @@ export default function DraftDetail({ draft, onBack, onUpdateSuccess }) {
   }, [draft.image_paths, draft.image_path]);
 
   // activeImage state removed since we now use a grid of thumbnails and a modal detail view
+  // While a reorder is saving, show the new order right away (see moveImage).
+  const [imageOrder, setImageOrder] = useState(null);
+  const shownImages = imageOrder || allImages;
 
   // Detect Android Webview container
   const isAndroidApp = typeof window.VelosiaBridge !== 'undefined';
@@ -233,7 +237,7 @@ export default function DraftDetail({ draft, onBack, onUpdateSuccess }) {
       onUpdateSuccess(updated);
     } catch (err) {
       console.error(err);
-      alert(`Status konnte nicht aktualisiert werden: ${err.message}`);
+      showError(`Status konnte nicht aktualisiert werden: ${err.message}`, handleRefreshStatus);
     } finally {
       setRefreshingStatus(false);
     }
@@ -249,23 +253,26 @@ export default function DraftDetail({ draft, onBack, onUpdateSuccess }) {
       onUpdateSuccess(updated);
     } catch (err) {
       console.error(err);
-      alert(`Status konnte nicht gesetzt werden: ${err.message}`);
+      showError(`Status konnte nicht gesetzt werden: ${err.message}`, () => handleSetStatus(platform, newStatus));
     } finally {
       setSettingStatus(false);
     }
   };
 
-  const handleAddImages = async (e) => {
+  const handleAddImages = (e) => {
     const files = Array.from(e.target.files);
     if (files.length === 0) return;
-    
+    uploadImages(files);
+  };
+
+  const uploadImages = async (files) => {
     setUploadingImage(true);
     try {
       const updated = await uploadDraftImages(draft.id, files);
       onUpdateSuccess(updated);
     } catch (err) {
       console.error(err);
-      alert(`Fehler beim Hochladen der Bilder: ${err.message}`);
+      showError(`Bilder konnten nicht hochgeladen werden: ${err.message}`, () => uploadImages(files));
     } finally {
       setUploadingImage(false);
       if (fileInputRef.current) {
@@ -285,6 +292,10 @@ export default function DraftDetail({ draft, onBack, onUpdateSuccess }) {
     setShowDeleteConfirm(false);
     const imgUrl = imageToDelete;
     setImageToDelete(null);
+    deleteImage(imgUrl);
+  };
+
+  const deleteImage = async (imgUrl) => {
     try {
       const updated = await deleteDraftImage(draft.id, imgUrl);
       onUpdateSuccess(updated);
@@ -294,7 +305,31 @@ export default function DraftDetail({ draft, onBack, onUpdateSuccess }) {
       }
     } catch (err) {
       console.error(err);
-      alert(`Fehler beim Löschen des Bildes: ${err.message}`);
+      showError(`Bild konnte nicht gelöscht werden: ${err.message}`, () => deleteImage(imgUrl));
+    }
+  };
+
+  // Move a photo to a new position. The first photo is the cover the platforms
+  // show in search results, and both the engine and the Android shell upload in
+  // image_paths order — so the order here is the order on Vinted/Kleinanzeigen.
+  // Optimistic: the grid updates at once, a failed save rolls back.
+  const moveImage = async (imgUrl, toIndex) => {
+    if (imageOrder) return; // one save at a time
+    const current = allImages;
+    const from = current.indexOf(imgUrl);
+    if (from < 0 || toIndex < 0 || toIndex >= current.length || from === toIndex) return;
+    const next = [...current];
+    next.splice(from, 1);
+    next.splice(toIndex, 0, imgUrl);
+    setImageOrder(next);
+    try {
+      const updated = await updateDraft(draft.id, { image_paths: JSON.stringify(next) });
+      onUpdateSuccess(updated);
+    } catch (err) {
+      console.error(err);
+      showError(`Reihenfolge konnte nicht gespeichert werden: ${err.message}`, () => moveImage(imgUrl, toIndex));
+    } finally {
+      setImageOrder(null);
     }
   };
 
@@ -316,7 +351,7 @@ export default function DraftDetail({ draft, onBack, onUpdateSuccess }) {
       onUpdateSuccess(updated);
     } catch (err) {
       console.error(err);
-      alert(`KI-Regenerierung fehlgeschlagen: ${err.message}`);
+      showError(`KI-Neugenerierung fehlgeschlagen: ${err.message}`, () => handleRegenerateField(field));
     } finally {
       setRegeneratingField(null);
     }
@@ -364,13 +399,16 @@ export default function DraftDetail({ draft, onBack, onUpdateSuccess }) {
 
         {/* Grid of thumbnails */}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(80px, 1fr))', gap: '0.75rem', width: '100%' }}>
-          {allImages.map((imgUrl, idx) => (
+          {shownImages.map((imgUrl, idx) => (
             <div 
-              key={idx}
+              key={imgUrl}
               onClick={() => setSelectedModalImage(imgUrl)}
               className="thumbnail-grid-item"
             >
               <img src={getImageUrl(imgUrl)} alt="" />
+              {idx === 0 && shownImages.length > 1 && (
+                <span className="thumbnail-cover-badge">Titelbild</span>
+              )}
             </div>
           ))}
           
@@ -924,6 +962,44 @@ export default function DraftDetail({ draft, onBack, onUpdateSuccess }) {
               className="image-detail-modal-img"
             />
           </div>
+          {shownImages.length > 1 && (() => {
+            const pos = shownImages.indexOf(selectedModalImage);
+            const busy = imageOrder !== null;
+            return (
+              <div className="image-detail-modal-position" onClick={(e) => e.stopPropagation()}>
+                <button
+                  className="image-move-btn"
+                  onClick={() => moveImage(selectedModalImage, pos - 1)}
+                  disabled={busy || pos <= 0}
+                  aria-label="Bild nach vorne verschieben"
+                  title="Nach vorne"
+                >
+                  <ChevronLeft size={20} />
+                </button>
+                {pos === 0 ? (
+                  <span className="image-cover-label"><Star size={14} /> Titelbild</span>
+                ) : (
+                  <button
+                    className="image-cover-btn"
+                    onClick={() => moveImage(selectedModalImage, 0)}
+                    disabled={busy}
+                  >
+                    <Star size={14} /> Als Titelbild
+                  </button>
+                )}
+                <span>{pos + 1} / {shownImages.length}</span>
+                <button
+                  className="image-move-btn"
+                  onClick={() => moveImage(selectedModalImage, pos + 1)}
+                  disabled={busy || pos >= shownImages.length - 1}
+                  aria-label="Bild nach hinten verschieben"
+                  title="Nach hinten"
+                >
+                  <ChevronRight size={20} />
+                </button>
+              </div>
+            );
+          })()}
           <div 
             className="image-detail-modal-actions"
             onClick={(e) => e.stopPropagation()}

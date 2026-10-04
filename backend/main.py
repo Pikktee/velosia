@@ -148,7 +148,7 @@ def run_migrations():
 
 run_migrations()
 
-app = FastAPI(title="Velosia API", version="2.7.48")
+app = FastAPI(title="Velosia API", version="2.7.49")
 
 UPLOAD_DIR = "/data/uploads" if os.path.isdir("/data") else "uploads"
 os.makedirs(UPLOAD_DIR, exist_ok=True)
@@ -425,6 +425,18 @@ DAILY_IMAGE_QUOTA = int(os.getenv("DAILY_IMAGE_QUOTA", "150"))
 # Storage guard: /api/drafts/{id}/images runs no AI, so the quota doesn't apply,
 # but it would otherwise accept unlimited photos onto the volume.
 MAX_IMAGES_PER_DRAFT = int(os.getenv("MAX_IMAGES_PER_DRAFT", "24"))
+
+
+def _draft_image_paths(draft: models.Draft) -> list:
+    """The draft's stored (raw, unsigned) photo paths, in order."""
+    if draft.image_paths:
+        try:
+            paths = json.loads(draft.image_paths)
+            if isinstance(paths, list):
+                return paths
+        except Exception:
+            pass
+    return [draft.image_path] if draft.image_path else []
 
 
 def _strip_signatures_in_json_list(raw: str) -> str:
@@ -767,8 +779,19 @@ def update_draft(
     update_data = updated_draft.dict(exclude_unset=True)
     # Photo paths leave the API signed; if a client ever echoes them back, store
     # the raw path so the signature never gets baked into the database.
-    if update_data.get("image_paths"):
-        update_data["image_paths"] = _strip_signatures_in_json_list(update_data["image_paths"])
+    if "image_paths" in update_data:
+        update_data["image_paths"] = _strip_signatures_in_json_list(update_data["image_paths"] or "[]")
+        # Only a reordering of the draft's own photos is allowed here — adding goes
+        # through POST /images, removing through DELETE /images. Otherwise a client
+        # could splice in another user's upload and get a signed URL for it.
+        try:
+            new_paths = json.loads(update_data["image_paths"])
+        except Exception:
+            raise HTTPException(status_code=400, detail="Ungültige Bildliste.")
+        if not isinstance(new_paths, list) or sorted(new_paths) != sorted(_draft_image_paths(db_draft)):
+            raise HTTPException(status_code=400, detail="Die Bilder können nur umsortiert werden.")
+        # The first photo is the cover — keep the legacy single-path column in sync.
+        update_data["image_path"] = new_paths[0] if new_paths else None
     for key, value in update_data.items():
         setattr(db_draft, key, value)
 
