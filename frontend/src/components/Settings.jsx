@@ -141,7 +141,13 @@ export default function Settings({ user, onLogout, onUpdateUser, onShowBugReport
 
   // Debounced auto-save effect
   useEffect(() => {
-    if (!hasChanges) return;
+    // Without pending changes nothing is saved — reset the indicator, otherwise a
+    // debounce cancelled here (e.g. on mount, before the user prop sync settles,
+    // or after the user reverts an edit) leaves "Speichert..." stuck forever.
+    if (!hasChanges) {
+      setSaving(false);
+      return;
+    }
     setSaving(true);
     const delayDebounceFn = setTimeout(saveSettings, 1000); // save 1 second after last change
     return () => clearTimeout(delayDebounceFn);
