@@ -6,6 +6,16 @@ let drafts = [];
 let isOverlayOpen = false;
 let backendUrl = "https://api.velosia.henrikheil.net"; // Default to production
 
+// Identifies API requests made by the extension (version from the manifest).
+const CLIENT_HEADER = { "X-Velosia-Client": "ext/" + chrome.runtime.getManifest().version };
+
+function authHeaders(token) {
+  return Object.assign({ "Authorization": `Bearer ${token}` }, CLIENT_HEADER);
+}
+
+// Origin of our own extension pages (camera iframe), e.g. "chrome-extension://<id>".
+const EXTENSION_ORIGIN = chrome.runtime.getURL("").replace(/\/$/, "");
+
 function openCameraOverlay() {
   if (document.getElementById("velosia-camera-iframe")) return;
 
@@ -33,22 +43,35 @@ function closeCameraOverlay() {
   if (iframe) iframe.remove();
 }
 
-// Window message receiver
+// Window message receiver. Only the camera iframe (an extension page) may talk to
+// us, and it sends just the new draft's id — the draft itself is loaded from the
+// backend with the stored session.
 window.addEventListener("message", (event) => {
-  if (!event.data) return;
+  const iframe = document.getElementById("velosia-camera-iframe");
+  if (!iframe || event.source !== iframe.contentWindow) return;
+  if (event.origin !== EXTENSION_ORIGIN) return;
+  const msg = event.data;
+  if (!msg || typeof msg !== "object") return;
 
-  if (event.data.type === "VELOSIA_DRAFT_CREATED") {
+  if (msg.type === "VELOSIA_DRAFT_CREATED") {
+    const draftId = Number(msg.draftId);
     closeCameraOverlay();
     closeOverlay();
-    chrome.storage.local.get("velosia_backend_url", (data) => {
+    if (!Number.isInteger(draftId) || draftId <= 0) return;
+    chrome.storage.local.get(["velosia_token", "velosia_backend_url"], async (data) => {
       if (data.velosia_backend_url) {
         backendUrl = data.velosia_backend_url;
       }
-      if (event.data.draft) {
-        autofillForm(event.data.draft);
+      const token = data.velosia_token;
+      if (!token) return;
+      if (!window.velosiaUserSettings) {
+        const settings = await fetchJson(`${backendUrl}/api/auth/me`, token);
+        if (settings) window.velosiaUserSettings = settings;
       }
+      const draft = await fetchJson(`${backendUrl}/api/drafts/${draftId}`, token);
+      if (draft) autofillForm(draft);
     });
-  } else if (event.data.type === "VELOSIA_CLOSE_CAMERA") {
+  } else if (msg.type === "VELOSIA_CLOSE_CAMERA") {
     closeCameraOverlay();
   }
 });
@@ -61,7 +84,7 @@ function init() {
 
 // Small helper for authenticated GET requests.
 function fetchJson(url, token) {
-  return fetch(url, { headers: { "Authorization": `Bearer ${token}` } })
+  return fetch(url, { headers: authHeaders(token) })
     .then((r) => (r.ok ? r.json() : null))
     .catch(() => null);
 }
@@ -110,7 +133,7 @@ function injectFloatingButton() {
 
   const btn = document.createElement("div");
   btn.id = "velosia-floating-btn";
-  btn.innerHTML = "✨ Velosia";
+  btn.textContent = "✨ Velosia";
   
   // Style
   Object.assign(btn.style, {
@@ -207,10 +230,10 @@ async function openOverlay() {
   document.body.appendChild(drawer);
 
   // Close event listener
-  document.getElementById("velosia-close").addEventListener("click", closeOverlay);
+  drawer.querySelector("#velosia-close").addEventListener("click", closeOverlay);
 
   // Camera event listener
-  const camBtn = document.getElementById("velosia-btn-camera");
+  const camBtn = drawer.querySelector("#velosia-btn-camera");
   camBtn.addEventListener("click", openCameraOverlay);
   camBtn.addEventListener("mouseenter", () => {
     camBtn.style.transform = "scale(1.02)";
@@ -240,9 +263,7 @@ async function openOverlay() {
       let userSettings = null;
       try {
         const userRes = await fetch(`${backendUrl}/api/auth/me`, {
-          headers: {
-            "Authorization": `Bearer ${token}`
-          }
+          headers: authHeaders(token)
         });
         if (userRes.ok) {
           userSettings = await userRes.json();
@@ -253,9 +274,7 @@ async function openOverlay() {
       window.velosiaUserSettings = userSettings;
 
       const response = await fetch(`${backendUrl}/api/drafts`, {
-        headers: {
-          "Authorization": `Bearer ${token}`
-        }
+        headers: authHeaders(token)
       });
       if (!response.ok) throw new Error();
       drafts = await response.json();
@@ -268,6 +287,16 @@ async function openOverlay() {
       `;
     }
   });
+}
+
+// Resolve a draft image path to an absolute URL on our backend's /uploads.
+// Anything else (foreign hosts, other schemes) is not rendered.
+function draftImageUrl(path) {
+  if (!path || typeof path !== "string") return "";
+  const prefix = `${backendUrl}/uploads/`;
+  if (path.startsWith("/uploads/")) return `${backendUrl}${path}`;
+  if (path.startsWith(prefix)) return path;
+  return "";
 }
 
 // Render the list of drafts inside the drawer
@@ -304,16 +333,32 @@ function renderDraftsList() {
       card.style.borderColor = "rgba(255,255,255,0.08)";
     });
 
-    const imageUrl = draft.image_path.startsWith("http") ? draft.image_path : `${backendUrl}${draft.image_path}`;
+    const img = document.createElement("img");
+    img.style.cssText = "width:50px; height:50px; object-fit:cover; border-radius:4px; background:#000; flex-shrink:0;";
+    img.alt = "";
+    const imageUrl = draftImageUrl(draft.image_path);
+    if (imageUrl) img.src = imageUrl;
 
-    card.innerHTML = `
-      <img src="${imageUrl}" style="width:50px; height:50px; object-fit:cover; border-radius:4px; background:#000;" />
-      <div style="flex-grow:1; min-width:0;">
-        <div style="font-weight:600; font-size:13px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:#f8fafc;">${draft.title || 'Unbenannt'}</div>
-        <div style="font-size:11px; color:#94a3b8; margin-top:2px;">${draft.category} • ${draft.condition}</div>
-      </div>
-      <div style="font-weight:bold; font-size:13px; color:#09b0b7; flex-shrink:0;">${Math.round(draft.price)}€</div>
-    `;
+    const info = document.createElement("div");
+    info.style.cssText = "flex-grow:1; min-width:0;";
+    const title = document.createElement("div");
+    title.style.cssText = "font-weight:600; font-size:13px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:#f8fafc;";
+    title.textContent = draft.title || "Unbenannt";
+    const meta = document.createElement("div");
+    meta.style.cssText = "font-size:11px; color:#94a3b8; margin-top:2px;";
+    meta.textContent = [draft.category, draft.condition].filter(Boolean).join(" • ");
+    info.appendChild(title);
+    info.appendChild(meta);
+
+    const price = document.createElement("div");
+    price.style.cssText = "font-weight:bold; font-size:13px; color:#09b0b7; flex-shrink:0;";
+    price.textContent = Number.isFinite(Number(draft.price)) && draft.price != null
+      ? `${Math.round(Number(draft.price))}€`
+      : "";
+
+    card.appendChild(img);
+    card.appendChild(info);
+    card.appendChild(price);
 
     card.addEventListener("click", () => {
       autofillForm(draft);

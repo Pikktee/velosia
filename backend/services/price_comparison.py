@@ -4,6 +4,7 @@ import statistics
 import urllib.parse
 from typing import List, Dict, Any, Optional
 from services import http_client
+from services.listing_urls import is_platform_url
 
 # How many genuine offers feed the statistics. More than a handful so a single
 # accessory or bundle in the results can't drag the median around.
@@ -62,6 +63,8 @@ def _parse_listings(html: str) -> List[Dict[str, Any]]:
 
         href = item.get("data-href") or ""
         link = href if href.startswith("http") else f"https://www.kleinanzeigen.de{href}"
+        if not is_platform_url(link):
+            link = None  # only ever link to the platform itself
 
         listings.append({"title": title, "price": price, "url": link})
         if len(listings) >= MAX_LISTINGS:

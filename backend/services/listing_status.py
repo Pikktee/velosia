@@ -44,6 +44,7 @@ UNBEKANNT = "unbekannt"
 TERMINAL = {VERKAUFT, GELOESCHT}
 
 from services import http_client
+from services import listing_urls
 
 
 # ---------------------------------------------------------------------------
@@ -132,12 +133,19 @@ def refresh_draft_status(draft, now):
     column updates. Terminal statuses (sold/deleted) are not re-polled."""
     updates = {}
 
-    ka_url = getattr(draft, "ka_listing_url", None)
+    # Stored URLs are re-validated on every poll: rows from before the URL
+    # validation may hold anything. An unusable URL is rebuilt from the listing
+    # id where possible (Vinted) or skipped.
+    ka_url = listing_urls.safe_listing_url(
+        listing_urls.KLEINANZEIGEN, getattr(draft, "ka_listing_id", None), getattr(draft, "ka_listing_url", None)
+    )
     if ka_url and getattr(draft, "ka_status", None) not in TERMINAL:
         updates["ka_status"] = check_kleinanzeigen(ka_url)
         updates["ka_status_at"] = now
 
-    v_url = getattr(draft, "vinted_listing_url", None)
+    v_url = listing_urls.safe_listing_url(
+        listing_urls.VINTED, getattr(draft, "vinted_listing_id", None), getattr(draft, "vinted_listing_url", None)
+    )
     if v_url and getattr(draft, "vinted_status", None) not in TERMINAL:
         updates["vinted_status"] = check_vinted(v_url)
         updates["vinted_status_at"] = now

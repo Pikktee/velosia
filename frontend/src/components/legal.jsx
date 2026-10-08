@@ -45,15 +45,18 @@ export function KontoLoeschenContent() {
       <p style={{ marginBottom: '1.5rem' }}>
         Vollständig und endgültig gelöscht werden: deine <strong>E-Mail-Adresse</strong>, dein
         Passwort bzw. die <strong>Google-Verknüpfung</strong>, alle erstellten{' '}
-        <strong>Anzeigen/Entwürfe</strong> sowie alle von dir <strong>hochgeladenen Fotos</strong>.
+        <strong>Anzeigen/Entwürfe</strong>, alle von dir <strong>hochgeladenen Fotos</strong>,
+        deine <strong>Fehlerberichte</strong> samt Screenshots sowie ein eventueller Eintrag auf
+        der <strong>Tester-Warteliste</strong>.
       </p>
 
       <h3 style={h3}>Werden Daten aufbewahrt?</h3>
       <p>
         Nach der Löschung bewahren wir <strong>keine</strong> personenbezogenen Konto- oder
         Anzeigendaten auf. Velosia ist kostenlos – es fallen keine Zahlungs- oder Rechnungsdaten an.
-        Lediglich von dir freiwillig gesendete Fehlerberichte können in <strong>anonymisierter
-        Form</strong> (ohne Bezug zu deinem Konto) zur Fehleranalyse erhalten bleiben.
+        Erhalten bleiben lediglich <strong>technische Auswertungen</strong> der automatischen
+        Formularausfüllung (welche Formularfelder gefunden wurden, ohne Anzeigeninhalte), die
+        nach der Löschung keinen Bezug mehr zu deinem Konto haben.
       </p>
     </div>
   );
@@ -101,7 +104,7 @@ export function DatenschutzContent() {
         <strong>Registrierungsdaten:</strong> Für die Nutzung unserer Angebots-Automatisierung erheben wir deine E-Mail-Adresse und ein verschlüsseltes Passwort. Bei der Anmeldung über Google erhalten wir zusätzlich deine bei Google hinterlegte E-Mail-Adresse. Diese Daten dienen ausschließlich zur Authentifizierung und Zuordnung deiner Angebote.
       </p>
       <p style={{ marginBottom: '1.5rem' }}>
-        <strong>Bilder und Angebote:</strong> Wenn du Fotos deiner Artikel hochlädst, werden diese temporär zur Analyse an den Google Gemini API Dienst übertragen. Es werden keine Metadaten oder Standortdaten deiner Bilder dauerhaft gespeichert oder für Werbezwecke verwendet.
+        <strong>Bilder und Angebote:</strong> Fotos deiner Artikel werden beim Hochladen auf unserem Server neu abgespeichert. Dabei werden alle eingebetteten Metadaten entfernt – insbesondere Kamera- und Standortdaten (EXIF/GPS). Gespeichert und später auf Vinted oder Kleinanzeigen hochgeladen wird nur das Bild selbst. Zur Analyse werden die Fotos an den Google Gemini API Dienst übertragen. Deine Angebote und Fotos bleiben gespeichert, bis du sie oder dein Konto löschst; sie werden nicht für Werbezwecke verwendet.
       </p>
 
       <h3 style={h3}>3. Weitergabe an Dritte</h3>

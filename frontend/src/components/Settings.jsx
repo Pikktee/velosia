@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { User, LogOut, Trash2, AlertTriangle, Save, HelpCircle, Check, Shield, Sparkles, Euro, MapPin, Sliders, Zap, Users, ClipboardList, Bug, ChevronRight, RefreshCw, AlertCircle } from 'lucide-react';
-import { deleteUserAccount, updateMe } from '../utils/api';
+import { User, LogOut, Trash2, AlertTriangle, Save, HelpCircle, Check, Shield, Sparkles, Euro, MapPin, Sliders, Zap, Users, ClipboardList, Bug, ChevronRight, RefreshCw, AlertCircle, KeyRound } from 'lucide-react';
+import { deleteUserAccount, updateMe, setPassword as setAccountPassword } from '../utils/api';
 import { version } from '../../package.json';
 
 // Default style instructions per tone preset. MUST stay in sync with TONE_PRESETS
@@ -29,6 +29,105 @@ const presetKeyForText = (text) => {
   }
   return 'custom';
 };
+
+// Must match the server's minimum (schemas.PASSWORD_MIN_LENGTH) and the sign-up form.
+const PASSWORD_MIN_LENGTH = 6;
+
+// "Passwort festlegen": lets an account that signs in with Google also use the
+// e-mail/password login (needed by the browser extension). The server accepts it
+// only shortly after a sign-in and then ends all other sessions.
+function PasswordSection() {
+  const [password, setPassword] = useState('');
+  const [confirm, setConfirm] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState(null); // { type: 'ok' | 'error', text }
+
+  const submit = async () => {
+    setMessage(null);
+    if (password.length < PASSWORD_MIN_LENGTH) {
+      setMessage({ type: 'error', text: `Das Passwort muss mindestens ${PASSWORD_MIN_LENGTH} Zeichen lang sein.` });
+      return;
+    }
+    if (password !== confirm) {
+      setMessage({ type: 'error', text: 'Die beiden Eingaben stimmen nicht überein.' });
+      return;
+    }
+    setBusy(true);
+    try {
+      await setAccountPassword(password);
+      setPassword('');
+      setConfirm('');
+      setMessage({ type: 'ok', text: 'Passwort gespeichert. Andere Geräte und die Browser-Erweiterung musst du neu anmelden.' });
+    } catch (err) {
+      setMessage({ type: 'error', text: err.message || 'Das Passwort konnte nicht gespeichert werden.' });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  // The section sits inside the settings <form>; Enter must not submit that one.
+  const onKeyDown = (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      if (!busy) submit();
+    }
+  };
+
+  return (
+    <div className="detail-section-unboxed" style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+      <h3 className="detail-section-title" style={{ margin: 0 }}>
+        <KeyRound size={18} style={{ color: 'var(--primary)' }} />
+        <span>Passwort festlegen</span>
+      </h3>
+      <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', margin: 0, lineHeight: 1.4 }}>
+        Nötig, wenn du dich mit Google anmeldest und die Browser-Erweiterung nutzen möchtest
+        (dort gibt es nur die Anmeldung mit E-Mail und Passwort). Aus Sicherheitsgründen geht das
+        nur kurz nach einer Anmeldung – melde dich sonst einmal ab und wieder an.
+      </p>
+      <input
+        type="password"
+        className="form-control"
+        placeholder="Neues Passwort"
+        autoComplete="new-password"
+        minLength={PASSWORD_MIN_LENGTH}
+        maxLength={256}
+        value={password}
+        onChange={(e) => setPassword(e.target.value)}
+        onKeyDown={onKeyDown}
+        aria-label="Neues Passwort"
+      />
+      <input
+        type="password"
+        className="form-control"
+        placeholder="Passwort wiederholen"
+        autoComplete="new-password"
+        maxLength={256}
+        value={confirm}
+        onChange={(e) => setConfirm(e.target.value)}
+        onKeyDown={onKeyDown}
+        aria-label="Passwort wiederholen"
+      />
+      {message && (
+        <p
+          role={message.type === 'error' ? 'alert' : 'status'}
+          style={{ fontSize: '0.85rem', margin: 0, color: message.type === 'error' ? '#fca5a5' : 'var(--primary)' }}
+        >
+          {message.text}
+        </p>
+      )}
+      <button
+        type="button"
+        onClick={submit}
+        disabled={busy || !password}
+        className="btn btn-secondary"
+        style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem', borderColor: 'var(--glass-border)', minHeight: '44px' }}
+      >
+        <KeyRound size={18} />
+        {busy ? 'Speichert...' : 'Passwort speichern'}
+      </button>
+    </div>
+  );
+}
 
 export default function Settings({ user, onLogout, onUpdateUser, onShowBugReport }) {
   const [showConfirm, setShowConfirm] = useState(false);
@@ -309,6 +408,8 @@ export default function Settings({ user, onLogout, onUpdateUser, onShowBugReport
                   Abmelden
                 </button>
               </div>
+
+              <PasswordSection />
  
               {/* Section: Anzeigentext — the final description is assembled top to
                   bottom as Einleitung + KI-Text + Abschluss (intro and footer are
@@ -332,6 +433,7 @@ export default function Settings({ user, onLogout, onUpdateUser, onShowBugReport
                     className="form-control"
                     style={{ minHeight: '64px' }}
                     placeholder="z.B. Hallo und willkommen bei meinen Anzeigen! 👋"
+                    maxLength={1000}
                     value={aiIntro}
                     onChange={(e) => setAiIntro(e.target.value)}
                   />
@@ -363,6 +465,7 @@ export default function Settings({ user, onLogout, onUpdateUser, onShowBugReport
                     className="form-control"
                     style={{ minHeight: '110px' }}
                     placeholder="Stil-/Tonfall-Anweisung an die KI..."
+                    maxLength={1000}
                     value={aiCustomTone}
                     onChange={(e) => handleTonePromptChange(e.target.value)}
                   />
@@ -381,6 +484,7 @@ export default function Settings({ user, onLogout, onUpdateUser, onShowBugReport
                     className="form-control"
                     style={{ minHeight: '64px' }}
                     placeholder="z.B. Privatverkauf, keine Garantie."
+                    maxLength={1000}
                     value={aiCustomFooter}
                     onChange={(e) => setAiCustomFooter(e.target.value)}
                   />
@@ -411,6 +515,7 @@ export default function Settings({ user, onLogout, onUpdateUser, onShowBugReport
                     type="text"
                     className="form-control"
                     placeholder="z.B. 10115"
+                    maxLength={20}
                     value={defaultZip}
                     onChange={(e) => setDefaultZip(e.target.value)}
                   />
@@ -428,6 +533,7 @@ export default function Settings({ user, onLogout, onUpdateUser, onShowBugReport
                     type="text"
                     className="form-control"
                     placeholder="z.B. DHL Paket versichert"
+                    maxLength={200}
                     value={defaultShipping}
                     onChange={(e) => setDefaultShipping(e.target.value)}
                   />

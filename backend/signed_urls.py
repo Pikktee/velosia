@@ -25,7 +25,7 @@ import os
 import time
 from typing import Optional
 
-from auth_utils import SECRET_KEY
+from auth_utils import SECRET_KEY, derive_key
 
 # Long enough that a listing being autofilled never expires mid-flow, short
 # enough that a leaked URL stops working. Clients refetch drafts constantly, so
@@ -45,22 +45,38 @@ PUBLIC = os.getenv("UPLOADS_PUBLIC", "").lower() in ("1", "true", "yes")
 _PREFIX = "/uploads/"
 
 
-def _signature(filename: str, expires: int) -> str:
+# URLs are signed with a key derived from SECRET_KEY rather than SECRET_KEY
+# itself, so upload signatures and session tokens never share a key.
+_KEY = derive_key(b"velosia/uploads/v1")
+
+# URLs minted before the key derivation was introduced were signed with
+# SECRET_KEY directly. They carry their own expiry (at most TTL_S + 1 day), so
+# they are honoured until they lapse; after this date the old scheme is dead.
+_LEGACY_ACCEPT_UNTIL = 1798761600  # 2027-01-01 UTC
+
+
+def _signature(filename: str, expires: int, key: bytes = _KEY) -> str:
     msg = f"{filename}:{expires}".encode()
-    return hmac.new(SECRET_KEY.encode(), msg, hashlib.sha256).hexdigest()[:32]
+    return hmac.new(key, msg, hashlib.sha256).hexdigest()[:32]
 
 
 def verify(filename: str, expires: str, signature: str) -> bool:
     """True if `signature` is ours for this filename and has not expired."""
-    if not filename or not expires or not signature:
+    if not filename or not expires or not signature or not signature.isascii():
         return False
     try:
         expires_at = int(expires)
     except (TypeError, ValueError):
         return False
-    if expires_at < time.time():
+    now = time.time()
+    if expires_at < now:
         return False
-    return hmac.compare_digest(_signature(filename, expires_at), signature)
+    if hmac.compare_digest(_signature(filename, expires_at), signature):
+        return True
+    if now < _LEGACY_ACCEPT_UNTIL:
+        legacy = _signature(filename, expires_at, SECRET_KEY.encode())
+        return hmac.compare_digest(legacy, signature)
+    return False
 
 
 def sign_path(path: Optional[str]) -> Optional[str]:

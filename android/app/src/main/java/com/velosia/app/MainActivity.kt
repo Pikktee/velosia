@@ -50,11 +50,14 @@ class MainActivity : AppCompatActivity() {
 
     private var activeDraftJson: String? = null
     private var activePlatform: String? = null
-    private var activeDraftId: Int = -1
-    // The JWT of the user who triggered the autofill. Used by the native listing
-    // capture (/api/listings/published) so the published listing is recorded and
-    // the dashboard shows its status.
-    private var authToken: String? = null
+    @Volatile private var activeDraftId: Int = -1
+    // The bearer token handed over by the frontend when the user starts a post (a
+    // short-lived, draft-scoped platform token, or the account token from older
+    // frontends). Only used natively for /api/auth/me, /api/drafts/{id},
+    // /api/listings/published and /api/telemetry/autofill — never passed into a page.
+    @Volatile private var authToken: String? = null
+    // Upper bound for engine telemetry events per post session.
+    private val telemetryCount = AtomicInteger(0)
     // Guards the one-shot native capture: once we detect the published listing URL
     // and POST it, we must not fire again for the same session.
     private var hasCaptured = false
@@ -86,29 +89,128 @@ class MainActivity : AppCompatActivity() {
         get() = (applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE) != 0
 
     // Hosts the JS bridge trusts. Sensitive, state-changing bridge methods are only
-    // honoured while the WebView is on the Velosia frontend; the photo/capture helpers
-    // additionally work on the two platform hosts the autofill engine drives. Every
-    // other origin (OAuth redirects, ad/analytics domains embedded by the platforms)
-    // gets no native capabilities.
-    private val trustedFrontendHosts = listOf("velosia.henrikheil.net", "localhost", "10.0.2.2")
-    private val trustedPlatformHosts = listOf("vinted.de", "vinted.fr", "kleinanzeigen.de")
+    // honoured while the WebView is on the Velosia frontend; the photo/capture/telemetry
+    // helpers additionally work on the exact platform hosts the autofill engine drives.
+    // Every other origin (OAuth redirects, ad/analytics domains embedded by the
+    // platforms) gets no native capabilities. Local dev hosts only on debug builds.
+    private val frontendHost = "velosia.henrikheil.net"
+    private val devHosts = setOf("localhost", "127.0.0.1", "10.0.2.2")
+    private val vintedHosts = setOf("www.vinted.de", "vinted.de", "www.vinted.fr", "vinted.fr")
+    private val kleinanzeigenHosts = setOf("www.kleinanzeigen.de", "kleinanzeigen.de")
     // Latest committed main-frame URL, so the synchronous photo getters can check the
     // origin without touching webView.url off the UI thread.
     @Volatile private var currentPageUrl: String = ""
 
-    private fun hostOf(url: String?): String = try {
-        Uri.parse(url ?: "").host?.lowercase() ?: ""
-    } catch (e: Exception) { "" }
+    private fun parseUri(url: String?): Uri? = try {
+        if (url.isNullOrEmpty()) null else Uri.parse(url)
+    } catch (e: Exception) { null }
 
+    private fun hostOf(url: String?): String = parseUri(url)?.host?.lowercase() ?: ""
+
+    private fun isHttps(uri: Uri): Boolean =
+        uri.scheme.equals("https", ignoreCase = true) && uri.userInfo == null &&
+            (uri.port == -1 || uri.port == 443)
+
+    // Exact Velosia frontend host over https; local dev servers only on debug builds.
     private fun isTrustedFrontend(url: String?): Boolean {
-        val h = hostOf(url)
-        return trustedFrontendHosts.any { h == it || h.endsWith(".$it") }
+        val uri = parseUri(url) ?: return false
+        val h = uri.host?.lowercase() ?: return false
+        if (h == frontendHost && isHttps(uri)) return true
+        if (isDebuggable && h in devHosts) {
+            val s = uri.scheme?.lowercase()
+            return s == "http" || s == "https"
+        }
+        return false
     }
 
-    private fun isTrustedPlatformOrFrontend(url: String?): Boolean {
+    private fun isPlatformPage(url: String?): Boolean {
+        val uri = parseUri(url) ?: return false
+        if (!isHttps(uri)) return false
+        val h = uri.host?.lowercase() ?: return false
+        return h in vintedHosts || h in kleinanzeigenHosts
+    }
+
+    private fun isTrustedPlatformOrFrontend(url: String?): Boolean =
+        isTrustedFrontend(url) || isPlatformPage(url)
+
+    // Which listing-form page (if any) a URL is. Host-exact + path-prefix match.
+    private enum class FormPage { VINTED_FORM, KA_CATEGORY, KA_FORM, NONE }
+
+    private fun formPageOf(url: String?): FormPage {
+        val uri = parseUri(url) ?: return FormPage.NONE
+        if (!isHttps(uri)) return FormPage.NONE
+        val h = uri.host?.lowercase() ?: return FormPage.NONE
+        val path = uri.path ?: ""
+        return when {
+            h in vintedHosts && (path == "/items/new" || path.startsWith("/items/new/")) -> FormPage.VINTED_FORM
+            h in kleinanzeigenHosts && path == "/p-anzeige-aufgeben.html" -> FormPage.KA_CATEGORY
+            h in kleinanzeigenHosts && path.startsWith("/p-anzeige-aufgeben-schritt2") -> FormPage.KA_FORM
+            else -> FormPage.NONE
+        }
+    }
+
+    // Main-frame navigation allowlist. The WebView keeps the frontend, the two
+    // platforms (incl. their subdomains, e.g. login/help/consent) and the sign-in,
+    // captcha and payment hosts their flows redirect through. Any other link opens
+    // in the user's browser instead of inside the app shell.
+    private val inAppHostSuffixes = listOf(
+        // platforms
+        "vinted.de", "vinted.fr", "vinted.com", "kleinanzeigen.de", "ebay-kleinanzeigen.de",
+        // sign-in providers offered on the platforms' login pages
+        "accounts.google.com", "accounts.youtube.com", "facebook.com", "appleid.apple.com",
+        "idmsa.apple.com",
+        // bot / captcha interstitials
+        "captcha-delivery.com", "hcaptcha.com", "recaptcha.net", "challenges.cloudflare.com",
+        // payment / 3-D Secure hand-offs (e.g. paid listing upgrades)
+        "adyen.com", "adyenpayments.com", "paypal.com", "klarna.com", "stripe.com",
+        "checkout.com"
+    )
+
+    private fun isAllowedInApp(uri: Uri): Boolean {
+        val url = uri.toString()
         if (isTrustedFrontend(url)) return true
-        val h = hostOf(url)
-        return trustedPlatformHosts.any { h == it || h.endsWith(".$it") }
+        if (!isHttps(uri)) return false
+        val h = uri.host?.lowercase() ?: return false
+        // Google bounces sign-in through accounts.google.<ccTLD> to set cookies.
+        if (h.startsWith("accounts.google.")) return true
+        return inAppHostSuffixes.any { h == it || h.endsWith(".$it") }
+    }
+
+    // Hand a URL the WebView should not load itself to the system (browser, mail,
+    // dialer, Play Store …). intent: URLs are sanitised so a page cannot target a
+    // specific (non-exported-to-browser) component.
+    private fun openExternally(uri: Uri) {
+        try {
+            val scheme = uri.scheme?.lowercase() ?: return
+            val intent = if (scheme == "intent") {
+                val parsed = Intent.parseUri(uri.toString(), Intent.URI_INTENT_SCHEME)
+                parsed.component = null
+                parsed.selector = null
+                parsed.clipData = null
+                // No URI grants from a web link (the app's FileProvider must stay private).
+                parsed.flags = parsed.flags and (
+                    Intent.FLAG_GRANT_READ_URI_PERMISSION or
+                    Intent.FLAG_GRANT_WRITE_URI_PERMISSION or
+                    Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION or
+                    Intent.FLAG_GRANT_PREFIX_URI_PERMISSION
+                ).inv()
+                val dataScheme = parsed.data?.scheme?.lowercase()
+                if (dataScheme == "content" || dataScheme == "file") return
+                parsed.addCategory(Intent.CATEGORY_BROWSABLE)
+                if (packageManager.resolveActivity(parsed, 0) == null) {
+                    val fallback = parsed.getStringExtra("browser_fallback_url")
+                    val fb = parseUri(fallback)
+                    if (fb != null && isHttps(fb)) {
+                        Intent(Intent.ACTION_VIEW, fb).addCategory(Intent.CATEGORY_BROWSABLE)
+                    } else return
+                } else parsed
+            } else {
+                Intent(Intent.ACTION_VIEW, uri).addCategory(Intent.CATEGORY_BROWSABLE)
+            }
+            startActivity(intent)
+        } catch (e: Exception) {
+            Toast.makeText(this, "Link konnte nicht geöffnet werden.", Toast.LENGTH_SHORT).show()
+        }
     }
 
     // Branded offline fallback shown by onReceivedError when the dashboard load fails.
@@ -153,8 +255,9 @@ class MainActivity : AppCompatActivity() {
         // Request runtime camera permission
         checkCameraPermission()
 
-        // Detect if running in emulator and override URLs
-        if (isEmulator()) {
+        // Debug builds on an emulator talk to the local dev servers; release builds
+        // always use production.
+        if (isDebuggable && isEmulator()) {
             frontendUrl = "http://10.0.2.2:5173"
             backendUrl = "http://10.0.2.2:8000"
             Toast.makeText(this, "Emulator erkannt - Lade lokale Server", Toast.LENGTH_SHORT).show()
@@ -176,8 +279,11 @@ class MainActivity : AppCompatActivity() {
         val settings = webView.settings
         settings.javaScriptEnabled = true
         settings.domStorageEnabled = true
-        settings.allowFileAccess = true
-        settings.allowContentAccess = true
+        // No file:// or content:// URL loading in pages. The file chooser keeps working:
+        // its content:// results are handed to the WebView via the callback and read by
+        // the WebView itself, not loaded as URLs.
+        settings.allowFileAccess = false
+        settings.allowContentAccess = false
         settings.databaseEnabled = true
         
         // Use a standard mobile Chrome user agent to prevent Cloudflare/Vinted bot-blocking
@@ -189,8 +295,29 @@ class MainActivity : AppCompatActivity() {
         // Setup WebViewClient
         webView.webViewClient = object : WebViewClient() {
             override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
-                // Keep navigation within the WebView
-                return false
+                // Sub-frames (consent dialogs, captchas, ads) are left to the page.
+                if (!request.isForMainFrame) return false
+                val uri = request.url
+                val scheme = uri.scheme?.lowercase() ?: return true
+                if (scheme == "about") return false
+                if (isAllowedInApp(uri)) return false
+                if (scheme == "https") {
+                    // A link the user tapped to some other site opens in the browser.
+                    // Automatic hops (server redirects, scripted navigations inside a
+                    // sign-in / consent / payment flow) stay in the WebView so those
+                    // flows are not cut in half; the bridge is host-gated regardless.
+                    if (request.hasGesture() && !request.isRedirect) {
+                        openExternally(uri)
+                        return true
+                    }
+                    return false
+                }
+                // mailto:, tel:, intent:, market:, plain http … — only on a user tap,
+                // never loaded inside the shell (data:/file:/content:/javascript: blocked).
+                if (scheme !in setOf("data", "file", "content", "javascript", "blob") && request.hasGesture()) {
+                    openExternally(uri)
+                }
+                return true
             }
 
             // Vinted publishes via SPA navigation (pushState, no document reload), so
@@ -244,11 +371,7 @@ class MainActivity : AppCompatActivity() {
                 super.onPageStarted(view, url, favicon)
                 currentPageUrl = url
                 if (activeDraftJson == null) return
-                val isFormish = url.contains("vinted.de/items/new") ||
-                    url.contains("vinted.fr/items/new") ||
-                    url.contains("kleinanzeigen.de/p-anzeige-aufgeben.html") ||
-                    url.contains("kleinanzeigen.de/p-anzeige-aufgeben-schritt2")
-                if (isFormish) injectEarlyBackdrop()
+                if (formPageOf(url) != FormPage.NONE) injectEarlyBackdrop()
             }
 
             override fun onPageFinished(view: WebView, url: String) {
@@ -291,8 +414,14 @@ class MainActivity : AppCompatActivity() {
 
             override fun onPermissionRequest(request: PermissionRequest) {
                 runOnUiThread {
-                    // Grant WebRTC camera permission dynamically
-                    request.grant(request.resources)
+                    // Only the Velosia frontend's in-app camera gets a video stream; the
+                    // platform pages receive photos via the bridge and need no camera.
+                    val wantsVideo = request.resources.contains(PermissionRequest.RESOURCE_VIDEO_CAPTURE)
+                    if (wantsVideo && isTrustedFrontend(request.origin?.toString())) {
+                        request.grant(arrayOf(PermissionRequest.RESOURCE_VIDEO_CAPTURE))
+                    } else {
+                        request.deny()
+                    }
                 }
             }
 
@@ -341,6 +470,7 @@ class MainActivity : AppCompatActivity() {
                 hasCaptured = false
                 authToken = token
                 activeDraftId = draftId
+                telemetryCount.set(0)
                 draftImageDataUrls = emptyList()
                 prefetchRemoteEngine()
                 fetchUserProfile(token)
@@ -370,11 +500,20 @@ class MainActivity : AppCompatActivity() {
         fun onListingPublished(platform: String, listingId: String, listingUrl: String) {
             runOnUiThread {
                 if (!isTrustedPlatformOrFrontend(webView.url)) return@runOnUiThread
-                if (hasCaptured || activeDraftId < 0 || listingId.isBlank()) return@runOnUiThread
+                if (hasCaptured || activeDraftId < 0) return@runOnUiThread
+                if (platform != activePlatform || !Regex("\\d{1,15}").matches(listingId)) return@runOnUiThread
                 val token = authToken ?: return@runOnUiThread
                 hasCaptured = true
-                val url = if (listingUrl.startsWith("http")) listingUrl
-                          else "https://www.${if (platform == "vinted") "vinted.de" else "kleinanzeigen.de"}/items/$listingId"
+                // Keep the reported URL only if it is a listing on that platform's own
+                // https host; otherwise build the canonical one from the id.
+                val given = parseUri(listingUrl)
+                val givenOk = given != null && isHttps(given) &&
+                    (given.host?.lowercase() ?: "") in (if (platform == "vinted") vintedHosts else kleinanzeigenHosts)
+                val url = when {
+                    givenOk -> listingUrl.substringBefore('#')
+                    platform == "vinted" -> "https://www.vinted.de/items/$listingId"
+                    else -> "https://www.kleinanzeigen.de/s-anzeige/$listingId"
+                }
                 capturePublishedListing(activeDraftId, platform, listingId, url, token)
             }
         }
@@ -383,6 +522,7 @@ class MainActivity : AppCompatActivity() {
         // WebView (the user's session cookies are present) so the user can delete
         // it himself. Deliberately NOT a headless delete — a write to the user's
         // platform account always keeps the user in the loop (final tap is his).
+        @Suppress("UNUSED_PARAMETER")
         @JavascriptInterface
         fun deleteOnPlatform(draftId: Int, platform: String, listingUrl: String, token: String) {
             runOnUiThread {
@@ -390,13 +530,19 @@ class MainActivity : AppCompatActivity() {
                 // never an attacker-supplied redirect that would hijack the logged-in
                 // WebView (open-redirect) or overwrite the session fields below.
                 if (!isTrustedFrontend(webView.url)) return@runOnUiThread
-                val h = hostOf(listingUrl)
-                val okHost = trustedPlatformHosts.any { h == it || h.endsWith(".$it") }
-                if (!listingUrl.startsWith("https://") || !okHost) {
+                if (!isPlatformPage(listingUrl)) {
                     Toast.makeText(this@MainActivity, "Ungültige Anzeigen-URL.", Toast.LENGTH_SHORT).show()
                     return@runOnUiThread
                 }
-                authToken = token
+                // Opening the ad needs no backend call, so no token is kept. A fresh
+                // session state also ensures no autofill/capture runs on this page.
+                activeDraftJson = null
+                activePlatform = null
+                draftImageDataUrls = emptyList()
+                hasAutoFilled = false
+                hasAutoCategory = false
+                hasCaptured = false
+                authToken = null
                 activeDraftId = draftId
                 Toast.makeText(
                     this@MainActivity,
@@ -413,11 +559,39 @@ class MainActivity : AppCompatActivity() {
         // user's draft photos.
         @JavascriptInterface
         fun getDraftImageCount(): Int =
-            if (isTrustedPlatformOrFrontend(currentPageUrl)) draftImageDataUrls.size else 0
+            if (activeDraftId >= 0 && isTrustedPlatformOrFrontend(currentPageUrl)) draftImageDataUrls.size else 0
 
         @JavascriptInterface
         fun getDraftImageDataUrl(index: Int): String =
-            if (isTrustedPlatformOrFrontend(currentPageUrl)) (draftImageDataUrls.getOrNull(index) ?: "") else ""
+            if (activeDraftId >= 0 && isTrustedPlatformOrFrontend(currentPageUrl)) (draftImageDataUrls.getOrNull(index) ?: "") else ""
+
+        // Engine telemetry (structural autofill outcome) is sent natively with the
+        // session token, so the page itself never holds credentials. Only during an
+        // active post session on a trusted host, size- and count-limited.
+        @JavascriptInterface
+        fun sendTelemetry(json: String) {
+            if (activeDraftId < 0 || !isTrustedPlatformOrFrontend(currentPageUrl)) return
+            val token = authToken
+            if (token.isNullOrEmpty() || json.length > 4096) return
+            if (telemetryCount.incrementAndGet() > 30) return
+            val payload = try { JSONObject(json) } catch (e: Exception) { return }
+            val body = payload.toString().toRequestBody("application/json; charset=utf-8".toMediaTypeOrNull())
+            val request = Request.Builder()
+                .url("$backendUrl/api/telemetry/autofill")
+                .header("Authorization", "Bearer $token")
+                .post(body)
+                .build()
+            okHttpClient.newCall(request).enqueue(object : Callback {
+                override fun onFailure(call: Call, e: IOException) { /* best-effort */ }
+                override fun onResponse(call: Call, response: Response) { response.close() }
+            })
+        }
+
+        // Installed app version (e.g. "2.7.51"), so the web side can adapt to the shell.
+        @JavascriptInterface
+        fun getAppVersion(): String = try {
+            packageManager.getPackageInfo(packageName, 0).versionName ?: ""
+        } catch (e: Exception) { "" }
     }
 
     // Fetch draft metadata from the backend, then navigate to the platform form.
@@ -588,26 +762,53 @@ class MainActivity : AppCompatActivity() {
     // on any failure we just keep using the bundled asset. A cache-buster avoids stale
     // CDN copies. Kicked off when the user starts a "post to platform" so it is ready
     // by the time the form loads; if not, readEngineJs falls back to the asset.
+    //
+    // The web copy is only used when its detached signature (<engine-url>.sig, base64
+    // DER ECDSA P-256 / SHA-256 over the exact file bytes) verifies against the key
+    // below and its VERSION is not older than the bundled engine.
     private fun prefetchRemoteEngine() {
-        val url = "$frontendUrl/autofill-engine.js?ts=${System.currentTimeMillis()}"
-        val request = Request.Builder().url(url).header("Cache-Control", "no-cache").build()
-        okHttpClient.newCall(request).enqueue(object : Callback {
+        val ts = System.currentTimeMillis()
+        val engineUrl = "$frontendUrl/autofill-engine.js"
+        val engineReq = Request.Builder().url("$engineUrl?ts=$ts").header("Cache-Control", "no-cache").build()
+        okHttpClient.newCall(engineReq).enqueue(object : Callback {
             override fun onFailure(call: Call, e: IOException) { /* keep bundled asset */ }
             override fun onResponse(call: Call, response: Response) {
-                response.use {
+                val bytes = response.use {
                     if (!response.isSuccessful) return
-                    val js = response.body?.string() ?: return
-                    // Sanity check it is really the engine before trusting it.
-                    if (js.contains("__velosia") && js.length > 1000) remoteEngineJs = js
+                    response.body?.bytes() ?: return
                 }
+                val sigReq = Request.Builder().url("$engineUrl.sig?ts=$ts").header("Cache-Control", "no-cache").build()
+                okHttpClient.newCall(sigReq).enqueue(object : Callback {
+                    override fun onFailure(call: Call, e: IOException) { acceptRemoteEngine(bytes, null) }
+                    override fun onResponse(call: Call, response: Response) {
+                        val sig = response.use { if (response.isSuccessful) response.body?.string() else null }
+                        acceptRemoteEngine(bytes, sig)
+                    }
+                })
             }
         })
     }
 
-    // Reads the shared autofill engine JS. Prefers the web-fetched copy (latest),
-    // else the bundled asset (offline fallback), cached after the first read.
-    private fun readEngineJs(): String {
-        remoteEngineJs?.let { return it }
+    private fun acceptRemoteEngine(bytes: ByteArray, signatureB64: String?) {
+        val js = String(bytes, Charsets.UTF_8)
+        if (!js.contains("__velosia") || js.length <= 1000) return
+        val signed = signatureB64 != null && EngineVerifier.verify(bytes, signatureB64)
+        // Debug builds against a local dev frontend may run an unsigned engine.
+        val unsignedOk = isDebuggable && hostOf(frontendUrl) in devHosts
+        if (!signed && !unsignedOk) {
+            if (isDebuggable) Log.w("Velosia", "Remote engine signature missing/invalid — using bundled engine")
+            return
+        }
+        val bundled = EngineVerifier.versionOf(readBundledEngineJs())
+        val remote = EngineVerifier.versionOf(js)
+        if (bundled != null && (remote == null || EngineVerifier.compareVersions(remote, bundled) < 0)) {
+            if (isDebuggable) Log.w("Velosia", "Remote engine $remote older than bundled $bundled — using bundled engine")
+            return
+        }
+        remoteEngineJs = js
+    }
+
+    private fun readBundledEngineJs(): String {
         engineJsCache?.let { return it }
         return try {
             val js = assets.open("autofill-engine.js").bufferedReader().use { it.readText() }
@@ -616,6 +817,13 @@ class MainActivity : AppCompatActivity() {
         } catch (e: Exception) {
             ""
         }
+    }
+
+    // Reads the shared autofill engine JS. Prefers the verified web copy (latest),
+    // else the bundled asset (offline fallback), cached after the first read.
+    private fun readEngineJs(): String {
+        remoteEngineJs?.let { return it }
+        return readBundledEngineJs()
     }
 
     // Paints a standalone grey backdrop + Velosia spinner the instant a form page begins
@@ -664,9 +872,11 @@ class MainActivity : AppCompatActivity() {
     // listing automatically.
     private fun injectAutofill(autoSubmit: Boolean) {
         val draftJson = activeDraftJson ?: return
+        // Re-check the page right before injecting: the delayed call may run after the
+        // WebView has already navigated somewhere else.
+        if (formPageOf(webView.url) == FormPage.NONE) return
         val escapedJson = draftJson.replace("\\", "\\\\").replace("'", "\\'")
         val zip = userZip?.replace("\\", "\\\\")?.replace("'", "\\'") ?: ""
-        val token = authToken?.replace("\\", "\\\\")?.replace("'", "\\'") ?: ""
         val engine = readEngineJs()
         if (engine.isEmpty()) {
             // The early backdrop (onPageStarted) would otherwise stay up forever since the
@@ -693,7 +903,7 @@ class MainActivity : AppCompatActivity() {
                         autoSubmit: $autoSubmit,
                         imageMode: 'bridge',
                         backendUrl: '$backendUrl',
-                        token: '$token',
+                        token: '',
                         showOverlay: true
                     });
                 } catch (e) { console.error('Velosia autofill failed', e); }
@@ -701,7 +911,8 @@ class MainActivity : AppCompatActivity() {
         """.trimIndent()
 
         webView.evaluateJavascript(engine) {
-            webView.evaluateJavascript(caller, null)
+            // The draft only goes into a listing-form page of the platforms.
+            if (formPageOf(webView.url) != FormPage.NONE) webView.evaluateJavascript(caller, null)
         }
     }
 
@@ -711,13 +922,11 @@ class MainActivity : AppCompatActivity() {
     // make it a single run regardless of how many times the URL is (re)visited.
     private fun maybeTriggerAutofill(url: String) {
         if (activeDraftJson == null) return
-        val isVintedForm = url.contains("vinted.de/items/new") ||
-            url.contains("vinted.fr/items/new")
+        val page = formPageOf(url)
         // Kleinanzeigen step 1 is only the category picker; the real form lives on
         // p-anzeige-aufgeben-schritt2.html, so we treat that as the fillable page.
-        val isKleinanzeigenCategory = url.contains("kleinanzeigen.de/p-anzeige-aufgeben.html")
-        val isKleinanzeigenForm = url.contains("kleinanzeigen.de/p-anzeige-aufgeben-schritt2")
-        val isFormPage = isVintedForm || isKleinanzeigenForm
+        val isKleinanzeigenCategory = page == FormPage.KA_CATEGORY
+        val isFormPage = page == FormPage.VINTED_FORM || page == FormPage.KA_FORM
 
         // On the actual form, fill once it has loaded. Whether it ALSO submits depends
         // on the user's "publish automatically" setting (default off -> the user
@@ -744,16 +953,22 @@ class MainActivity : AppCompatActivity() {
         val platform = activePlatform ?: return
         val token = authToken ?: return
 
+        // Only the platform's own https hosts count (host-exact, not a substring).
+        val uri = parseUri(url) ?: return
+        if (!isHttps(uri)) return
+        val host = uri.host?.lowercase() ?: return
+        val path = uri.path ?: ""
         val listingId = when (platform) {
             "vinted" -> {
-                if (url.contains("/items/new")) null
-                else Regex("/items/(\\d+)").find(url)?.groupValues?.get(1)
+                if (host !in vintedHosts || path.startsWith("/items/new")) null
+                else Regex("^/items/(\\d{1,15})").find(path)?.groupValues?.get(1)
             }
             // KA's rebuilt flow may land on a confirmation page (?adId=…) instead of
             // navigating straight to /s-anzeige/<slug>/<id> — so accept both.
             "kleinanzeigen" -> {
-                Regex("/s-anzeige/[^/]+/(\\d+)").find(url)?.groupValues?.get(1)
-                    ?: Regex("[?&]adId=(\\d+)").find(url)?.groupValues?.get(1)
+                if (host !in kleinanzeigenHosts) null
+                else Regex("^/s-anzeige/[^/]+/(\\d{1,15})").find(path)?.groupValues?.get(1)
+                    ?: uri.getQueryParameter("adId")?.takeIf { Regex("\\d{1,15}").matches(it) }
             }
             else -> null
         }
@@ -762,8 +977,8 @@ class MainActivity : AppCompatActivity() {
             // Diagnostic: while a KA capture is still pending, report any navigation that
             // leaves the listing form so we can confirm KA's real post-publish URL in the
             // Railway logs (the moment adId/s-anzeige both miss, this tells us what to add).
-            if (platform == "kleinanzeigen" && url.contains("kleinanzeigen.de")
-                && !url.startsWith(frontendUrl) && !url.contains("p-anzeige-aufgeben")) {
+            if (platform == "kleinanzeigen" && host in kleinanzeigenHosts
+                && !path.startsWith("/p-anzeige-aufgeben")) {
                 postDebug("ka_postpublish_nav", url.substringBefore('#'))
             }
             return
@@ -975,6 +1190,9 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun injectJwtToken(jwtToken: String) {
+        // The session token only ever goes into the Velosia frontend's own storage.
+        if (!isTrustedFrontend(webView.url)) return
+        if (!Regex("[A-Za-z0-9._-]+").matches(jwtToken)) return
         val js = """
             (function() {
                 localStorage.setItem('velosia_token', '$jwtToken');

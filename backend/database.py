@@ -24,7 +24,8 @@ else:
 
 # Diagnostic print statements for debugging Railway permissions
 print("--- DATABASE INITIALIZATION DIAGNOSTICS ---", flush=True)
-print(f"DATABASE_URL: {DATABASE_URL}", flush=True)
+# Only the scheme: a server URL could carry credentials.
+print(f"DATABASE_URL scheme: {DATABASE_URL.split(':', 1)[0]}", flush=True)
 try:
     print(f"Current UID: {os.getuid()}", flush=True)
     print(f"Current GID: {os.getgid()}", flush=True)

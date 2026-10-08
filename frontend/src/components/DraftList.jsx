@@ -1,7 +1,7 @@
 import React, { useRef, useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Tag, Sparkles, Trash2, Calendar, ShoppingBag, Camera, FolderHeart, ChevronRight, RefreshCw, AlertTriangle, Clock, Coins, ExternalLink, X } from 'lucide-react';
-import { getImageUrl, getAuthToken, setListingStatus } from '../utils/api';
+import { getImageUrl, setListingStatus } from '../utils/api';
 import { statusMeta, hasListing, listingPlatforms, draftSection, crossPostConflict, listingAgeDays, STALE_DAYS } from '../utils/listingStatus';
 
 // dd.mm for compact list signals.
@@ -640,7 +640,8 @@ function CrossPostSheet({ conflict, onClose }) {
     if (typeof window !== 'undefined'
         && window.VelosiaBridge
         && typeof window.VelosiaBridge.deleteOnPlatform === 'function') {
-      window.VelosiaBridge.deleteOnPlatform(draft.id, live.key, live.url || '', getAuthToken());
+      // The app only opens the ad here; it needs no API token for that.
+      window.VelosiaBridge.deleteOnPlatform(draft.id, live.key, live.url || '', '');
     } else if (live.url) {
       window.open(live.url, '_blank', 'noopener');
     }

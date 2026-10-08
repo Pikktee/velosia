@@ -3,6 +3,29 @@ let stream = null;
 let backendUrl = "https://api.velosia.henrikheil.net"; // Default to production
 let token = null;
 
+const CLIENT_HEADER = { "X-Velosia-Client": "ext/" + chrome.runtime.getManifest().version };
+
+// The camera runs as an iframe inside the platform page; messages go only to that
+// page's origin. Fallback "*" is used only if the origin cannot be determined —
+// the messages carry nothing but a draft id / close signal.
+const PLATFORM_ORIGIN_RE = /^https:\/\/([a-z0-9-]+\.)*(vinted\.de|vinted\.fr|kleinanzeigen\.de)$/;
+
+function parentOrigin() {
+  let origin = "";
+  try {
+    if (location.ancestorOrigins && location.ancestorOrigins.length) {
+      origin = location.ancestorOrigins[0];
+    } else if (document.referrer) {
+      origin = new URL(document.referrer).origin;
+    }
+  } catch (e) { origin = ""; }
+  return PLATFORM_ORIGIN_RE.test(origin) ? origin : "*";
+}
+
+function notifyParent(message) {
+  window.parent.postMessage(message, parentOrigin());
+}
+
 const video = document.getElementById("video");
 const canvas = document.getElementById("canvas");
 const btnShutter = document.getElementById("btn-shutter");
@@ -104,9 +127,7 @@ async function uploadAndAnalyze(file) {
 
     const response = await fetch(uploadUrl, {
       method: "POST",
-      headers: {
-        "Authorization": `Bearer ${token}`
-      },
+      headers: Object.assign({ "Authorization": `Bearer ${token}` }, CLIENT_HEADER),
       body: formData
     });
 
@@ -120,10 +141,10 @@ async function uploadAndAnalyze(file) {
     
     // Notify parent page that the draft is created
     stopCamera();
-    window.parent.postMessage({
+    notifyParent({
       type: "VELOSIA_DRAFT_CREATED",
-      draft: draft
-    }, "*");
+      draftId: draft && draft.id
+    });
 
   } catch (err) {
     console.error("Upload fehlgeschlagen:", err);
@@ -151,7 +172,7 @@ function showError(message) {
 // Close Camera (User Cancel)
 function closeCamera() {
   stopCamera();
-  window.parent.postMessage({ type: "VELOSIA_CLOSE_CAMERA" }, "*");
+  notifyParent({ type: "VELOSIA_CLOSE_CAMERA" });
 }
 
 // Listeners

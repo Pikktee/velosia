@@ -36,7 +36,7 @@
   // and in the extension it is a persistent content script — never redefine.
   if (window.__velosia && window.__velosia.__loaded) return;
 
-  var VERSION = "2.7.54";
+  var VERSION = "2.7.55";
 
   // ----------------------------------------------------------------------------
   // Low level helpers
@@ -2435,12 +2435,27 @@
   // can automatically detect when Vinted/Kleinanzeigen change their forms.
   // ----------------------------------------------------------------------------
 
+  // The Android shell exposes native helpers on window.VelosiaBridge. Newer app
+  // builds send telemetry/capture natively with the session they hold, so the
+  // engine needs no credentials in the page; the extension and older app builds
+  // still pass options.token and use fetch.
+  function nativeBridge(method) {
+    try {
+      var b = (typeof window !== "undefined") ? window.VelosiaBridge : null;
+      return (b && b[method]) ? b : null;
+    } catch (e) { return null; }
+  }
+
   function sendTelemetry(payload, options) {
     try {
+      payload.engine_version = VERSION;
+      var nb = nativeBridge("sendTelemetry");
+      if (nb) {
+        try { nb.sendTelemetry(JSON.stringify(payload)); return; } catch (e) { /* fall back to fetch */ }
+      }
       if (!options || !options.backendUrl) return;
       var headers = { "Content-Type": "application/json" };
       if (options.token) headers["Authorization"] = "Bearer " + options.token;
-      payload.engine_version = VERSION;
       fetch(options.backendUrl + "/api/telemetry/autofill", {
         method: "POST", headers: headers, body: JSON.stringify(payload), keepalive: true
       }).catch(function () {});
@@ -2549,17 +2564,19 @@
       var listingUrl = listingUrlFrom(item);
       console.log("Velosia: Vinted-Item erkannt -> id=" + item.id + " url=" + listingUrl);
       sendDebug({ event: "vinted_item_captured", id: String(item.id), url: listingUrl }, options);
-      // Backend capture (works on desktop too; idempotent server-side).
-      captureListing({
-        backendUrl: options.backendUrl, token: options.token,
-        draftId: draft.id, href: listingUrl
-      });
+      // Backend capture (works on desktop too; idempotent server-side). Skipped when
+      // no token was passed and the native shell captures instead (newer app builds).
+      var nb = nativeBridge("onListingPublished");
+      if (options.token || !nb) {
+        captureListing({
+          backendUrl: options.backendUrl, token: options.token,
+          draftId: draft.id, href: listingUrl
+        });
+      }
       // Native shell: let it capture authenticated + auto-close with a success
       // message. Harmless no-op in the browser extension (no bridge).
       try {
-        if (window.VelosiaBridge && window.VelosiaBridge.onListingPublished) {
-          window.VelosiaBridge.onListingPublished("vinted", String(item.id), listingUrl || "");
-        }
+        if (nb) nb.onListingPublished("vinted", String(item.id), listingUrl || "");
       } catch (e) {}
     }
 

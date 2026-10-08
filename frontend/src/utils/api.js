@@ -263,6 +263,22 @@ export const getDraft = async (id) => {
   return response.json();
 };
 
+// Short-lived token that only works for publishing this one draft. It is what
+// the Android shell receives for the platform WebView (Vinted/Kleinanzeigen),
+// so the session token never enters that context.
+export const getPlatformToken = async (draftId) => {
+  const response = await fetch(`${API_BASE_URL}/api/drafts/${draftId}/platform-token`, {
+    method: 'POST',
+    headers: getHeaders(),
+  });
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    throw new Error(errorData.detail || 'Veröffentlichen konnte nicht vorbereitet werden.');
+  }
+  const data = await response.json();
+  return data.token;
+};
+
 export const updateDraft = async (id, draftData) => {
   const response = await fetch(`${API_BASE_URL}/api/drafts/${id}`, {
     method: 'PUT',
@@ -300,6 +316,28 @@ export const deleteUserAccount = async () => {
     throw new Error('Fehler beim Löschen des Accounts.');
   }
 
+  return true;
+};
+
+// Set or replace the account password (e.g. after linking the account to Google,
+// so the e-mail/password login of the browser extension works). The server only
+// accepts this shortly after a sign-in and revokes all other sessions; the fresh
+// token it returns keeps this session signed in.
+export const setPassword = async (password) => {
+  const response = await fetch(`${API_BASE_URL}/api/auth/set-password`, {
+    method: 'POST',
+    headers: getHeaders(),
+    body: JSON.stringify({ password }),
+  });
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    const detail = typeof errorData.detail === 'string' ? errorData.detail : null;
+    const err = new Error(detail || 'Das Passwort konnte nicht gespeichert werden.');
+    err.status = response.status;
+    throw err;
+  }
+  const data = await response.json();
+  setAuthToken(data.access_token);
   return true;
 };
 

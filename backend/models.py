@@ -35,6 +35,9 @@ class User(Base):
     # Both maintained exclusively by consume_ai_quota() in main.py.
     ai_images_used = Column(Integer, default=0, nullable=True)
     ai_quota_reset_at = Column(DateTime, nullable=True)
+    # Token generation. Every session token carries it (`ver` claim); bumping it
+    # invalidates all tokens issued before (e.g. when an account is re-linked).
+    token_version = Column(Integer, default=0, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
 
     # Relationships
@@ -42,10 +45,16 @@ class User(Base):
 
     @property
     def is_admin(self) -> bool:
+        """Admin rights come only from the ADMIN_EMAILS environment variable
+        (comma-separated, no default). The stored address must match an entry
+        exactly in its normalized (lower-case) form, so a differently-cased
+        variant of an admin address never qualifies."""
         import os
-        admin_emails_str = os.getenv("ADMIN_EMAILS", "henrik.heil@gmail.com")
-        admin_emails = [email.strip().lower() for email in admin_emails_str.split(",")]
-        return self.email.lower() in admin_emails
+        admin_emails = {
+            e.strip().lower() for e in os.getenv("ADMIN_EMAILS", "").split(",") if e.strip()
+        }
+        email = self.email or ""
+        return bool(admin_emails) and email == email.strip().lower() and email in admin_emails
 
 class Draft(Base):
     __tablename__ = "drafts"

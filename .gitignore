@@ -46,3 +46,20 @@ android/play-deploy-key.json
 .claude/launch.json.vor-devhub
 .cursor/rules/devhub.local.mdc
 # <<< devhub
+
+# Secrets, keys & local databases (never commit)
+*.db
+*.sqlite
+*.sqlite3
+*.sqlite-*
+.env.*
+**/.env.*
+!.env.example
+!**/.env.example
+*.pem
+*.p12
+*.pfx
+*.keystore
+*.jks
+*-key.json
+*service-account*.json

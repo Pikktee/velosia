@@ -35,9 +35,11 @@ class Policy(NamedTuple):
 # --- Policies (one place to tune them) ---------------------------------------
 # Login limits count FAILED attempts only, so a normal user never hits them.
 #
-# The ACCOUNT limit is the actual brute-force defence: it is tied to the account
-# under attack, so it bites regardless of how many IPs the attacker rotates
-# through, and it can never lock out a bystander.
+# The (ACCOUNT, IP) limit is the hard brute-force stop: one source guessing one
+# account's password is cut off quickly. On top of it an account-wide limit
+# catches guessing spread over many IPs. That one is deliberately higher, so a
+# stranger typing someone else's address cannot lock the real owner out with a
+# handful of failed attempts.
 #
 # The IP limit is deliberately loose. Velosia is primarily a mobile app, and
 # mobile carriers put thousands of subscribers behind one CGNAT address — a
@@ -45,11 +47,16 @@ class Policy(NamedTuple):
 # the same carrier. It exists to blunt credential stuffing across many accounts
 # and to cap bcrypt CPU burn, not as the primary defence.
 LOGIN_IP = Policy(limit=40, window_s=300)          # 40 Fehlversuche / 5 min je IP
-LOGIN_ACCOUNT = Policy(limit=8, window_s=900)      # 8 Fehlversuche / 15 min je Konto
+LOGIN_ACCOUNT_IP = Policy(limit=8, window_s=900)   # 8 Fehlversuche / 15 min je (Konto, IP)
+LOGIN_ACCOUNT = Policy(limit=50, window_s=900)     # 50 Fehlversuche / 15 min je Konto (alle IPs)
 REGISTER_IP = Policy(limit=5, window_s=3600)       # 5 neue Konten / Stunde je IP
 GOOGLE_IP = Policy(limit=30, window_s=300)         # Google-Login (Token-Verify)
 WAITLIST_IP = Policy(limit=5, window_s=3600)       # Warteliste (öffentlich, mailt uns)
 BUGREPORT_USER = Policy(limit=12, window_s=3600)   # Bug-Reports (speichern Screenshots)
+PLATFORM_TOKEN_USER = Policy(limit=30, window_s=3600)  # Plattform-Token je Nutzer
+TELEMETRY_USER = Policy(limit=60, window_s=3600)   # Autofill-Telemetrie je Nutzer
+DEBUG_BEACON_IP = Policy(limit=120, window_s=3600) # Diagnose-Beacon je IP (nur wenn aktiviert)
+SET_PASSWORD_USER = Policy(limit=5, window_s=3600) # Passwort festlegen je Nutzer
 
 # Escape hatch for local development and tests.
 DISABLED = os.getenv("RATE_LIMIT_DISABLED", "").lower() in ("1", "true", "yes")

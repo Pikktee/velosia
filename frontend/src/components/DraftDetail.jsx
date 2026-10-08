@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { ArrowLeft, Copy, Check, ExternalLink, Monitor, RefreshCw, AlertCircle, Trash2, Plus, Sparkles, Upload, Share2, Camera, TrendingUp, ChevronDown, ChevronLeft, ChevronRight, Star, Tag, Coins } from 'lucide-react';
-import { updateDraft, getImageUrl, getAuthToken, uploadDraftImages, deleteDraftImage, regenerateDraftField, refreshListingStatus, setListingStatus } from '../utils/api';
+import { updateDraft, getImageUrl, getPlatformToken, uploadDraftImages, deleteDraftImage, regenerateDraftField, refreshListingStatus, setListingStatus } from '../utils/api';
 import { statusMeta, listingPlatforms, TERMINAL } from '../utils/listingStatus';
 import { showError } from '../utils/toast';
 
@@ -208,16 +208,26 @@ export default function DraftDetail({ draft, onBack, onUpdateSuccess }) {
     setTimeout(() => setCopiedField(null), 2000);
   };
 
-  const handlePostInApp = (platform) => {
+  const handlePostInApp = async (platform) => {
     if (isAndroidApp) {
       if (navigator.vibrate) {
         try { navigator.vibrate([15]); } catch (e) { /* ignore */ }
+      }
+      // The app hands this token to the platform page, so it gets a draft-scoped
+      // one rather than the session token.
+      let platformToken;
+      try {
+        platformToken = await getPlatformToken(draft.id);
+      } catch (err) {
+        console.error(err);
+        showError(err.message || 'Veröffentlichen konnte nicht vorbereitet werden.', () => handlePostInApp(platform));
+        return;
       }
       // Remember which draft we're publishing so that returning from the platform
       // WebView (back gesture OR after a successful publish) lands back on THIS
       // detail page instead of the list. App.jsx reads this marker on (re)mount.
       try { localStorage.setItem('velosia_return_draft', String(draft.id)); } catch (e) { /* ignore */ }
-      window.VelosiaBridge.postToPlatform(draft.id, platform, getAuthToken());
+      window.VelosiaBridge.postToPlatform(draft.id, platform, platformToken);
     }
   };
 
@@ -745,6 +755,7 @@ export default function DraftDetail({ draft, onBack, onUpdateSuccess }) {
           <textarea
             id="edit-desc"
             className="form-control"
+            maxLength={5000}
             value={description}
             onChange={(e) => setDescription(e.target.value)}
             placeholder={regeneratingField === 'description' ? "Generiere..." : "Verkaufsbeschreibung schreiben..."}

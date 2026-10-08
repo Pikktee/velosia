@@ -53,7 +53,11 @@
 
       fetch(backendUrl + "/api/listings/published", {
         method: "POST",
-        headers: { "Content-Type": "application/json", "Authorization": "Bearer " + token },
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": "Bearer " + token,
+          "X-Velosia-Client": "ext/" + chrome.runtime.getManifest().version
+        },
         body: JSON.stringify({
           draft_id: pc.draftId,
           platform: info.platform,

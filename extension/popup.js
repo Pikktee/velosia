@@ -1,5 +1,12 @@
 let backendUrl = "https://api.velosia.henrikheil.net"; // Default to production
 
+// Identifies API requests made by the extension (version from the manifest).
+const CLIENT_HEADER = { "X-Velosia-Client": "ext/" + chrome.runtime.getManifest().version };
+
+function authHeaders(token) {
+  return Object.assign({ "Authorization": `Bearer ${token}` }, CLIENT_HEADER);
+}
+
 document.addEventListener("DOMContentLoaded", async () => {
   const statusBadge = document.getElementById("status");
   const loginView = document.getElementById("login-view");
@@ -67,7 +74,7 @@ document.addEventListener("DOMContentLoaded", async () => {
       statusBadge.className = "status-badge disconnected";
 
       const response = await fetch(`${backendUrl}/api/auth/me`, {
-        headers: { "Authorization": `Bearer ${token}` }
+        headers: authHeaders(token)
       });
       
       if (response.ok) {
@@ -96,7 +103,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     try {
       const response = await fetch(`${backendUrl}/api/auth/login`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: Object.assign({ "Content-Type": "application/json" }, CLIENT_HEADER),
         body: JSON.stringify({ email, password })
       });
 
@@ -165,7 +172,7 @@ async function loadDrafts() {
 
     try {
       const meRes = await fetch(`${backendUrl}/api/auth/me`, {
-        headers: { "Authorization": `Bearer ${token}` }
+        headers: authHeaders(token)
       });
       if (meRes.ok) {
         const me = await meRes.json();
@@ -175,7 +182,7 @@ async function loadDrafts() {
 
     try {
       const res = await fetch(`${backendUrl}/api/drafts`, {
-        headers: { "Authorization": `Bearer ${token}` }
+        headers: authHeaders(token)
       });
       if (!res.ok) throw new Error();
       renderDrafts(await res.json());
@@ -198,31 +205,51 @@ function renderDrafts(drafts) {
   if (statusEl) statusEl.textContent = `${drafts.length} ${drafts.length === 1 ? "Angebot" : "Angebote"}:`;
 
   drafts.forEach((draft) => {
-    const imgPath = draft.image_path || "";
-    const imageUrl = imgPath
-      ? (imgPath.startsWith("http") ? imgPath : `${backendUrl}${imgPath}`)
-      : "";
     const card = document.createElement("div");
     card.style.cssText = "background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.07); border-radius:8px; padding:8px; display:flex; gap:8px; align-items:center;";
-    card.innerHTML = `
-      <img src="${imageUrl}" style="width:40px; height:40px; object-fit:cover; border-radius:5px; background:#000; flex-shrink:0;" />
-      <div style="flex-grow:1; min-width:0;">
-        <div style="font-size:12px; font-weight:600; color:#f8fafc; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${escapeHtml(draft.title || "Unbenannt")}</div>
-        <div style="font-size:11px; color:#09b0b7; font-weight:bold;">${draft.price != null ? Math.round(draft.price) + " €" : ""}</div>
-      </div>
-      <div style="display:flex; flex-direction:column; gap:4px; flex-shrink:0;">
-        <button data-id="${draft.id}" data-platform="vinted" class="velosia-launch" style="background:#09b0b7; color:#000; border:none; border-radius:5px; font-size:10px; font-weight:bold; padding:4px 8px; cursor:pointer; white-space:nowrap;">Vinted</button>
-        <button data-id="${draft.id}" data-platform="kleinanzeigen" class="velosia-launch" style="background:rgba(255,255,255,0.08); color:#f8fafc; border:1px solid rgba(255,255,255,0.12); border-radius:5px; font-size:10px; font-weight:bold; padding:4px 8px; cursor:pointer; white-space:nowrap;">Kleinanz.</button>
-      </div>
-    `;
+
+    const img = document.createElement("img");
+    img.style.cssText = "width:40px; height:40px; object-fit:cover; border-radius:5px; background:#000; flex-shrink:0;";
+    img.alt = "";
+    const imageUrl = draftImageUrl(draft.image_path);
+    if (imageUrl) img.src = imageUrl;
+
+    const info = document.createElement("div");
+    info.style.cssText = "flex-grow:1; min-width:0;";
+    const title = document.createElement("div");
+    title.style.cssText = "font-size:12px; font-weight:600; color:#f8fafc; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;";
+    title.textContent = draft.title || "Unbenannt";
+    const price = document.createElement("div");
+    price.style.cssText = "font-size:11px; color:#09b0b7; font-weight:bold;";
+    price.textContent = draft.price != null && Number.isFinite(Number(draft.price))
+      ? Math.round(Number(draft.price)) + " €"
+      : "";
+    info.appendChild(title);
+    info.appendChild(price);
+
+    const actions = document.createElement("div");
+    actions.style.cssText = "display:flex; flex-direction:column; gap:4px; flex-shrink:0;";
+    const draftId = Number(draft.id);
+    [
+      { platform: "vinted", label: "Vinted", style: "background:#09b0b7; color:#000; border:none;" },
+      { platform: "kleinanzeigen", label: "Kleinanz.", style: "background:rgba(255,255,255,0.08); color:#f8fafc; border:1px solid rgba(255,255,255,0.12);" }
+    ].forEach((p) => {
+      const btn = document.createElement("button");
+      btn.className = "velosia-launch";
+      btn.textContent = p.label;
+      btn.style.cssText = p.style + " border-radius:5px; font-size:10px; font-weight:bold; padding:4px 8px; cursor:pointer; white-space:nowrap;";
+      btn.addEventListener("click", () => {
+        if (Number.isInteger(draftId)) startAutofill(draftId, p.platform);
+      });
+      actions.appendChild(btn);
+    });
+
+    card.appendChild(img);
+    card.appendChild(info);
+    card.appendChild(actions);
     listEl.appendChild(card);
   });
 
-  listEl.querySelectorAll(".velosia-launch").forEach((btn) => {
-    btn.addEventListener("click", () => {
-      startAutofill(parseInt(btn.dataset.id, 10), btn.dataset.platform);
-    });
-  });
 }
 
 // Queue the draft for autofill, then open the platform's "new listing" page in a
@@ -241,8 +268,12 @@ function startAutofill(draftId, platform) {
   });
 }
 
-function escapeHtml(str) {
-  const div = document.createElement("div");
-  div.textContent = str == null ? "" : String(str);
-  return div.innerHTML;
+// Resolve a draft image path to an absolute URL on our backend's /uploads.
+// Anything else (foreign hosts, other schemes) is not rendered.
+function draftImageUrl(path) {
+  if (!path || typeof path !== "string") return "";
+  const prefix = `${backendUrl}/uploads/`;
+  if (path.startsWith("/uploads/")) return `${backendUrl}${path}`;
+  if (path.startsWith(prefix)) return path;
+  return "";
 }

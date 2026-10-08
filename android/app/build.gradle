@@ -27,13 +27,9 @@ android {
     namespace 'com.velosia.app'
     compileSdk 35
 
+    // Debug builds use the Android SDK's standard per-machine debug key
+    // (~/.android/debug.keystore); no key material lives in the repository.
     signingConfigs {
-        debug {
-            storeFile file("debug.keystore")
-            storePassword "android"
-            keyAlias "androiddebugkey"
-            keyPassword "android"
-        }
         if (hasReleaseKeystore) {
             release {
                 storeFile file(keystoreProperties['storeFile'])
@@ -48,16 +44,13 @@ android {
         applicationId "com.velosia.app"
         minSdk 26
         targetSdk 35
-        versionCode 220
-        versionName "2.7.50"
+        versionCode 221
+        versionName "2.7.51"
 
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
     }
 
     buildTypes {
-        debug {
-            signingConfig signingConfigs.debug
-        }
         release {
             // Real upload key when keystore.properties is present; debug key only as
             // a local fallback (never ship a debug-signed bundle to Play).

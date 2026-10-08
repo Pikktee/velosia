@@ -1,44 +1,26 @@
 // Velosia Session Sync Script
 console.log("Velosia Session Sync Script geladen!");
 
-// Inject code to read page's localStorage and post a message to the content script
+// Content scripts share the page origin's localStorage, so the session can be read
+// directly — no script injection into the page and no window.postMessage round trip.
 function syncSession() {
-  const scriptContent = `
-    (function() {
-      const token = localStorage.getItem('velosia_token');
-      const email = localStorage.getItem('velosia_user_email');
-      window.postMessage({ 
-        type: 'VELOSIA_SYNC_SESSION', 
-        token: token, 
-        email: email 
-      }, '*');
-    })();
-  `;
-  
-  const script = document.createElement('script');
-  script.textContent = scriptContent;
-  (document.head || document.documentElement).appendChild(script);
-  script.remove();
-}
-
-// Listen for messages from the page context
-window.addEventListener('message', (event) => {
-  // Only accept messages from our own window and matching the type
-  if (event.source !== window || !event.data || event.data.type !== 'VELOSIA_SYNC_SESSION') {
+  let token = null;
+  let email = null;
+  try {
+    token = window.localStorage.getItem('velosia_token');
+    email = window.localStorage.getItem('velosia_user_email');
+  } catch (e) {
     return;
   }
 
-  const { token, email } = event.data;
-
-  // Read current saved session first to avoid redundant writing
-  const isProd = window.location.hostname.includes("velosia.henrikheil.net");
+  const isProd = window.location.hostname === "velosia.henrikheil.net";
   const detectedBackendUrl = isProd ? "https://api.velosia.henrikheil.net" : "http://localhost:8000";
 
   chrome.storage.local.get(['velosia_token', 'velosia_user_email', 'velosia_backend_url'], (result) => {
     if (token) {
       if (result.velosia_token !== token || result.velosia_user_email !== email || result.velosia_backend_url !== detectedBackendUrl) {
-        chrome.storage.local.set({ 
-          velosia_token: token, 
+        chrome.storage.local.set({
+          velosia_token: token,
           velosia_user_email: email || 'Google-Nutzer',
           velosia_backend_url: detectedBackendUrl
         }, () => {
@@ -54,7 +36,7 @@ window.addEventListener('message', (event) => {
       }
     }
   });
-});
+}
 
 // Run once on load
 syncSession();

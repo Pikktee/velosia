@@ -119,6 +119,7 @@ export default function BugReportModal({ onClose, currentView }) {
                 placeholder="Bitte beschreibe kurz, was passiert ist und wie man den Fehler reproduzieren kann."
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
+                maxLength={5000}
                 required
                 disabled={isSubmitting}
                 style={{ minHeight: '150px' }}
