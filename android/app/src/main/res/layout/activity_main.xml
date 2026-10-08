@@ -2,9 +2,15 @@
 <androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://tools.android.com/apk/res-auto"
+    android:id="@+id/root"
     android:layout_width="match_parent"
-    android:layout_height="match_parent">
+    android:layout_height="match_parent"
+    android:background="#0e121a">
 
+    <!-- Edge-to-edge (enforced from targetSdk 35, no opt-out at 36): MainActivity
+         pads this root by the system-bar, display-cutout and keyboard insets, so the
+         WebView never sits under the status/navigation bar or the IME. The padded
+         strips show this background (the old statusBarColor is ignored on API 35+). -->
     <android.webkit.WebView
         android:id="@+id/webView"
         android:layout_width="match_parent"
@@ -18,7 +24,7 @@
         android:id="@+id/fabClose"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:layout_marginTop="64dp"
+        android:layout_marginTop="40dp"
         android:layout_marginEnd="16dp"
         android:text="✕ Schließen"
         android:textColor="#FFFFFF"

@@ -25,7 +25,7 @@ if (hasReleaseKeystore) {
 
 android {
     namespace 'com.velosia.app'
-    compileSdk 35
+    compileSdk 36
 
     // Debug builds use the Android SDK's standard per-machine debug key
     // (~/.android/debug.keystore); no key material lives in the repository.
@@ -43,9 +43,9 @@ android {
     defaultConfig {
         applicationId "com.velosia.app"
         minSdk 26
-        targetSdk 35
-        versionCode 221
-        versionName "2.7.51"
+        targetSdk 36
+        versionCode 222
+        versionName "2.7.52"
 
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
     }

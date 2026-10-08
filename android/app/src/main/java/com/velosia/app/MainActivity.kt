@@ -14,9 +14,13 @@ import android.view.View
 import android.view.ViewGroup
 import android.webkit.*
 import android.widget.Toast
+import androidx.activity.OnBackPressedCallback
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
 import com.google.android.gms.auth.api.signin.GoogleSignIn
 import com.google.android.gms.auth.api.signin.GoogleSignInOptions
 import com.google.android.gms.common.api.ApiException
@@ -250,7 +254,16 @@ class MainActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // Edge-to-edge is enforced from targetSdk 35 and can no longer be opted out of
+        // at 36. Draw edge-to-edge on every API level (uniform behaviour) and pad the
+        // root container by the insets ourselves — see applyWindowInsets().
+        WindowCompat.setDecorFitsSystemWindows(window, false)
         setContentView(R.layout.activity_main)
+        applyWindowInsets(findViewById(R.id.root))
+
+        // Back handling via the dispatcher: with targetSdk 36 predictive back is on by
+        // default and Activity.onBackPressed() is no longer called by the system.
+        onBackPressedDispatcher.addCallback(this, backCallback)
 
         // Request runtime camera permission
         checkCameraPermission()
@@ -1258,8 +1271,28 @@ class MainActivity : AppCompatActivity() {
         super.onDestroy()
     }
 
-    @Deprecated("Deprecated in Java")
-    override fun onBackPressed() {
+    // Pad the root by status/navigation bar, display cutout and keyboard (IME) insets.
+    // The WebView (and the Close FAB, which is laid out inside the root) therefore
+    // never sits under a system bar, and the WebView shrinks above the keyboard so
+    // Chromium scrolls the focused Vinted/KA input into view (adjustResize no longer
+    // resizes an edge-to-edge window). The insets are consumed here, so pages see
+    // env(safe-area-inset-*) = 0 and the frontend does not pad a second time.
+    private fun applyWindowInsets(root: View) {
+        ViewCompat.setOnApplyWindowInsetsListener(root) { v, insets ->
+            val bars = insets.getInsets(
+                WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout()
+            )
+            val ime = insets.getInsets(WindowInsetsCompat.Type.ime())
+            v.setPadding(bars.left, bars.top, bars.right, maxOf(bars.bottom, ime.bottom))
+            WindowInsetsCompat.CONSUMED
+        }
+    }
+
+    private val backCallback = object : OnBackPressedCallback(true) {
+        override fun handleOnBackPressed() = handleBack()
+    }
+
+    private fun handleBack() {
         // On an external platform page during a publish session, back mirrors the
         // Close (X) button: abort and return to the dashboard, which then restores
         // the draft's detail view (via the velosia_return_draft marker the frontend
@@ -1279,7 +1312,11 @@ class MainActivity : AppCompatActivity() {
                     if (webView.canGoBack()) {
                         webView.goBack()
                     } else {
-                        super.onBackPressed()
+                        // Nothing left to go back to: hand back to the system default
+                        // (moves the task to the background, as before).
+                        backCallback.isEnabled = false
+                        onBackPressedDispatcher.onBackPressed()
+                        backCallback.isEnabled = true
                     }
                 }
             }
