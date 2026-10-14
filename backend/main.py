@@ -14,6 +14,8 @@ import secrets
 from datetime import datetime, timedelta, timezone
 from typing import List, Optional
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from contextlib import contextmanager
+import contextvars
 
 import models
 import schemas
@@ -22,6 +24,7 @@ import signed_urls
 import image_store
 from database import engine, get_db
 from services.gemini_service import analyze_item_image, group_images_by_offer
+from services import ai_usage
 from services.notifications import send_email
 from auth_utils import (
     verify_password, get_password_hash, decode_access_token, create_user_token,
@@ -131,6 +134,12 @@ def run_migrations():
         # Rolling 24h AI image quota (cost control, added V2.7.39)
         ("ai_images_used", "INTEGER DEFAULT 0"),
         ("ai_quota_reset_at", "DATETIME"),
+        # Real Gemini token totals for the admin cost overview (added V2.7.53)
+        ("ai_calls", "INTEGER DEFAULT 0"),
+        ("ai_prompt_tokens", "INTEGER DEFAULT 0"),
+        ("ai_output_tokens", "INTEGER DEFAULT 0"),
+        ("ai_thinking_tokens", "INTEGER DEFAULT 0"),
+        ("ai_usage_since", "DATETIME"),
         # Token generation (see models.User.token_version)
         ("token_version", "INTEGER DEFAULT 0"),
     ]:
@@ -180,7 +189,7 @@ run_migrations()
 _API_DOCS = os.getenv("ENABLE_API_DOCS", "").lower() in ("1", "true", "yes")
 app = FastAPI(
     title="Velosia API",
-    version="2.7.52",
+    version="2.7.53",
     docs_url="/docs" if _API_DOCS else None,
     redoc_url="/redoc" if _API_DOCS else None,
     openapi_url="/openapi.json" if _API_DOCS else None,
@@ -1008,6 +1017,43 @@ def _check_global_cap(db: Session, images: int, now: datetime) -> None:
         )
 
 
+@contextmanager
+def track_ai_usage(db: Session, user: models.User):
+    """Zählt die Gemini-Token aller KI-Aufrufe im Block und schreibt sie dem
+    Nutzer gut, auch wenn der Block mit einem Fehler endet (bezahlt ist dann
+    meist trotzdem schon)."""
+    with ai_usage.track() as tally:
+        try:
+            yield tally
+        finally:
+            record_ai_usage(db, user, tally)
+
+
+def record_ai_usage(db: Session, user: models.User, tally: "ai_usage.UsageTally") -> None:
+    """Addiert ein Tally atomar auf die Token-Spalten des Nutzers. Wirft nie:
+    eine verlorene Zählung darf keine fertige Analyse kaputtmachen."""
+    if tally.empty:
+        return
+    U = models.User
+    try:
+        db.execute(
+            update(U)
+            .where(U.id == user.id)
+            .values(
+                ai_calls=func.coalesce(U.ai_calls, 0) + tally.calls,
+                ai_prompt_tokens=func.coalesce(U.ai_prompt_tokens, 0) + tally.prompt_tokens,
+                ai_output_tokens=func.coalesce(U.ai_output_tokens, 0) + tally.output_tokens,
+                ai_thinking_tokens=func.coalesce(U.ai_thinking_tokens, 0) + tally.thinking_tokens,
+                ai_usage_since=func.coalesce(U.ai_usage_since, datetime.utcnow()),
+            )
+            .execution_options(synchronize_session=False)
+        )
+        db.commit()
+    except Exception as e:
+        db.rollback()
+        print(f"Velosia: Token-Verbrauch konnte nicht gespeichert werden: {e}", flush=True)
+
+
 def consume_ai_quota(db: Session, user: models.User, images: int) -> None:
     """Charge `images` against the user's rolling 24h AI quota, or raise 429.
 
@@ -1143,7 +1189,8 @@ def upload_and_analyze(
 
     # Step-by-step AI + Live Scraper analysis
     try:
-        analysis = analyze_item_image(local_paths, user=current_user, user_condition=condition, user_details=details)
+        with track_ai_usage(db, current_user):
+            analysis = analyze_item_image(local_paths, user=current_user, user_condition=condition, user_details=details)
     except Exception as e:
         _remove_local_files(local_paths)
         raise ai_failure(db, e, "KI-Analyse")
@@ -1204,31 +1251,36 @@ def upload_turbo(
 
     _cleanup = _remove_local_files
 
-    # 2. Let the AI group photos into separate offers (robust, never raises)
-    try:
-        groups = group_images_by_offer(local_paths)
-    except Exception:
-        groups = [list(range(len(local_paths)))]
-    if not groups:
-        groups = [list(range(len(local_paths)))]
+    with track_ai_usage(db, current_user):
+        # 2. Let the AI group photos into separate offers (robust, never raises)
+        try:
+            groups = group_images_by_offer(local_paths)
+        except Exception:
+            groups = [list(range(len(local_paths)))]
+        if not groups:
+            groups = [list(range(len(local_paths)))]
 
-    # 3. Analyze each group in parallel (analyze_item_image is sync + network-bound)
-    def analyze_group(group):
-        group_local = [local_paths[i] for i in group]
-        return analyze_item_image(group_local, user=current_user, user_condition=None, user_details=None)
+        # 3. Analyze each group in parallel (analyze_item_image is sync + network-bound)
+        def analyze_group(group):
+            group_local = [local_paths[i] for i in group]
+            return analyze_item_image(group_local, user=current_user, user_condition=None, user_details=None)
 
-    results = [None] * len(groups)
-    errors = []
-    max_workers = min(len(groups), 4)
-    with ThreadPoolExecutor(max_workers=max_workers) as executor:
-        future_to_idx = {executor.submit(analyze_group, groups[i]): i for i in range(len(groups))}
-        for future in as_completed(future_to_idx):
-            idx = future_to_idx[future]
-            try:
-                results[idx] = future.result()
-            except Exception as e:
-                print(f"Velosia Turbo: Analyse von Gruppe {idx} fehlgeschlagen: {e}", flush=True)
-                errors.append(e)
+        results = [None] * len(groups)
+        errors = []
+        max_workers = min(len(groups), 4)
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            # copy_context: worker threads must see the active token tally.
+            future_to_idx = {
+                executor.submit(contextvars.copy_context().run, analyze_group, groups[i]): i
+                for i in range(len(groups))
+            }
+            for future in as_completed(future_to_idx):
+                idx = future_to_idx[future]
+                try:
+                    results[idx] = future.result()
+                except Exception as e:
+                    print(f"Velosia Turbo: Analyse von Gruppe {idx} fehlgeschlagen: {e}", flush=True)
+                    errors.append(e)
 
     # 4. Persist one draft per successfully analyzed group
     created_drafts = []
@@ -1524,7 +1576,8 @@ def regenerate_draft_field_endpoint(
 
     from services.gemini_service import regenerate_draft_field
     try:
-        new_val = regenerate_draft_field(image_paths, req.field, user=current_user)
+        with track_ai_usage(db, current_user):
+            new_val = regenerate_draft_field(image_paths, req.field, user=current_user)
     except Exception as e:
         raise ai_failure(db, e, "KI-Regeneration")
 
@@ -2066,10 +2119,51 @@ def list_waitlist(
 
 
 # --- Admin user management ---------------------------------------------------
-# Per-image estimate (EUR) for the admin cost overview. There is no real token
-# accounting yet, so cost is ESTIMATED from the number of analysed images
-# (Gemini Vision dominates the bill). Tunable via env without a redeploy.
+# AI cost in the admin overview comes from the real Gemini token counts
+# (users.ai_*_tokens, see record_ai_usage) times these prices in EUR per million
+# tokens. Defaults = gemini-2.5-flash paid tier (USD 0.30 input incl. images /
+# USD 2.50 output) at ~0.86 EUR/USD. Thinking tokens are billed as output.
+# Tunable via env without a redeploy (e.g. after a model or price change).
+AI_PRICE_INPUT_EUR_PER_M = float(os.getenv("AI_PRICE_INPUT_EUR_PER_M", "0.26"))
+AI_PRICE_OUTPUT_EUR_PER_M = float(os.getenv("AI_PRICE_OUTPUT_EUR_PER_M", "2.15"))
+# Fallback only for drafts created before token counting began (legacy rows):
+# those are still ESTIMATED per image.
 EST_COST_PER_IMAGE_EUR = float(os.getenv("EST_COST_PER_IMAGE_EUR", "0.0025"))
+
+
+def _admin_user_row(u: models.User) -> schemas.AdminUserResponse:
+    drafts = u.drafts  # relationship; small user base, N+1 is fine here
+    image_count = sum(_count_draft_images(d) for d in drafts)
+    since = getattr(u, "ai_usage_since", None)
+    legacy_images = sum(
+        _count_draft_images(d) for d in drafts
+        if since is None or (d.created_at is not None and d.created_at < since)
+    )
+    prompt_t = u.ai_prompt_tokens or 0
+    output_t = u.ai_output_tokens or 0
+    thinking_t = u.ai_thinking_tokens or 0
+    token_cost = (
+        prompt_t * AI_PRICE_INPUT_EUR_PER_M
+        + (output_t + thinking_t) * AI_PRICE_OUTPUT_EUR_PER_M
+    ) / 1_000_000
+    legacy_cost = legacy_images * EST_COST_PER_IMAGE_EUR
+    return schemas.AdminUserResponse(
+        id=u.id,
+        email=u.email,
+        created_at=u.created_at,
+        is_admin=u.is_admin,
+        is_blocked=bool(getattr(u, "is_blocked", False)),
+        draft_count=len(drafts),
+        image_count=image_count,
+        est_cost_eur=round(token_cost + legacy_cost, 4),
+        token_cost_eur=round(token_cost, 4),
+        legacy_cost_eur=round(legacy_cost, 4),
+        legacy_image_count=legacy_images,
+        ai_calls=u.ai_calls or 0,
+        ai_prompt_tokens=prompt_t,
+        ai_output_tokens=output_t,
+        ai_thinking_tokens=thinking_t,
+    )
 
 
 def _count_draft_images(draft: models.Draft) -> int:
@@ -2086,26 +2180,12 @@ def admin_list_users(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user),
 ):
-    """Admin-only: all users with usage stats + estimated AI cost."""
+    """Admin-only: all users with usage stats + AI cost (token-based)."""
     if not current_user.is_admin:
         raise HTTPException(status_code=403, detail="Not authorized")
 
     users = db.query(models.User).order_by(models.User.created_at.desc()).all()
-    out = []
-    for u in users:
-        drafts = u.drafts  # relationship; small user base, N+1 is fine here
-        image_count = sum(_count_draft_images(d) for d in drafts)
-        out.append(schemas.AdminUserResponse(
-            id=u.id,
-            email=u.email,
-            created_at=u.created_at,
-            is_admin=u.is_admin,
-            is_blocked=bool(getattr(u, "is_blocked", False)),
-            draft_count=len(drafts),
-            image_count=image_count,
-            est_cost_eur=round(image_count * EST_COST_PER_IMAGE_EUR, 4),
-        ))
-    return out
+    return [_admin_user_row(u) for u in users]
 
 
 @app.post("/api/admin/users/{user_id}/block", response_model=schemas.AdminUserResponse)
@@ -2130,14 +2210,7 @@ def admin_block_user(
     db.commit()
     db.refresh(target)
 
-    drafts = target.drafts
-    image_count = sum(_count_draft_images(d) for d in drafts)
-    return schemas.AdminUserResponse(
-        id=target.id, email=target.email, created_at=target.created_at,
-        is_admin=target.is_admin, is_blocked=bool(target.is_blocked),
-        draft_count=len(drafts), image_count=image_count,
-        est_cost_eur=round(image_count * EST_COST_PER_IMAGE_EUR, 4),
-    )
+    return _admin_user_row(target)
 
 
 @app.delete("/api/admin/users/{user_id}", status_code=status.HTTP_204_NO_CONTENT)

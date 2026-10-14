@@ -35,6 +35,15 @@ class User(Base):
     # Both maintained exclusively by consume_ai_quota() in main.py.
     ai_images_used = Column(Integer, default=0, nullable=True)
     ai_quota_reset_at = Column(DateTime, nullable=True)
+    # Echte Gemini-Token-Summen für die Kostenübersicht im Admin-Panel. Rein
+    # additiv (nie zurückgesetzt, auch nicht beim Löschen von Entwürfen); gepflegt
+    # von record_ai_usage() in main.py. `ai_usage_since` = erster gezählter
+    # Aufruf; davor angelegte Entwürfe werden weiter pro Bild geschätzt.
+    ai_calls = Column(Integer, default=0, nullable=True)
+    ai_prompt_tokens = Column(Integer, default=0, nullable=True)
+    ai_output_tokens = Column(Integer, default=0, nullable=True)
+    ai_thinking_tokens = Column(Integer, default=0, nullable=True)
+    ai_usage_since = Column(DateTime, nullable=True)
     # Token generation. Every session token carries it (`ver` claim); bumping it
     # invalidates all tokens issued before (e.g. when an account is re-linked).
     token_version = Column(Integer, default=0, nullable=True)

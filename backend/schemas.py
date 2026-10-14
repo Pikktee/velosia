@@ -269,7 +269,16 @@ class AdminUserResponse(BaseModel):
     is_blocked: bool
     draft_count: int
     image_count: int
+    # Gesamtkosten = token_cost_eur (echte Gemini-Token) + legacy_cost_eur
+    # (Bild-Schätzung nur für Entwürfe vor Beginn der Token-Zählung).
     est_cost_eur: float
+    token_cost_eur: float = 0.0
+    legacy_cost_eur: float = 0.0
+    legacy_image_count: int = 0
+    ai_calls: int = 0
+    ai_prompt_tokens: int = 0
+    ai_output_tokens: int = 0
+    ai_thinking_tokens: int = 0
 
 class UserBlockRequest(BaseModel):
     blocked: bool

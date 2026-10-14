@@ -319,6 +319,25 @@ function WaitlistTab({ entries, onCopy, copied }) {
 }
 
 // -------------------------------------------------------------------- Users
+const totalTokens = (u) => (u.ai_prompt_tokens || 0) + (u.ai_output_tokens || 0) + (u.ai_thinking_tokens || 0);
+
+function formatTokens(n) {
+  if (n >= 1e6) return `${(n / 1e6).toLocaleString('de-DE', { maximumFractionDigits: 1 })} Mio.`;
+  if (n >= 1e3) return `${(n / 1e3).toLocaleString('de-DE', { maximumFractionDigits: 0 })} Tsd.`;
+  return String(n);
+}
+
+function costTooltip(u) {
+  const lines = [
+    `Token-basiert: € ${Number(u.token_cost_eur || 0).toFixed(4)} (${u.ai_calls || 0} KI-Aufrufe)`,
+    `Eingabe: ${(u.ai_prompt_tokens || 0).toLocaleString('de-DE')} · Ausgabe: ${(u.ai_output_tokens || 0).toLocaleString('de-DE')} · Thinking: ${(u.ai_thinking_tokens || 0).toLocaleString('de-DE')}`,
+  ];
+  if ((u.legacy_cost_eur || 0) > 0) {
+    lines.push(`Geschätzt (vor Token-Zählung, ${u.legacy_image_count} Bilder): € ${Number(u.legacy_cost_eur).toFixed(4)}`);
+  }
+  return lines.join('\n');
+}
+
 function UsersTab({ users, onToggleBlock, onDelete }) {
   if (users.length === 0) {
     return (
@@ -331,6 +350,9 @@ function UsersTab({ users, onToggleBlock, onDelete }) {
 
   const totalCost = users.reduce((s, u) => s + (u.est_cost_eur || 0), 0);
   const totalDrafts = users.reduce((s, u) => s + (u.draft_count || 0), 0);
+  // Kosten kommen aus echten Gemini-Token; nur Entwürfe von vor der Token-Zählung
+  // sind pro Bild geschätzt. Dann (und nur dann) kennzeichnet "~" den Betrag.
+  const anyLegacy = users.some((u) => (u.legacy_cost_eur || 0) > 0);
 
   return (
     <div>
@@ -338,7 +360,11 @@ function UsersTab({ users, onToggleBlock, onDelete }) {
       <div style={{ display: 'flex', gap: '0.75rem', marginBottom: '1.25rem', flexWrap: 'wrap' }}>
         <Stat icon={<Users size={15} />} label="Benutzer" value={users.length} />
         <Stat icon={<Package size={15} />} label="Entwürfe gesamt" value={totalDrafts} />
-        <Stat icon={<Euro size={15} />} label="Kosten gesamt (geschätzt)" value={`€ ${totalCost.toFixed(2)}`} />
+        <Stat
+          icon={<Euro size={15} />}
+          label={anyLegacy ? 'KI-Kosten gesamt (teils geschätzt)' : 'KI-Kosten gesamt'}
+          value={`${anyLegacy ? '~ ' : ''}€ ${totalCost.toFixed(2)}`}
+        />
       </div>
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
@@ -359,7 +385,12 @@ function UsersTab({ users, onToggleBlock, onDelete }) {
                 <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap', marginTop: '0.5rem', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
                   <span><Package size={11} style={{ verticalAlign: '-1px' }} /> {u.draft_count} Entwürfe</span>
                   <span>{u.image_count} Bilder</span>
-                  <span><Euro size={11} style={{ verticalAlign: '-1px' }} /> ~ € {Number(u.est_cost_eur).toFixed(2)}</span>
+                  <span title={costTooltip(u)}>
+                    <Euro size={11} style={{ verticalAlign: '-1px' }} /> {(u.legacy_cost_eur || 0) > 0 ? '~ ' : ''}€ {Number(u.est_cost_eur).toFixed(2)}
+                  </span>
+                  {(u.ai_calls || 0) > 0 && (
+                    <span style={{ color: 'var(--text-muted)' }}>{formatTokens(totalTokens(u))} Token</span>
+                  )}
                   <span style={{ color: 'var(--text-muted)' }}><Calendar size={11} style={{ verticalAlign: '-1px' }} /> {formatDate(u.created_at)}</span>
                 </div>
               </div>

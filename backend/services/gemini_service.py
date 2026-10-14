@@ -5,6 +5,7 @@ import re
 import json
 from dotenv import load_dotenv
 from services.price_comparison import search_marketplace_prices
+from services import ai_usage
 from data import kleinanzeigen_categories as kacat
 from data import kleinanzeigen_taxonomy as katax
 from data import vinted_taxonomy as vtax
@@ -46,6 +47,7 @@ def pick_vinted_category(title: str, description: str = "", search_query: str = 
         for mn in models_to_try:
             try:
                 resp = genai.GenerativeModel(mn).generate_content(prompt)
+                ai_usage.record(resp)
             except Exception as e:
                 print(f"Velosia Vinted-Kategorie: Modell '{mn}' fehlgeschlagen: {e}", flush=True)
                 continue
@@ -321,6 +323,7 @@ def group_images_by_offer(image_paths: List[str]) -> List[List[int]]:
                     parts,
                     generation_config={"response_mime_type": "application/json"}
                 )
+                ai_usage.record(response)
                 break
             except Exception as e:
                 print(f"Velosia Turbo: Modell '{model_name}' fehlgeschlagen bei Gruppierung: {e}")
@@ -392,6 +395,7 @@ def analyze_item_image(image_paths: List[str], user = None, user_condition: str 
                 print(f"Velosia: Calling Gemini with model '{model_name}'...")
                 model = genai.GenerativeModel(model_name)
                 id_response = model.generate_content([*imgs, identify_prompt])
+                ai_usage.record(id_response)
                 working_model_name = model_name
                 break
             except Exception as e:
@@ -489,6 +493,7 @@ def analyze_item_image(image_paths: List[str], user = None, user_condition: str 
                 [*imgs, final_prompt],
                 generation_config=generation_config
             )
+            ai_usage.record(response)
         except Exception as e:
             err_msg = str(e)
             if "quota" in err_msg.lower() or "429" in err_msg or "resource_exhausted" in err_msg.lower():
@@ -623,6 +628,7 @@ def regenerate_draft_field(image_paths: List[str], field: str, user = None) -> s
                 print(f"Velosia: Regenerating field '{field}' with model '{model_name}'...")
                 model = genai.GenerativeModel(model_name)
                 response = model.generate_content([*imgs, prompt])
+                ai_usage.record(response)
                 break
             except Exception as e:
                 print(f"Velosia: Model '{model_name}' failed during regeneration: {e}")
