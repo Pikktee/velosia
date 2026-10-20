@@ -140,8 +140,19 @@ def _strip_contact_data(text: str) -> str:
     return re.sub(r"[ \t]+(\n|$)", r"\1", text).strip()
 
 
+# Kleinanzeigen nimmt höchstens 65 Zeichen im Titel an; das Limit gilt für beide
+# Plattformen, weil ein Entwurf denselben Titel für Vinted und KA nutzt.
+TITLE_MAX = 65
+
+
 def _clean_generated_title(title: str) -> str:
-    return re.sub(r"\s+", " ", _strip_contact_data(title or "")).strip()
+    title = re.sub(r"\s+", " ", _strip_contact_data(title or "")).strip()
+    if len(title) <= TITLE_MAX:
+        return title
+    cut = title[:TITLE_MAX + 1].rsplit(" ", 1)[0] if " " in title[:TITLE_MAX + 1] else ""
+    if len(cut) < TITLE_MAX // 2:
+        cut = title[:TITLE_MAX]
+    return cut.rstrip(" ,;:-–(/").strip()
 
 
 def comparison_prompt_data(listings) -> str:
@@ -459,7 +470,7 @@ def analyze_item_image(image_paths: List[str], user = None, user_condition: str 
             "(inklusive der ' > '-Trenner) als Wert für 'category'. Erfinde keine eigenen Kategorien:\n"
             f"{selection_prompt}\n\n"
             "Erstelle eine strukturierte JSON-Antwort mit folgenden Feldern auf Deutsch:\n"
-            "- 'title': Ein aussagekräftiger Titel (max. 80 Zeichen), optimiert für Vinted/Kleinanzeigen.\n"
+            f"- 'title': Ein aussagekräftiger Titel (max. {TITLE_MAX} Zeichen, harte Grenze von Kleinanzeigen), optimiert für Vinted/Kleinanzeigen.\n"
             f"- 'description': {tone_instruction} Nenne wichtige Details (wie Schnitt, Muster). Füge KEINE Hashtags hinzu.{details_instruction}{framing_instruction}\n"
             f"- 'category': Eine WORTWÖRTLICH kopierte Zeile aus der obigen Kategorie-Liste (z.B. 'Elektronik > Haushaltsgeräte > Staubsauger').\n"
             "- 'attributes': Ein JSON-Objekt mit passenden Zusatzfeldern für das Inserat. Übliche Felder sind "
@@ -603,7 +614,7 @@ def regenerate_draft_field(image_paths: List[str], field: str, user = None) -> s
         if field == "title":
             prompt = (
                 "Analysiere diese Fotos eines Artikels. Erzeuge einen neuen, kreativen, verkaufsfördernden und keyword-reichen Titel "
-                "(max. 80 Zeichen) für eine Verkaufsanzeige auf Vinted/Kleinanzeigen auf Deutsch. "
+                f"(max. {TITLE_MAX} Zeichen) für eine Verkaufsanzeige auf Vinted/Kleinanzeigen auf Deutsch. "
                 "Gib AUSSCHLIESSLICH den Titel zurück, ohne Anführungszeichen, ohne Einleitung, ohne Markdown."
             )
         elif field == "description":

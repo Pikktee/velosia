@@ -37,6 +37,17 @@
   if (window.__velosia && window.__velosia.__loaded) return;
 
   var VERSION = "2.7.55";
+  var KA_TITLE_MAX = 65;
+
+  // Cut at the last word boundary within `max`; hard cut if that loses too much.
+  function clampTitle(title, max) {
+    var t = String(title || "").replace(/\s+/g, " ").trim();
+    if (t.length <= max) return t;
+    var cut = t.slice(0, max + 1);
+    var sp = cut.lastIndexOf(" ");
+    cut = sp >= max / 2 ? cut.slice(0, sp) : t.slice(0, max);
+    return cut.replace(/[\s,;:\-–(\/]+$/, "");
+  }
 
   // ----------------------------------------------------------------------------
   // Low level helpers
@@ -2209,6 +2220,10 @@
     // A core field that HAS a value but couldn't be filled (selector didn't match)
     // must land in `manual` — otherwise the overlay stays silent and the user can
     // publish an empty listing without noticing.
+    // Kleinanzeigen nimmt höchstens 65 Zeichen an (ältere Entwürfe haben bis zu 80).
+    if (platform === "kleinanzeigen" && draft.title && draft.title.length > KA_TITLE_MAX) {
+      draft = Object.assign({}, draft, { title: clampTitle(draft.title, KA_TITLE_MAX) });
+    }
     if (fillField(titleEl, draft.title)) filled.push("Titel");
     else if (draft.title) manual.push("Titel");
     if (fillField(descEl, draft.description)) filled.push("Beschreibung");

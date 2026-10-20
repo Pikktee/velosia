@@ -723,13 +723,13 @@ export default function DraftDetail({ draft, onBack, onUpdateSuccess }) {
             id="edit-title" 
             className="form-control" 
             value={title} 
-            onChange={(e) => setTitle(e.target.value.substring(0, 80))}
+            onChange={(e) => setTitle(e.target.value.substring(0, 65))}
             placeholder={regeneratingField === 'title' ? "Generiere..." : "Titel für die Anzeige..."}
             disabled={regeneratingField === 'title'}
             style={{ opacity: regeneratingField === 'title' ? 0.6 : 1 }}
           />
           <div style={{ textAlign: 'right', fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: '0.2rem' }}>
-            {title.length}/80
+            {title.length}/65
           </div>
         </div>
 
