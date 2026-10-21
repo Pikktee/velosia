@@ -57,6 +57,27 @@ export const getImageUrl = (path) => {
 
 // --- AUTH API ---
 
+// Error text for the login/register form. FastAPI answers validation errors
+// (422) with `detail` as a list of {loc, type, ctx} objects instead of a string,
+// e.g. for an address with a reserved domain like .test.
+const authErrorMessage = (errorData, fallback) => {
+  const detail = errorData?.detail;
+  if (typeof detail === 'string') return detail;
+  if (!Array.isArray(detail)) return fallback;
+  const field = (name) => detail.find((d) => d?.loc?.[d.loc.length - 1] === name);
+  if (field('email')) {
+    return 'Diese E-Mail-Adresse wird nicht akzeptiert. Bitte prüfe die Schreibweise oder nutze eine andere Adresse.';
+  }
+  const password = field('password');
+  if (password?.type === 'string_too_short') {
+    return `Das Passwort muss mindestens ${password.ctx?.min_length ?? 6} Zeichen lang sein.`;
+  }
+  if (password?.type === 'string_too_long') {
+    return `Das Passwort darf höchstens ${password.ctx?.max_length ?? 256} Zeichen lang sein.`;
+  }
+  return fallback;
+};
+
 export const registerUser = async (email, password) => {
   const response = await fetch(`${API_BASE_URL}/api/auth/register`, {
     method: 'POST',
@@ -65,8 +86,8 @@ export const registerUser = async (email, password) => {
   });
 
   if (!response.ok) {
-    const errorData = await response.json();
-    throw new Error(errorData.detail || 'Registrierung fehlgeschlagen.');
+    const errorData = await response.json().catch(() => ({}));
+    throw new Error(authErrorMessage(errorData, 'Registrierung fehlgeschlagen.'));
   }
 
   return response.json();
@@ -100,8 +121,8 @@ export const loginUser = async (email, password) => {
   });
 
   if (!response.ok) {
-    const errorData = await response.json();
-    throw new Error(errorData.detail || 'Login fehlgeschlagen. E-Mail oder Passwort falsch.');
+    const errorData = await response.json().catch(() => ({}));
+    throw new Error(authErrorMessage(errorData, 'Login fehlgeschlagen. E-Mail oder Passwort falsch.'));
   }
 
   const data = await response.json();
@@ -130,8 +151,8 @@ export const loginWithGoogle = async (credential) => {
   });
 
   if (!response.ok) {
-    const errorData = await response.json();
-    throw new Error(errorData.detail || 'Google-Login-Validierung fehlgeschlagen.');
+    const errorData = await response.json().catch(() => ({}));
+    throw new Error(authErrorMessage(errorData, 'Google-Login-Validierung fehlgeschlagen.'));
   }
 
   const data = await response.json();
