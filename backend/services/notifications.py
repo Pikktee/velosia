@@ -37,9 +37,19 @@ def email_configured() -> bool:
     return all([c["host"], c["user"], c["password"], c["to"]])
 
 
+def _failure_reason(e: Exception) -> str:
+    """Log-safe description of a send failure. The exception text itself is not
+    logged: smtplib puts the refused sender/recipient addresses into it."""
+    code = getattr(e, "smtp_code", None)
+    return f"{type(e).__name__} ({code})" if code else type(e).__name__
+
+
 def send_email(subject: str, body: str) -> bool:
     """Send a plain-text e-mail. Returns True on success, False (and logs) on any
-    failure or missing config — never raises."""
+    failure or missing config — never raises.
+
+    The subject ends up in the Railway log, so it must not carry personal data
+    (e-mail addresses, names); those belong in the body, which is never logged."""
     c = _cfg()
     if not email_configured():
         print(f"[notifications] SMTP nicht konfiguriert — Alarm nur geloggt: {subject}", flush=True)
@@ -55,8 +65,8 @@ def send_email(subject: str, body: str) -> bool:
             server.starttls(context=ctx)
             server.login(c["user"], c["password"])
             server.send_message(msg)
-        print(f"[notifications] Alarm-Mail gesendet an {c['to']}: {subject}", flush=True)
+        print(f"[notifications] Alarm-Mail gesendet: {subject}", flush=True)
         return True
     except Exception as e:
-        print(f"[notifications] Mailversand fehlgeschlagen: {e}", flush=True)
+        print(f"[notifications] Mailversand fehlgeschlagen: {_failure_reason(e)}", flush=True)
         return False

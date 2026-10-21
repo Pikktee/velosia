@@ -2090,8 +2090,9 @@ def join_waitlist(request: Request, entry_in: schemas.WaitlistCreate, db: Sessio
 
     try:
         count = db.query(models.WaitlistEntry).count()
+        # The address goes only into the body: send_email logs the subject.
         send_email(
-            subject=f"Velosia: neue Tester-Anmeldung ({email})",
+            subject="Velosia: neue Tester-Anmeldung",
             body=(
                 f"Neue Eintragung in die Tester-Warteliste:\n\n"
                 f"E-Mail: {email}\n"
