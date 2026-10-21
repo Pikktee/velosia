@@ -1,9 +1,10 @@
 import React from 'react';
 import { ArrowLeft } from 'lucide-react';
-import { ImpressumContent, DatenschutzContent, KontoLoeschenContent, LEGAL_TITLES } from './legal';
+import { LegalContent, LEGAL_TITLES, LEGAL_STAND } from './legal';
 
-// Standalone legal page for #/datenschutz and #/impressum — gives Google Play a
-// stable, directly linkable privacy-policy URL (separate from the in-app modal).
+// Standalone legal page for #/datenschutz, #/impressum, #/nutzungsbedingungen and
+// #/konto-loeschen — gives Google Play and the browser extension stable, directly
+// linkable URLs (separate from the in-app overlay, LegalModal).
 export default function LegalPage({ doc }) {
   return (
     <div className="fade-in" style={{ maxWidth: '680px', margin: '0 auto', padding: '0 0.25rem' }}>
@@ -11,7 +12,7 @@ export default function LegalPage({ doc }) {
         onClick={() => window.location.hash = '#/'}
         style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem', background: 'transparent', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer', fontSize: '0.85rem', padding: '0.5rem 0.25rem', marginBottom: '1rem' }}
       >
-        <ArrowLeft size={15} /> Zurück zur Startseite
+        <ArrowLeft size={15} /> Zur Startseite
       </button>
 
       <h1 style={{
@@ -29,13 +30,11 @@ export default function LegalPage({ doc }) {
         lineHeight: '1.65',
         color: 'var(--text-secondary)'
       }}>
-        {doc === 'impressum' ? <ImpressumContent />
-          : doc === 'konto-loeschen' ? <KontoLoeschenContent />
-          : <DatenschutzContent />}
+        <LegalContent doc={doc} />
       </div>
 
       <p style={{ fontSize: '0.78rem', color: 'var(--text-muted)', textAlign: 'center', marginTop: '1.5rem' }}>
-        Velosia · Stand: Juni 2026
+        Velosia · {LEGAL_STAND}
       </p>
     </div>
   );

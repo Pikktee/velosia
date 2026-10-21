@@ -28,6 +28,16 @@ const analysisErrorMessage = (err, fallback) => {
   return err?.message || fallback;
 };
 
+// Hash routes that show a legal text. Reachable logged out (guest routes) and
+// logged in, so a link from the browser extension or the Play Store always lands
+// on the text instead of the app.
+const LEGAL_ROUTES = {
+  '#/datenschutz': 'datenschutz',
+  '#/impressum': 'impressum',
+  '#/nutzungsbedingungen': 'nutzungsbedingungen',
+  '#/konto-loeschen': 'konto-loeschen',
+};
+
 export default function App() {
   const isAndroidApp = typeof window.VelosiaBridge !== 'undefined';
   const [token, setToken] = useState(null);
@@ -194,7 +204,7 @@ export default function App() {
           window.location.hash = '#/login';
         }
       } else {
-        const guestRoutes = ['#/', '#/login', '#/testen', '#/datenschutz', '#/impressum', '#/konto-loeschen'];
+        const guestRoutes = ['#/', '#/login', '#/testen', ...Object.keys(LEGAL_ROUTES)];
         if (!guestRoutes.includes(route)) {
           window.location.hash = '#/';
         }
@@ -538,15 +548,22 @@ export default function App() {
             <Login onLoginSuccess={handleLoginSuccess} />
           ) : route === '#/testen' ? (
             <TesterPage />
-          ) : route === '#/datenschutz' ? (
-            <LegalPage doc="datenschutz" />
-          ) : route === '#/impressum' ? (
-            <LegalPage doc="impressum" />
-          ) : route === '#/konto-loeschen' ? (
-            <LegalPage doc="konto-loeschen" />
+          ) : LEGAL_ROUTES[route] ? (
+            <LegalPage doc={LEGAL_ROUTES[route]} />
           ) : (
             isAndroid ? <Login onLoginSuccess={handleLoginSuccess} /> : <LandingPage />
           )}
+        </div>
+      </div>
+    );
+  }
+
+  // Logged in, but a legal text was opened by link (e.g. from the browser extension).
+  if (LEGAL_ROUTES[route]) {
+    return (
+      <div style={{ minHeight: '100dvh', background: 'var(--bg-gradient)' }}>
+        <div className="container" style={{ padding: '2rem 1.25rem' }}>
+          <LegalPage doc={LEGAL_ROUTES[route]} />
         </div>
       </div>
     );
