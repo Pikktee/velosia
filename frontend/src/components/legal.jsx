@@ -90,6 +90,8 @@ export function KontoLoeschenContent() {
       </ol>
       <p style={{ marginBottom: '1.5rem' }}>
         Dein Konto und alle Daten werden dabei <strong>sofort und unwiderruflich</strong> gelöscht.
+        Möchtest du vorher eine Kopie, lade sie unter Profil → <strong>„Deine Daten“</strong> →{' '}
+        <strong>„Meine Daten exportieren“</strong> herunter.
       </p>
 
       <h3 style={h3}>Variante 2: Per E-Mail</h3>
@@ -115,7 +117,7 @@ export function KontoLoeschenContent() {
         Erhalten bleiben lediglich <strong>technische Auswertungen</strong> der automatischen
         Formularausfüllung (welche Formularfelder gefunden wurden, ohne Anzeigeninhalte), aus denen
         wir bei der Löschung deine Nutzer-ID entfernen – sie haben danach keinen Bezug mehr zu
-        deinem Konto.
+        deinem Konto und werden 90 Tage nach ihrer Entstehung automatisch gelöscht.
       </p>
       <Todo>
         Außerhalb der Datenbank bleiben bisher: ein Eintrag in der Testerliste der Google Play
@@ -410,17 +412,15 @@ export function DatenschutzContent() {
           Nutzer-ID – sie ist also <strong>pseudonym, nicht anonym</strong>. Daran erkennen wir
           automatisch, wenn Vinted oder Kleinanzeigen ihr Formular geändert haben, und erhalten dann
           eine Warn-E-Mail. Diese enthält nur Plattform, Feldname, Fehlerquote und Engine-Versionen.
+          Jede ausgelöste Warnung vermerken wir intern ohne personenbezogene Daten und löschen diesen
+          Vermerk nach 90 Tagen.
         </p>
         <Steckbrief
           zweck="Die automatische Formularausfüllung funktionsfähig halten."
           grundlage="Art. 6 Abs. 1 lit. f DSGVO (berechtigtes Interesse, Formularänderungen der Plattformen schnell zu erkennen). Du kannst widersprechen (Abschnitt 16)."
-          dauer="Derzeit unbefristet. Löschst du dein Konto, entfernen wir die Nutzer-ID aus deinen Meldungen."
+          dauer="90 Tage, danach werden die Meldungen automatisch gelöscht. Löschst du dein Konto, entfernen wir sofort die Nutzer-ID aus deinen Meldungen."
           empfaenger="Railway (Hosting); der E-Mail-Dienst für die Warn-Mails (Abschnitt 13)."
         />
-        <Todo>
-          Löschfrist für die Telemetrie festlegen, umsetzen und hier eintragen (geplant, noch nicht
-          umgesetzt).
-        </Todo>
       </section>
 
       <section style={section}>
@@ -437,13 +437,9 @@ export function DatenschutzContent() {
         <Steckbrief
           zweck="Fehler nachvollziehen und beheben, Rückfragen."
           grundlage="Art. 6 Abs. 1 lit. f DSGVO (berechtigtes Interesse an einer funktionierenden App); du entscheidest selbst, ob du einen Bericht und ein Bildschirmfoto sendest."
-          dauer="Bis wir den Bericht nach der Bearbeitung löschen, spätestens mit deinem Konto."
+          dauer="12 Monate, danach werden Bericht und Bildschirmfoto automatisch gelöscht; früher, wenn wir den Bericht nach der Bearbeitung löschen. Löschst du dein Konto, werden deine Berichte sofort gelöscht."
           empfaenger="Railway (Hosting)."
         />
-        <Todo>
-          Feste Löschfrist für Fehlerberichte festlegen, umsetzen und hier eintragen (geplant, noch
-          nicht umgesetzt).
-        </Todo>
       </section>
 
       <section style={section}>
@@ -458,13 +454,13 @@ export function DatenschutzContent() {
         <Steckbrief
           zweck="Dich zum Test der Android-App einladen."
           grundlage="Art. 6 Abs. 1 lit. b DSGVO (Maßnahmen auf deine Anfrage hin)."
-          dauer="Bis du die Löschung verlangst. Löschst du ein Velosia-Konto mit derselben Adresse, entfällt auch der Eintrag in der Warteliste. In der Play Console bleibt die Adresse, bis wir sie dort entfernen."
+          dauer="12 Monate nach der Eintragung, danach wird der Eintrag automatisch gelöscht. Auf Wunsch löschen wir ihn sofort; löschst du ein Velosia-Konto mit derselben Adresse, entfällt er ebenfalls sofort. In der Testerliste der Play Console bleibt die Adresse, bis wir sie dort von Hand entfernen."
           empfaenger="Railway (Hosting); der E-Mail-Dienst für die Benachrichtigung (Abschnitt 13); Google (Play Console)."
         />
         <Todo>
-          Löschfrist für die Warteliste festlegen (z. B. nach der Einladung oder nach Ende des
-          Tests), umsetzen und hier eintragen (geplant, noch nicht umgesetzt). Ebenso festlegen,
-          wann Adressen aus der Play Console entfernt werden.
+          Festlegen, wann Adressen aus der Testerliste der Play Console entfernt werden (z. B. nach
+          Ende des Tests oder spätestens nach 12 Monaten), und hier eintragen. Das geschieht nicht
+          automatisch.
         </Todo>
       </section>
 
@@ -641,17 +637,19 @@ export function DatenschutzContent() {
         <h3 style={h3}>15. Speicherdauer im Überblick</h3>
         <ul style={ul}>
           <li>Konto, Einstellungen, Angebote, Fotos, Inserats-Links: bis du sie bzw. dein Konto löschst.</li>
-          <li>Fehlerberichte: bis zur Löschung nach der Bearbeitung, spätestens mit deinem Konto.</li>
-          <li>Funktions-Telemetrie: derzeit unbefristet; mit der Kontolöschung ohne Nutzer-ID.</li>
-          <li>Tester-Warteliste: bis du die Löschung verlangst oder ein Konto mit derselben Adresse löschst.</li>
+          <li>Funktions-Telemetrie: 90 Tage; bei Kontolöschung wird die Nutzer-ID sofort entfernt.</li>
+          <li>Fehlerberichte samt Bildschirmfotos: 12 Monate; bei Kontolöschung sofort.</li>
+          <li>Tester-Warteliste: 12 Monate nach der Eintragung; auf Wunsch oder bei Kontolöschung sofort.</li>
+          <li>Interne Vermerke über Warn-E-Mails (ohne personenbezogene Daten): 90 Tage.</li>
           <li>Zähler gegen Missbrauch: nur im Arbeitsspeicher, höchstens etwa eine Stunde.</li>
+          <li>Download-Link für deinen Datenexport: 10 Minuten gültig.</li>
           <li>Daten auf deinem Gerät: siehe Abschnitte 11 und 12.</li>
           <li>Server-Protokolle und E-Mails: siehe Abschnitte 2 und 13.</li>
         </ul>
-        <Todo>
-          Nach Umsetzung der geplanten Löschfristen (Telemetrie, Fehlerberichte, Warteliste) die
-          Liste aktualisieren.
-        </Todo>
+        <p style={p}>
+          Abgelaufene Einträge löscht ein automatischer Aufräumlauf einmal täglich; er startet
+          jeweils kurz nach einem Neustart des Servers.
+        </p>
       </section>
 
       <section style={section}>
@@ -666,14 +664,19 @@ export function DatenschutzContent() {
           <li>Widerspruch gegen die Verarbeitung (Art. 21 DSGVO, siehe unten).</li>
         </ul>
         <p style={p}>
+          <strong>Kopie deiner Daten:</strong> Unter Profil → „Deine Daten“ → „Meine Daten
+          exportieren“ → „Herunterladen“ erhältst du eine ZIP-Datei mit allem, was Velosia zu deinem
+          Konto speichert (Art. 15 Abs. 3 und Art. 20 DSGVO): deine Daten in maschinenlesbarer Form
+          (JSON – Konto und Einstellungen ohne Passwort, Angebote, Fehlerberichte, Eintrag in der
+          Warteliste, Funktions-Telemetrie), die Fotos deiner Angebote, die Bildschirmfotos deiner
+          Fehlerberichte und eine Erklärung der Inhalte (LIESMICH.txt). Der Download-Link gilt
+          10 Minuten; in der Android-App öffnet er sich in deinem Browser.
+        </p>
+        <p style={p}>
           Dein Konto mit allen Daten kannst du jederzeit selbst löschen (Profil → Gefahrenbereich →
           „Account löschen“); Einstellungen und Angebote kannst du in der App selbst ändern. Für
-          alles andere – etwa eine Kopie deiner Daten – genügt eine E-Mail an mail@henrikheil.net.
+          alles andere genügt eine E-Mail an mail@henrikheil.net.
         </p>
-        <Todo>
-          Einen Datenexport in der App gibt es noch nicht (geplant). Bis dahin per E-Mail; nach
-          Umsetzung hier erwähnen.
-        </Todo>
         <div style={{
           margin: '0 0 1rem',
           padding: '0.8rem 0.9rem',
@@ -807,7 +810,8 @@ export function NutzungsbedingungenContent() {
       <section style={section}>
         <h3 style={h3}>8. Konto beenden und Sperrung</h3>
         <p style={p}>
-          Du kannst dein Konto jederzeit in der App löschen; damit endet die Nutzung. Verstößt du
+          Du kannst dein Konto jederzeit in der App löschen; damit endet die Nutzung. Vorher kannst
+          du unter Profil → „Deine Daten“ eine Kopie deiner Daten herunterladen. Verstößt du
           gegen diese Bedingungen, können wir dein Konto sperren oder löschen. Wir können Velosia
           einstellen; wir kündigen das vorher in der App an.
         </p>

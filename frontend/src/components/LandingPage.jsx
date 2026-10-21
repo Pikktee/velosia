@@ -258,8 +258,8 @@ export default function LandingPage() {
                 Trag dich ein – wir laden dich ein, sobald ein Testplatz frei wird.
               </span>
               <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', textAlign: 'center', lineHeight: '1.45' }}>
-                Wir speichern deine Adresse für die Einladung und tragen sie dafür in die Testerliste
-                von Google Play ein. Mehr in der{' '}
+                Wir speichern deine Adresse bis zu 12 Monate für die Einladung und tragen sie dafür in
+                die Testerliste von Google Play ein. Mehr in der{' '}
                 <button type="button" style={legalLinkStyle} onClick={() => setActiveDoc('datenschutz')}>Datenschutzerklärung</button>.
               </span>
             </form>
