@@ -319,6 +319,24 @@ export const deleteUserAccount = async () => {
   return true;
 };
 
+// Data export (GDPR access / portability): asks the server for a short-lived
+// download link to a ZIP with all account data and photos. The link is opened as
+// a plain link, not fetched here: the Android WebView cannot save files and
+// hands a tapped API link to the system browser, which downloads it.
+export const createExportLink = async () => {
+  const response = await fetch(`${API_BASE_URL}/api/auth/me/export-link`, {
+    method: 'POST',
+    headers: getHeaders(),
+  });
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    const detail = typeof errorData.detail === 'string' ? errorData.detail : null;
+    throw new Error(detail || 'Der Export konnte nicht vorbereitet werden.');
+  }
+  const data = await response.json();
+  return { ...data, url: `${API_BASE_URL}${data.url}` };
+};
+
 // Set or replace the account password (e.g. after linking the account to Google,
 // so the e-mail/password login of the browser extension works). The server only
 // accepts this shortly after a sign-in and revokes all other sessions; the fresh
@@ -532,3 +550,14 @@ export const deleteUser = async (id) => {
   return true;
 };
 
+export const deleteWaitlistEntry = async (id) => {
+  const response = await fetch(`${API_BASE_URL}/api/waitlist/${id}`, {
+    method: 'DELETE',
+    headers: getHeaders(),
+  });
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    throw new Error(errorData.detail || 'Eintrag konnte nicht gelöscht werden.');
+  }
+  return true;
+};

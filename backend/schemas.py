@@ -70,6 +70,16 @@ class PlatformTokenResponse(BaseModel):
     expires_in: int  # seconds
 
 
+class ExportLinkResponse(BaseModel):
+    """Download link for the data export plus what it will contain, so the
+    client can say how big the download is before it starts."""
+    url: str          # API path incl. token; the client prefixes the API base URL
+    expires_in: int   # seconds
+    draft_count: int
+    photo_count: int  # draft photos + bug report screenshots in the ZIP
+    size_bytes: int   # approximate ZIP size (the files are stored uncompressed)
+
+
 class UserUpdate(BaseModel):
     ai_tone: Optional[str] = Field(None, max_length=50)
     ai_intro: Optional[str] = Field(None, max_length=_SETTING_TEXT)

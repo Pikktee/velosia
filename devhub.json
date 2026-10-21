@@ -1,0 +1,20 @@
+{
+  "profiles": {
+    "default": [
+      {
+        "name": "web",
+        "role": "frontend",
+        "cwd": "frontend",
+        "env": { "VITE_API_URL": "{backendUrl}" },
+        "cmd": ["npx", "vite", "--port", "{port}", "--strictPort", "--host", "{bindHost}"]
+      },
+      {
+        "name": "api",
+        "role": "backend",
+        "cwd": "backend",
+        "env": { "RATE_LIMIT_DISABLED": "1" },
+        "cmd": [".venv/bin/uvicorn", "main:app", "--port", "{port}", "--host", "{bindHost}", "--reload"]
+      }
+    ]
+  }
+}

@@ -25,6 +25,13 @@
  *                  the files itself; native = engine only clicks the <input type=file>
  *                  so the Android host can supply the photo via onShowFileChooser)
  *     showOverlay: boolean  (default true -> visible "what was filled" panel)
+ *     onPublishIntent:   fn({platform, draftId, source})  (optional host hook: the
+ *                  user / auto-submit triggered the publish action — the extension
+ *                  arms its listing-capture marker only then)
+ *     onListingCaptured: fn({platform, listingId, listingUrl})  (optional: the Vinted
+ *                  watcher captured the published item)
+ *     onCaptureAborted:  fn({platform, reason})  (optional: the Vinted watcher gave up,
+ *                  e.g. the user left the form without publishing)
  *   }
  *
  *   result = { platform, phase, filled:[], manual:[], photos:Number, submitted:Bool }
@@ -36,7 +43,7 @@
   // and in the extension it is a persistent content script — never redefine.
   if (window.__velosia && window.__velosia.__loaded) return;
 
-  var VERSION = "2.7.55";
+  var VERSION = "2.7.56";
   var KA_TITLE_MAX = 65;
 
   // Cut at the last word boundary within `max`; hard cut if that loses too much.
@@ -298,10 +305,6 @@
     } catch (e) {}
   }
 
-  // Structural photo-step diagnostics (no content) — sent as a ka_photo_probe beacon
-  // by the form flow, so a failed upload on a phone shows up in the Railway logs.
-  var lastPhotoDiag = null;
-
   // The photo section around the upload input: climb until the ancestor carries the
   // section heading ("Bilder"/"Fotos"), so previews rendered NEXT to the dropzone count.
   function photoSection(input) {
@@ -340,36 +343,20 @@
   async function commitFilesToInput(input, dt, allowDrop) {
     var section = allowDrop ? photoSection(input) : null;
     var before = allowDrop ? photoPreviewCount(section) : 0;
-    lastPhotoDiag = {
-      files: dt.files.length,
-      fileInputs: document.querySelectorAll("input[type='file']").length,
-      accept: String(input.accept || "").slice(0, 60),
-      previewsBefore: before
-    };
     try {
       input.files = dt.files;
       input.dispatchEvent(new Event("input", { bubbles: true }));
       input.dispatchEvent(new Event("change", { bubbles: true }));
-    } catch (e) { lastPhotoDiag.error = "set_files"; return false; }
+    } catch (e) { return false; }
     if (!allowDrop) return true;
 
     await sleep(300);
-    lastPhotoDiag.filesLeft = input.files ? input.files.length : -1;
-    if (await waitForPreviewGrowth(section, before, 6000)) {
-      lastPhotoDiag.via = "change";
-      return true;
-    }
+    if (await waitForPreviewGrowth(section, before, 6000)) return true;
     try {
       var zone = input.closest("[class*='dashed'], [class*='drop'], [class*='Drop'], [class*='upload'], [class*='Upload']") || input.parentElement;
       fireDropEvent(zone, dt);
-      lastPhotoDiag.dropFired = true;
     } catch (e) {}
-    if (await waitForPreviewGrowth(section, before, 6000)) {
-      lastPhotoDiag.via = "drop";
-      return true;
-    }
-    lastPhotoDiag.via = "none";
-    lastPhotoDiag.previewsAfter = photoPreviewCount(section);
+    if (await waitForPreviewGrowth(section, before, 6000)) return true;
     return false;
   }
 
@@ -940,15 +927,12 @@
   // (connector-insensitive) match. KA only filters on a real InputEvent — a plain
   // Event("input") does NOT — and we also fire key events for keyup-based filters.
   // Filtering dodges the full-list render that on mobile left the brand unmatched.
-  // Never commits a non-exact brand. `options` is only used for an optional beacon.
-  async function selectKleinanzeigenBrand(brand, options) {
-    // Emit exactly one structural diagnostic per call (no listing content beyond the
-    // brand length) so the Railway logs reveal WHERE the brand step bails on mobile —
-    // the previous probe only fired mid-loop and so never arrived when the function
-    // returned early. reason tells us: no control / no input / no matching option.
+  // Never commits a non-exact brand.
+  async function selectKleinanzeigenBrand(brand) {
+    // Uniform failure result; reason tells us where the brand step bailed:
+    // no control / no input / no matching option / clicked but not committed.
     function bail(reason, extra) {
       var detail = extra ? Object.keys(extra).map(function (k) { return k + "=" + extra[k]; }).join(" ") : "";
-      try { sendDebug(Object.assign({ event: "ka_brand_probe", reason: reason, brandLen: String(brand || "").length }, extra || {}), options); } catch (e) {}
       return { ok: false, reason: reason, detail: detail };
     }
     if (!brand) return bail("no_brand_value");
@@ -1012,7 +996,7 @@
       return { ok: true };
     }
     // Clicked the right option but KA didn't commit it — return failure (brand stays
-    // manual) and let the cheap probe record it, rather than a false "Alles ausgefüllt".
+    // manual) rather than a false "Alles ausgefüllt".
     return bail("clicked_no_commit", { optText: norm(opt.textContent).slice(0, 18), ctrlVal: (control.value || "").slice(0, 18) });
   }
 
@@ -1611,18 +1595,6 @@
     }
     if (!picked) {
       vintedDiagPicker(logName);
-      if (opts.exact) {
-        var openSheet = vintedOpenPickerFor(fieldLabel);
-        try {
-          sendDebug({
-            event: "vinted_spec_probe", field: logName, reason: "no_option",
-            opener: (opener.tagName || "") + ":" + norm(opener.textContent || "").slice(0, 40),
-            sheet: !!openSheet,
-            sheetText: openSheet ? norm(openSheet.textContent || "").slice(0, 160) : null,
-            cands: candidates.join("|")
-          }, lastAutofillOptions);
-        } catch (e) {}
-      }
       console.log("Velosia Vinted: " + logName + "-Option (" + candidates.join("/") + ") nicht gefunden");
       return false;
     }
@@ -1646,9 +1618,6 @@
       "' -> " + (verified ? "übernommen" : "Klick OHNE Übernahme (Feld unverändert)"));
     return !!verified;
   }
-
-  // Options of the running autofill, so deep helpers can send a diagnostic beacon.
-  var lastAutofillOptions = null;
 
   // The option sheet that is open RIGHT NOW for this field: on screen and titled with
   // the field label. Vinted keeps closed sheets mounted, so a document-wide search for
@@ -1898,10 +1867,126 @@
   async function trySubmit(platform) {
     for (var i = 0; i < 6; i++) {
       var btn = findSubmitButton(platform);
-      if (btn) { try { btn.click(); return true; } catch (e) {} }
+      if (btn) {
+        // Auto-submit IS the publish action: arm the listing capture before clicking.
+        armPublish("auto-submit");
+        try { btn.click(); return true; } catch (e) {}
+      }
       await sleep(1200);
     }
     return false;
+  }
+
+  // ----------------------------------------------------------------------------
+  // Publish intent — a published-listing capture (the Vinted watcher below, the
+  // extension's capture marker) only counts once the user, or auto-submit, has
+  // actually triggered the platform's publish action. Without this gate any ad
+  // opened after an autofill (e.g. someone else's) was recorded as the user's own
+  // listing and then polled by the server.
+  // ----------------------------------------------------------------------------
+
+  // How long a triggered publish stays valid. Every further publish click re-arms.
+  var PUBLISH_ARM_TTL_MS = 10 * 60 * 1000;
+
+  // Labels of the publish buttons (same needles as findSubmitButton) and words that
+  // mark a look-alike button that does NOT publish ("Fotos hochladen", "Als Entwurf
+  // speichern", "Vorschau").
+  var PUBLISH_NEEDLES = {
+    vinted: ["hochladen", "einstellen", "veröffentlichen", "veroffentlichen"],
+    kleinanzeigen: ["anzeige aufgeben", "veröffentlichen", "veroffentlichen", "einstellen"]
+  };
+  var NOT_PUBLISH_WORDS = ["foto", "bild", "video", "entwurf", "vorschau", "abbrechen"];
+
+  // The autofill session of this page: {platform, draftId, options, ready, armedAt}.
+  // Replaced by every autofill run. ready = filling has ended (the engine's own
+  // clicks never count); armedAt stays 0 until publish was triggered.
+  var publishSession = null;
+  var publishListening = false;
+
+  // Was this click on the form's publish button — the one findSubmitButton returns
+  // (what the arrow points at and auto-submit clicks)? Our own UI never counts, nor
+  // a link to another page (KA's header "Anzeige aufgeben" link starts a NEW ad).
+  function isSubmitTarget(target, platform) {
+    try {
+      if (!target || target.nodeType !== 1 || !target.closest) return false;
+      if (target.closest("[id^='velosia-']")) return false;
+      var link = target.closest("a[href]");
+      if (link && !/^\s*(#|javascript:)/i.test(link.getAttribute("href") || "")) return false;
+      var btn = findSubmitButton(platform);
+      var b = (btn && (btn === target || btn.contains(target))) ? btn
+            : target.closest("button, input[type='submit'], [role='button']");
+      if (!b) return false;
+      var t = norm(b.innerText || b.value || b.textContent || "");
+      for (var i = 0; i < NOT_PUBLISH_WORDS.length; i++) {
+        if (t.indexOf(NOT_PUBLISH_WORDS[i]) !== -1) return false;
+      }
+      if (b === btn) return true;
+      // Fallback for layouts where findSubmitButton picks another match first (e.g.
+      // a hidden duplicate): the clicked button itself reads like "publish". Not in
+      // the site's header / navigation (KA's "Anzeige aufgeben" there starts a NEW ad).
+      if (b.tagName === "A" || !t || t.length > 40) return false;
+      if (b.closest("header, nav, [role='navigation']")) return false;
+      var needles = PUBLISH_NEEDLES[platform] || [];
+      for (var j = 0; j < needles.length; j++) {
+        if (t.indexOf(needles[j]) !== -1) return true;
+      }
+    } catch (e) {}
+    return false;
+  }
+
+  // A real <form> submit of the listing form (e.g. Enter in a field or KA's form
+  // post), recognised by containing the title or description field.
+  function isListingForm(form, platform) {
+    try {
+      var map = FIELD_MAP[platform];
+      if (!map || !form || form.tagName !== "FORM") return false;
+      var sels = map.title.selectors.concat(map.description.selectors);
+      for (var i = 0; i < sels.length; i++) {
+        if (form.querySelector(sels[i])) return true;
+      }
+    } catch (e) {}
+    return false;
+  }
+
+  function isPublishArmed(session) {
+    return !!(session && session.armedAt && (Date.now() - session.armedAt) <= PUBLISH_ARM_TTL_MS);
+  }
+
+  // Record that publishing was triggered and tell the host: the extension arms its
+  // capture marker (options.onPublishIntent); a native shell that implements
+  // VelosiaBridge.onPublishIntent can gate its own URL capture on it.
+  function armPublish(source) {
+    var s = publishSession;
+    if (!s || !s.ready) return;
+    s.armedAt = Date.now();
+    console.log("Velosia: Veröffentlichen ausgelöst (" + source + ") -> Erfassung aktiv");
+    if (typeof s.options.onPublishIntent === "function") {
+      try { s.options.onPublishIntent({ platform: s.platform, draftId: s.draftId, source: source }); } catch (e) {}
+    }
+    var nb = nativeBridge("onPublishIntent");
+    if (nb) { try { nb.onPublishIntent(String(s.platform)); } catch (e) {} }
+  }
+
+  // Start this page's session (set ready once filling has ended) and listen for the
+  // publish action. Capture-phase listeners on the document keep working when React
+  // re-renders the button.
+  function startPublishSession(platform, draft, options) {
+    publishSession = {
+      platform: platform, draftId: draft ? draft.id : null,
+      options: options || {}, ready: false, armedAt: 0
+    };
+    if (!publishListening) {
+      publishListening = true;
+      document.addEventListener("click", function (e) {
+        var s = publishSession;
+        if (s && s.ready && isSubmitTarget(e.target, s.platform)) armPublish("click");
+      }, true);
+      document.addEventListener("submit", function (e) {
+        var s = publishSession;
+        if (s && s.ready && isListingForm(e.target, s.platform)) armPublish("submit");
+      }, true);
+    }
+    return publishSession;
   }
 
   // ----------------------------------------------------------------------------
@@ -2187,7 +2272,6 @@
     // path everywhere (it uploads ALL draft photos and needs no user gesture); the
     // native chooser is only a fallback for environments without DataTransfer.
     setBackdrop("Fotos werden übertragen …");
-    lastPhotoDiag = null;
     var photos = 0;
     // Kleinanzeigen's new react-dropzone uploader also accepts a 'drop' fallback.
     var allowDrop = platform === "kleinanzeigen";
@@ -2204,10 +2288,6 @@
     // 3) Last-resort native file chooser.
     if (photos === 0 && options.imageMode === "native") photos = triggerNativeFileChooser();
     try { console.log("Velosia: Fotos übertragen -> " + photos + " (Modus " + options.imageMode + ")"); } catch (e) {}
-    if (platform === "kleinanzeigen") {
-      sendDebug(Object.assign({ event: "ka_photo_probe", photos: photos, bridged: bridged },
-        lastPhotoDiag || { fileInputs: document.querySelectorAll("input[type='file']").length }), options);
-    }
 
     // Look the fields up again AFTER the photo step — the form may have re-mounted
     // its inputs, leaving references from before the upload detached.
@@ -2313,9 +2393,9 @@
         // nothing to do
       } else if (kaBrand && !alreadyFilled("marke")) {
         // selectKleinanzeigenBrand returns {ok, reason, detail}; on failure the brand
-        // stays manual (the cheap ka_brand_probe beacon still records the bail reason).
+        // stays manual.
         var br = { ok: false };
-        try { br = await selectKleinanzeigenBrand(kaBrand, options); } catch (e) { br = { ok: false }; }
+        try { br = await selectKleinanzeigenBrand(kaBrand); } catch (e) { br = { ok: false }; }
         fields.brand = !!(br && br.ok);
         if (br && br.ok) filled.push("Marke");
         else manual.push("Marke");
@@ -2477,21 +2557,6 @@
     } catch (e) { /* telemetry is best-effort, never block autofill */ }
   }
 
-  // Temporary, UNAUTHENTICATED diagnostic beacon (no listing content — only a short
-  // event tag + observed request method/url) so we can confirm publish detection in
-  // the Railway logs without adb. Unauthenticated on purpose: it must still report
-  // even if the auth token is missing (the very failure mode we are chasing).
-  function sendDebug(payload, options) {
-    try {
-      if (!options || !options.backendUrl) return;
-      payload.engine_version = VERSION;
-      fetch(options.backendUrl + "/api/telemetry/debug", {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload), keepalive: true
-      }).catch(function () {});
-    } catch (e) {}
-  }
-
   // ----------------------------------------------------------------------------
   // Published-listing capture — read the public listing id/URL after publishing
   // (no login, no form crawl) and report it so the dashboard can track status.
@@ -2556,54 +2621,95 @@
   // (esp. on mobile it may stay on /items/new or jump elsewhere), so URL-watching
   // alone misses the event. The robust signal is the item-creation API RESPONSE:
   // we patch fetch/XHR before publish and read the new item's id out of the JSON
-  // the moment Vinted's create call returns — independent of any navigation.
-  // Backstop: keep polling the URL too. Fire-and-forget (do not await).
-  async function watchVintedPublish(draft, options) {
-    if (!draft || draft.id == null || !options || !options.backendUrl) return;
-    var captured = false;
+  // the moment Vinted's create call returns — independent of any navigation. This
+  // only works where the engine shares the page's JS world (Android WebView); the
+  // extension's isolated content-script world never sees the page's requests.
+  // Backstop (the only path in the extension): watch the URL — but only the FIRST
+  // navigation away from the form counts, and only after the publish action.
 
-    function originOf() { try { return window.location.origin; } catch (e) { return ""; } }
+  // The Vinted watch of this page; a new autofill run supersedes it.
+  var vintedWatch = null;
+  var vintedNetPatched = false;
 
-    // Build an absolute listing URL from whatever the API gave us (full url, a
-    // relative path, or just an id) so the backend can poll it later.
-    function listingUrlFrom(item) {
-      var u = item && (item.url || item.path);
-      if (u) return /^https?:/.test(u) ? u : (originOf() + u);
-      if (item && item.id != null) return originOf() + "/items/" + item.id;
-      return null;
+  // Vinted's create-item call (confirmed live): POST /api/v2/item_upload/items.
+  // Plain POST /api/v2/items is kept as an alternative. Exact path only: a sub-path
+  // (/items/<id>/…) is an action on an existing — possibly foreign — item.
+  function isVintedCreateRequest(url, method) {
+    if (!/^post$/i.test(method || "")) return false;
+    var u;
+    try { u = new URL(url, window.location.href); } catch (e) { return false; }
+    if ((u.hostname || "").indexOf("vinted") === -1) return false;
+    return /^\/api\/v\d+\/(item_upload\/)?items\/?$/i.test(u.pathname || "");
+  }
+
+  // Build an absolute listing URL from whatever the API gave us (full url, a
+  // relative path, or just an id) so the backend can poll it later.
+  function vintedListingUrl(item) {
+    var origin = "";
+    try { origin = window.location.origin; } catch (e) {}
+    var u = item && (item.url || item.path);
+    if (u) return /^https?:/.test(u) ? u : (origin + u);
+    if (item && item.id != null) return origin + "/items/" + item.id;
+    return null;
+  }
+
+  // One capture per watch. Also accepted after the URL watch ended: a create
+  // response can land after Vinted already routed away from the form.
+  function fireVintedCapture(w, item) {
+    if (!w || w.captured || w.superseded || !item || item.id == null) return;
+    w.captured = true;
+    w.done = true;
+    var o = w.options;
+    var listingUrl = vintedListingUrl(item);
+    console.log("Velosia: Vinted-Item erkannt -> id=" + item.id + " url=" + listingUrl);
+    // Backend capture (works on desktop too; idempotent server-side). Skipped when
+    // no token was passed and the native shell captures instead (newer app builds).
+    var nb = nativeBridge("onListingPublished");
+    if (o.token || !nb) {
+      captureListing({
+        backendUrl: o.backendUrl, token: o.token,
+        draftId: w.draftId, href: listingUrl
+      });
     }
-
-    function fire(item) {
-      if (captured || !item || item.id == null) return;
-      captured = true;
-      var listingUrl = listingUrlFrom(item);
-      console.log("Velosia: Vinted-Item erkannt -> id=" + item.id + " url=" + listingUrl);
-      sendDebug({ event: "vinted_item_captured", id: String(item.id), url: listingUrl }, options);
-      // Backend capture (works on desktop too; idempotent server-side). Skipped when
-      // no token was passed and the native shell captures instead (newer app builds).
-      var nb = nativeBridge("onListingPublished");
-      if (options.token || !nb) {
-        captureListing({
-          backendUrl: options.backendUrl, token: options.token,
-          draftId: draft.id, href: listingUrl
-        });
-      }
-      // Native shell: let it capture authenticated + auto-close with a success
-      // message. Harmless no-op in the browser extension (no bridge).
-      try {
-        if (nb) nb.onListingPublished("vinted", String(item.id), listingUrl || "");
-      } catch (e) {}
+    // Native shell: let it capture authenticated + auto-close with a success
+    // message. Harmless no-op in the browser extension (no bridge).
+    try {
+      if (nb) nb.onListingPublished("vinted", String(item.id), listingUrl || "");
+    } catch (e) {}
+    // Host hook (extension): the capture is done, drop its pending marker so no
+    // later item page in another tab is reported for this draft.
+    if (typeof o.onListingCaptured === "function") {
+      try { o.onListingCaptured({ platform: "vinted", listingId: String(item.id), listingUrl: listingUrl }); } catch (e) {}
     }
+  }
 
-    // Vinted's create-item call (confirmed live): POST /api/v2/item_upload/items.
-    // Keep the plain /items endpoint as an alternative just in case.
-    function isCreateEndpoint(url) {
-      return /\/api\/v\d+\/item_upload\/items(\/|\?|$)/i.test(url || "") ||
-             /\/api\/v\d+\/items(\/|\?|$)/i.test(url || "");
+  // Stop watching the URL without a capture and tell the host (extension) to drop
+  // its pending marker too.
+  function endVintedWatch(w, reason) {
+    if (!w || w.done) return;
+    w.done = true;
+    console.log("Velosia: Vinted-Erfassung beendet (" + reason + ")");
+    if (typeof w.options.onCaptureAborted === "function") {
+      try { w.options.onCaptureAborted({ platform: "vinted", reason: reason }); } catch (e) {}
     }
+  }
 
-    // Pull the new item out of the create response. id alone is enough here (we only
-    // parse the known create endpoint, so a bare id is the listing id).
+  // A new autofill run on this page replaces the watch silently (the new run
+  // resets the host marker itself); a late create response no longer counts.
+  function supersedeVintedWatch() {
+    var w = vintedWatch;
+    if (!w) return;
+    w.superseded = true;
+    w.done = true;
+  }
+
+  // Patch fetch/XHR once per page; the patches report to the current watch.
+  function installVintedNetWatch() {
+    if (vintedNetPatched) return;
+    vintedNetPatched = true;
+
+    // Pull the new item out of the create response. id alone is enough here (we
+    // only parse the known create endpoint, so a bare id is the listing id).
     function itemFromJson(data) {
       if (!data || typeof data !== "object") return null;
       var item = data.item || data;
@@ -2611,63 +2717,53 @@
       return null;
     }
 
-    // Report the response shape (keys only, no content) so we can confirm where the
-    // id lives if extraction ever misses. Temporary diagnostic.
-    function reportShape(url, data) {
-      try {
-        var keys = (data && typeof data === "object") ? Object.keys(data).slice(0, 40) : [];
-        var item = data && (data.item || data);
-        var itemKeys = (item && typeof item === "object") ? Object.keys(item).slice(0, 40) : [];
-        sendDebug({
-          event: "vinted_create_response", url: url, keys: keys, itemKeys: itemKeys,
-          itemId: (item && item.id != null) ? String(item.id) : null
-        }, options);
-      } catch (e) {}
-    }
-
-    // A POST/PUT to a Vinted /api/ path is a publish candidate. EXCLUDE our own
-    // backend calls (telemetry/listing capture) — otherwise the debug beacon's own
-    // POST is seen as a candidate and loops.
-    var backendUrl = options.backendUrl || "";
-    var dbgCount = 0;
-    function isCandidate(url, method) {
+    // A POST/PUT to a Vinted /api/ path is a publish candidate (logged for
+    // diagnosis). EXCLUDE our own backend calls (telemetry/listing capture) — they
+    // go through the same patched fetch and must never be inspected as a publish.
+    function isCandidate(w, url, method) {
       url = url || "";
       if (!/post|put/i.test(method || "") || !/\/api\//i.test(url)) return false;
+      var backendUrl = w.options.backendUrl || "";
       if (backendUrl && url.indexOf(backendUrl) !== -1) return false;
       if (/\/api\/(telemetry|listings)\//i.test(url)) return false;
       return true;
     }
-    function noteCandidate(method, url) {
-      if (captured || !isCandidate(url, method)) return;
+
+    // The watch to report to if this request is Vinted's create call, else null.
+    // Once the URL watch has ended, only while a triggered publish is still valid
+    // (Vinted may route away from the form before its create call goes out).
+    function observe(method, url) {
+      var w = vintedWatch;
+      if (!w || w.captured || w.superseded) return null;
+      if (w.done && !isPublishArmed(w.session)) return null;
+      if (!isCandidate(w, url, method)) return null;
       console.log("Velosia: Vinted-Publish-Request beobachtet -> " + method + " " + url);
-      if (dbgCount < 30) {
-        dbgCount++;
-        sendDebug({ event: "vinted_publish_request", method: method, url: url }, options);
-      }
+      if (!isVintedCreateRequest(url, method)) return null;
+      // The create call itself is the publish action (also arms the URL backstop).
+      if (publishSession && publishSession === w.session) armPublish("create-request");
+      return w;
     }
 
-    // --- Patch fetch: inspect POST/PUT responses to Vinted's API. ---
+    // --- Patch fetch: inspect the create call's response. ---
     try {
       var origFetch = window.fetch;
       if (origFetch && !origFetch.__velosiaPatched) {
         var patched = function (input, init) {
-          var url = (typeof input === "string") ? input : (input && input.url) || "";
+          var url = (typeof input === "string") ? input : (input && input.url) || (input ? String(input) : "");
           var method = (init && init.method) || (input && input.method) || "GET";
           var p = origFetch.apply(this, arguments);
           try {
-            if (!captured && isCandidate(url, method)) {
-              noteCandidate(method, url);
-              if (isCreateEndpoint(url)) {
-                p.then(function (resp) {
-                  try {
-                    resp.clone().json().then(function (data) {
-                      reportShape(url, data);
-                      var item = itemFromJson(data);
-                      if (item) fire(item);
-                    }).catch(function () {});
-                  } catch (e) {}
-                }).catch(function () {});
-              }
+            var w = observe(method, url);
+            if (w) {
+              p.then(function (resp) {
+                if (!resp || !resp.ok) return;
+                try {
+                  resp.clone().json().then(function (data) {
+                    var item = itemFromJson(data);
+                    if (item) fireVintedCapture(w, item);
+                  }).catch(function () {});
+                } catch (e) {}
+              }).catch(function () {});
             }
           } catch (e) {}
           return p;
@@ -2690,18 +2786,15 @@
         XHR.prototype.send = function () {
           try {
             var self = this;
-            if (!captured && isCandidate(self.__velosiaUrl, self.__velosiaMethod)) {
-              noteCandidate(self.__velosiaMethod, self.__velosiaUrl);
-              if (isCreateEndpoint(self.__velosiaUrl)) {
-                self.addEventListener("load", function () {
-                  try {
-                    var data = JSON.parse(self.responseText);
-                    reportShape(self.__velosiaUrl, data);
-                    var item = itemFromJson(data);
-                    if (item) fire(item);
-                  } catch (e) {}
-                });
-              }
+            var w = observe(self.__velosiaMethod, self.__velosiaUrl);
+            if (w) {
+              self.addEventListener("load", function () {
+                try {
+                  if (self.status < 200 || self.status >= 300) return;
+                  var item = itemFromJson(JSON.parse(self.responseText));
+                  if (item) fireVintedCapture(w, item);
+                } catch (e) {}
+              });
             }
           } catch (e) {}
           return origSend.apply(this, arguments);
@@ -2709,17 +2802,59 @@
         XHR.prototype.__velosiaPatched = true;
       }
     } catch (e) {}
+  }
 
-    // --- Backstop: poll the URL in case Vinted DOES navigate to /items/<id>. ---
-    var deadline = 10 * 60 * 1000; // give the user up to 10 min to review & publish
-    for (var elapsed = 0; elapsed < deadline && !captured; elapsed += 2500) {
-      await sleep(2500);
+  // Fire-and-forget (do not await). session = this page's publish session.
+  async function watchVintedPublish(draft, options, session) {
+    if (!draft || draft.id == null || !options || !options.backendUrl) return;
+    supersedeVintedWatch();
+    var w = {
+      draftId: draft.id, options: options, session: session || null,
+      formPath: window.location.pathname || "", done: false, captured: false, superseded: false
+    };
+    vintedWatch = w;
+    try { installVintedNetWatch(); } catch (e) {}
+
+    function onForm(path) {
+      return path === w.formPath || /^\/items\/new(\/|$)/.test(path);
+    }
+
+    // Only the FIRST navigation away from the form decides: an item page reached
+    // after the publish action -> capture; anything else (back/forward, catalog,
+    // an item opened before publishing …) -> stop for good. Query/hash changes on
+    // the form itself are ignored.
+    function check(traversal) {
+      if (w.done) return;
+      if (onForm(window.location.pathname || "")) return;
       var info = parseListingUrl(window.location.href);
-      if (info && info.platform === "vinted") {
-        fire({ id: info.listingId, url: info.listingUrl });
-        return;
+      if (!traversal && info && info.platform === "vinted" && isPublishArmed(w.session)) {
+        fireVintedCapture(w, { id: info.listingId, url: info.listingUrl });
+      } else {
+        endVintedWatch(w, traversal ? "back/forward" : "left the form without publishing");
       }
     }
+    function onPop() { check(true); }
+    function onEntry(e) { check(!!(e && e.navigationType === "traverse")); }
+
+    // popstate = back/forward. The Navigation API (where available) reports every
+    // SPA route change right away; the poll is the fallback.
+    var nav = null;
+    try { nav = window.navigation || null; } catch (e) {}
+    try { window.addEventListener("popstate", onPop, true); } catch (e) {}
+    try { if (nav && nav.addEventListener) nav.addEventListener("currententrychange", onEntry); } catch (e) {}
+
+    // Keep watching while the user reviews (up to an hour), longer only while a
+    // triggered publish is still valid.
+    var started = Date.now();
+    while (!w.done) {
+      await sleep(1000);
+      check(false);
+      if (!w.done && (Date.now() - started) > 60 * 60 * 1000 && !isPublishArmed(w.session)) {
+        endVintedWatch(w, "timeout");
+      }
+    }
+    try { window.removeEventListener("popstate", onPop, true); } catch (e) {}
+    try { if (nav && nav.removeEventListener) nav.removeEventListener("currententrychange", onEntry); } catch (e) {}
   }
 
   // ----------------------------------------------------------------------------
@@ -2727,7 +2862,6 @@
   // ----------------------------------------------------------------------------
 
   async function autofill(draft, options) {
-    lastAutofillOptions = options || null;
     options = options || {};
     if (typeof draft === "string") {
       try { draft = JSON.parse(draft); } catch (e) { draft = {}; }
@@ -2745,6 +2879,11 @@
         " category=" + (draft && draft.category) + " category_path=" + (draft && draft.category_path) +
         " vinted_category=" + (draft && draft.vinted_category) + " vinted_path=" + (draft && draft.vinted_path));
     } catch (e) {}
+
+    // A new run replaces this page's earlier publish session / Vinted watch, and the
+    // engine's own clicks while filling must never count as the publish action.
+    publishSession = null;
+    supersedeVintedWatch();
 
     // Kleinanzeigen step 1: pick the category, then let the step-2 reload fill.
     // A light backdrop signals progress; the page reloads to schritt2 right after.
@@ -2766,13 +2905,20 @@
     // engine fills the fields, then reveal the result + an arrow to "Veröffentlichen".
     if (showUi) ensureBackdrop();
 
+    // Publish session for the listing capture: only a click on the publish button
+    // (or auto-submit below) AFTER filling arms it — also when filling fails and the
+    // user completes the form by hand.
+    var session = startPublishSession(platform, draft, options);
+
     var r;
     try {
       r = await fillForm(draft, options, platform);
     } catch (e) {
+      session.ready = true;
       if (showUi) removeBackdrop();
       throw e;
     }
+    session.ready = true;
     var result = {
       platform: platform, phase: phase,
       filled: r.filled, manual: r.manual, photos: r.photos, submitted: false
@@ -2795,9 +2941,13 @@
     // Vinted publishes via SPA navigation (no reload) — start watching for the
     // resulting /items/<id> URL so we can capture & track the listing. Works for
     // both manual and auto-submit. Fire-and-forget. (Kleinanzeigen reloads to a
-    // fresh page, so its capture is handled by the capture content script.)
+    // fresh page, so its capture is handled by the host: the extension's content
+    // scripts or the native shell.)
     if (platform === "vinted" && phase === "form") {
-      try { watchVintedPublish(draft, options); } catch (e) {}
+      try {
+        var watching = watchVintedPublish(draft, options, session);
+        if (watching && watching.catch) watching.catch(function () {});
+      } catch (e) {}
     }
 
     if (autoSubmit) {
