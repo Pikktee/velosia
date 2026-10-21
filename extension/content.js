@@ -79,6 +79,7 @@ window.addEventListener("message", (event) => {
 // Initialize
 function init() {
   injectFloatingButton();
+  checkPublishConfirmation();
   checkPendingAutofill();
 }
 
@@ -369,6 +370,70 @@ function renderDraftsList() {
   });
 }
 
+// ---------------------------------------------------------------------------
+// Published-listing capture marker. capture.js (public ad pages) and the
+// Kleinanzeigen confirmation check below report a listing for a draft only while
+// this marker is armed. It is written only when the user (or auto-submit) really
+// triggers the platform's publish action — the engine's onPublishIntent hook, not
+// the autofill itself — is valid for a short time, and is used up by the first
+// listing page that reads it. So an ad opened after an autofill without
+// publishing (e.g. someone else's) is never stored as the user's own listing.
+// ---------------------------------------------------------------------------
+const CAPTURE_MARKER = "velosia_pending_capture";
+const CAPTURE_TTL_MS = 10 * 60 * 1000;
+
+function newCaptureSessionId() {
+  try {
+    if (self.crypto && self.crypto.randomUUID) return self.crypto.randomUUID();
+  } catch (e) {}
+  return Date.now().toString(36) + Math.random().toString(36).slice(2);
+}
+
+function armCaptureMarker(platform, draftId, sid) {
+  chrome.storage.local.set({
+    [CAPTURE_MARKER]: { v: 2, platform: platform, draftId: draftId, sid: sid, armedAt: Date.now() }
+  });
+}
+
+// Drop the marker only if it still belongs to this autofill session (another tab
+// may have armed its own in the meantime).
+function clearCaptureMarker(sid) {
+  chrome.storage.local.get([CAPTURE_MARKER], (data) => {
+    const pc = data && data[CAPTURE_MARKER];
+    if (pc && pc.sid === sid) chrome.storage.local.remove(CAPTURE_MARKER);
+  });
+}
+
+// Kleinanzeigen sends the user to a confirmation page that carries the new ad's id
+// (p-anzeige-aufgeben-…?adId=<id>; this content script matches it). That is the
+// most precise capture source: exactly the ad that was just published. It uses up
+// the marker, so capture.js does not report a later ad page for the same draft.
+function checkPublishConfirmation() {
+  const info = (window.__velosia && window.__velosia.parseListingUrl)
+    ? window.__velosia.parseListingUrl(window.location.href) : null;
+  if (!info || info.platform !== "kleinanzeigen") return;
+  chrome.storage.local.get([CAPTURE_MARKER, "velosia_token", "velosia_backend_url"], (data) => {
+    const pc = data[CAPTURE_MARKER];
+    if (!pc || pc.v !== 2 || !pc.armedAt || pc.platform !== info.platform) return;
+    chrome.storage.local.remove(CAPTURE_MARKER);
+    const age = Date.now() - pc.armedAt;
+    if (age < 0 || age > CAPTURE_TTL_MS || pc.draftId == null) return;
+    const token = data.velosia_token;
+    if (!token) return;
+    const base = data.velosia_backend_url || backendUrl;
+    fetch(`${base}/api/listings/published`, {
+      method: "POST",
+      headers: Object.assign({ "Content-Type": "application/json" }, authHeaders(token)),
+      body: JSON.stringify({
+        draft_id: pc.draftId,
+        platform: info.platform,
+        listing_id: info.listingId,
+        listing_url: info.listingUrl
+      })
+    }).catch(() => {});
+  });
+}
+
 // Perform Autofill by delegating to the shared Velosia engine (autofill-engine.js,
 // loaded as a content script before this file). All the platform-specific field
 // logic, the React-safe value setter, the photo upload and the feedback overlay
@@ -378,16 +443,15 @@ async function autofillForm(draft, autoSubmit) {
     console.error("Velosia: Autofill-Engine nicht geladen.");
     return;
   }
-  // Arm a capture marker: once the user publishes and lands on the public listing
-  // page, capture.js reports the listing id back so the dashboard can track it.
+  // A new autofill supersedes any capture still pending from an earlier one. The
+  // marker for THIS draft is armed by the engine once publishing is triggered.
+  const sid = newCaptureSessionId();
+  let platform = null;
   try {
-    const platform = window.__velosia.detectPlatform();
-    if (platform && draft && draft.id != null) {
-      chrome.storage.local.set({
-        velosia_pending_capture: { platform: platform, draftId: draft.id, ts: Date.now() }
-      });
-    }
+    platform = window.__velosia.detectPlatform();
+    chrome.storage.local.remove(CAPTURE_MARKER);
   } catch (e) {}
+  const canCapture = !!(platform && draft && draft.id != null);
 
   const settings = window.velosiaUserSettings || {};
   const submit = (typeof autoSubmit === "boolean") ? autoSubmit : !!settings.auto_submit;
@@ -403,7 +467,10 @@ async function autofillForm(draft, autoSubmit) {
       userCity: settings.default_city || "",
       autoSubmit: submit,
       imageMode: "datatransfer",
-      showOverlay: true
+      showOverlay: true,
+      onPublishIntent: () => { if (canCapture) armCaptureMarker(platform, draft.id, sid); },
+      onListingCaptured: () => clearCaptureMarker(sid),
+      onCaptureAborted: () => clearCaptureMarker(sid)
     });
   } catch (err) {
     console.error("Velosia: Autofill fehlgeschlagen:", err);

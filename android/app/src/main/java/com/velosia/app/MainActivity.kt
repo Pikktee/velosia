@@ -8,6 +8,7 @@ import android.graphics.Bitmap
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.os.SystemClock
 import android.util.Base64
 import android.util.Log
 import android.view.View
@@ -65,6 +66,17 @@ class MainActivity : AppCompatActivity() {
     // Guards the one-shot native capture: once we detect the published listing URL
     // and POST it, we must not fire again for the same session.
     private var hasCaptured = false
+    // Listing-capture gate (see captureAllowed), all UI thread only. When the user — or
+    // auto-submit — actually triggered the platform's publish action, as reported by the
+    // engine via VelosiaBridge.onPublishIntent (elapsedRealtime, 0 = not yet).
+    private var publishArmedAt = 0L
+    // Whether the engines injected in this session report that publish action (null =
+    // none injected yet). Older engines don't; the capture then falls back to the
+    // strict navigation rule instead of failing for good.
+    private var sessionEngineSignalsPublish: Boolean? = null
+    // Pages committed in this session, oldest first (fragment stripped, capped), so a
+    // listing page can be judged by how it was reached.
+    private val sessionPages = ArrayList<String>()
     // All draft photos, fetched server-side (okhttp, no browser CORS) and base64
     // data-URL encoded, handed to the autofill engine via the JS bridge so it can
     // inject every photo without a file chooser or a cross-origin fetch.
@@ -347,6 +359,8 @@ class MainActivity : AppCompatActivity() {
                 // guard keeps it a single run).
                 maybeTriggerAutofill(url)
                 maybeCapturePublishedListing(url)
+                // After the capture check, so the history holds the pages BEFORE this one.
+                rememberSessionPage(url)
             }
 
             // Renderer died (OOM on image-heavy vinted/KA pages, or a system reclaim).
@@ -481,6 +495,7 @@ class MainActivity : AppCompatActivity() {
                 hasAutoFilled = false
                 hasAutoCategory = false
                 hasCaptured = false
+                resetCaptureGate()
                 authToken = token
                 activeDraftId = draftId
                 telemetryCount.set(0)
@@ -531,6 +546,24 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
+        // The engine (2.7.56+) calls this the moment the user — or auto-submit — actually
+        // triggers the platform's publish action after the autofill (publish-button click,
+        // form submit, Vinted's create request). Only after that may a listing page of
+        // this session be captured (see captureAllowed), so an ad merely opened while
+        // browsing — possibly someone else's — is never stored as the user's listing.
+        // Platform pages of the active session's platform only.
+        @JavascriptInterface
+        fun onPublishIntent(platform: String) {
+            runOnUiThread {
+                val url = webView.url
+                if (!isPlatformPage(url) || activeDraftId < 0) return@runOnUiThread
+                if (platform != activePlatform) return@runOnUiThread
+                val hosts = if (platform == "vinted") vintedHosts else kleinanzeigenHosts
+                if (hostOf(url) !in hosts) return@runOnUiThread
+                publishArmedAt = SystemClock.elapsedRealtime()
+            }
+        }
+
         // Semi-manual cross-platform take-down: open the still-live ad in the
         // WebView (the user's session cookies are present) so the user can delete
         // it himself. Deliberately NOT a headless delete — a write to the user's
@@ -555,6 +588,7 @@ class MainActivity : AppCompatActivity() {
                 hasAutoFilled = false
                 hasAutoCategory = false
                 hasCaptured = false
+                resetCaptureGate()
                 authToken = null
                 activeDraftId = draftId
                 Toast.makeText(
@@ -766,6 +800,7 @@ class MainActivity : AppCompatActivity() {
         hasAutoFilled = false
         hasAutoCategory = false
         hasCaptured = false
+        resetCaptureGate()
         fabClose.visibility = View.GONE
         webView.loadUrl(frontendUrl)
     }
@@ -891,6 +926,10 @@ class MainActivity : AppCompatActivity() {
         val escapedJson = draftJson.replace("\\", "\\\\").replace("'", "\\'")
         val zip = userZip?.replace("\\", "\\\\")?.replace("'", "\\'") ?: ""
         val engine = readEngineJs()
+        // The listing capture may rely on the publish signal only if EVERY engine of this
+        // session sends it: one older (or missing) engine and it falls back to the strict
+        // navigation rule (see captureAllowed) rather than waiting for a signal in vain.
+        sessionEngineSignalsPublish = (sessionEngineSignalsPublish ?: true) && engineSignalsPublish(engine)
         if (engine.isEmpty()) {
             // The early backdrop (onPageStarted) would otherwise stay up forever since the
             // engine — which owns its removal — never runs. Drop it so the page is usable.
@@ -957,10 +996,128 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    // ---- Published-listing capture gate --------------------------------------------
+    // A listing page that shows up during a post session is recorded as the draft's
+    // listing only when it was reached by publishing, never by browsing: otherwise an ad
+    // the user merely opened (someone else's) would be stored and polled by the server.
+    // Same rules as the browser extension (capture.js), but judged on this session's
+    // real page history instead of document.referrer.
+
+    // A publish signal stays valid this long; every further publish click re-arms it.
+    private val PUBLISH_ARM_TTL_MS = 10 * 60 * 1000L
+    // First engine version that reports the publish action via onPublishIntent.
+    private val PUBLISH_INTENT_MIN_ENGINE = "2.7.56"
+    private val SESSION_PAGES_MAX = 40
+
+    private enum class CapturePage { FLOW, TRANSIT, BROWSING }
+
+    private fun resetCaptureGate() {
+        publishArmedAt = 0L
+        sessionEngineSignalsPublish = null
+        sessionPages.clear()
+    }
+
+    // Does this engine source report the publish action? Version AND the bridge call
+    // itself, so an engine without the hook is never mistaken for one with it.
+    private fun engineSignalsPublish(js: String): Boolean {
+        val version = EngineVerifier.versionOf(js) ?: return false
+        return EngineVerifier.compareVersions(version, PUBLISH_INTENT_MIN_ENGINE) >= 0 &&
+            js.contains("onPublishIntent")
+    }
+
+    // Append a committed main-frame URL to this session's page history (fragment
+    // stripped, consecutive repeats collapsed, oldest dropped beyond the cap).
+    private fun rememberSessionPage(url: String) {
+        if (activeDraftId < 0) return
+        val page = url.substringBefore('#')
+        if (sessionPages.lastOrNull() == page) return
+        sessionPages.add(page)
+        if (sessionPages.size > SESSION_PAGES_MAX) sessionPages.removeAt(0)
+    }
+
+    // The listing form itself or KA's publish flow (/p-anzeige-aufgeben…: category
+    // picker, form, confirmation page). A listing reached from here was just published.
+    private fun isPublishFlowPage(url: String): Boolean {
+        if (formPageOf(url) != FormPage.NONE) return true
+        val uri = parseUri(url) ?: return false
+        return isHttps(uri) && (uri.host?.lowercase() ?: "") in kleinanzeigenHosts &&
+            (uri.path ?: "").startsWith("/p-anzeige-aufgeben")
+    }
+
+    // The ad a page of that platform shows, loosely (also KA's short /s-anzeige/<id>).
+    // Only used to see through repeat visits of the same ad (redirect, reload).
+    private fun adIdOf(url: String, platform: String): String? {
+        val uri = parseUri(url) ?: return null
+        val host = uri.host?.lowercase() ?: return null
+        val path = uri.path ?: ""
+        val id = when {
+            platform == "vinted" && host in vintedHosts ->
+                Regex("^/items/(\\d{1,15})").find(path)?.groupValues?.get(1)
+            platform == "kleinanzeigen" && host in kleinanzeigenHosts ->
+                Regex("^/s-anzeige/(?:[^/]+/)?(\\d{1,15})").find(path)?.groupValues?.get(1)
+                    ?: uri.getQueryParameter("adId")
+            else -> null
+        }
+        return id?.takeIf { Regex("\\d{1,15}").matches(it) }
+    }
+
+    // How an earlier page of the session relates to publishing the listing `listingId`:
+    //  FLOW     — the form / KA's publish flow (isPublishFlowPage).
+    //  TRANSIT  — may sit between publishing and the live ad but offers no other
+    //             people's ads: another KA process page (/p-…: upsell/feature booking,
+    //             payment, review notice), KA's login and the user's own ad list, the
+    //             same ad again, and anything off both platforms (payment, 3-D Secure,
+    //             captcha and sign-in hand-offs, about:blank).
+    //  BROWSING — everything else on the platforms (home, search, categories, other ads,
+    //             watchlist, messages, any other Vinted page, other markets/subdomains)
+    //             and the Velosia frontend: someone else's ad is one tap away.
+    private fun capturePageOf(url: String, platform: String, listingId: String): CapturePage {
+        if (adIdOf(url, platform) == listingId) return CapturePage.TRANSIT
+        if (isPublishFlowPage(url)) return CapturePage.FLOW
+        val uri = parseUri(url)
+        val host = uri?.host?.lowercase()
+        if (uri == null || host.isNullOrEmpty()) return CapturePage.TRANSIT
+        val onPlatform = host.split('.').any { it == "vinted" || it == "kleinanzeigen" || it == "ebay-kleinanzeigen" }
+        if (!onPlatform) return if (isTrustedFrontend(url)) CapturePage.BROWSING else CapturePage.TRANSIT
+        if (host !in kleinanzeigenHosts || !isHttps(uri)) return CapturePage.BROWSING
+        val path = uri.path ?: ""
+        return if (path.startsWith("/p-") || path.startsWith("/m-einloggen") || path.startsWith("/m-meine-anzeigen"))
+            CapturePage.TRANSIT else CapturePage.BROWSING
+    }
+
+    // May the listing page (`listingId` on `platform`), reached after `pages` (this
+    // session's earlier pages, oldest first), be recorded as the draft's listing?
+    // No side effects.
+    //  - Engine reports publishing: only while a publish signal is valid, and only if
+    //    the page the user came from — looking back past TRANSIT pages, which a real
+    //    publish may pass through (upsell, payment, review notice) — is a FLOW page.
+    //    A BROWSING page or an exhausted history blocks.
+    //  - Older engine (no signal): strict, only straight from a FLOW page — so the
+    //    capture keeps working for the normal publish without the signal.
+    private fun captureAllowed(
+        pages: List<String>, platform: String, listingId: String,
+        publishArmed: Boolean, signalSupported: Boolean
+    ): Boolean {
+        if (!signalSupported) {
+            val prev = pages.lastOrNull() ?: return false
+            return isPublishFlowPage(prev)
+        }
+        if (!publishArmed) return false
+        for (i in pages.indices.reversed()) {
+            when (capturePageOf(pages[i], platform, listingId)) {
+                CapturePage.FLOW -> return true
+                CapturePage.BROWSING -> return false
+                CapturePage.TRANSIT -> {}
+            }
+        }
+        return false
+    }
+
     // Detect the *published* listing page during an active autofill session and, on the
     // first hit, record it on the backend natively (okhttp: has the user's token, no
     // browser CORS), then close the WebView and confirm success in the app. Vinted item:
     // /items/<id>-slug (NOT /items/new); Kleinanzeigen ad: /s-anzeige/<slug>/<id>-…
+    // Only a listing page reached by publishing counts (captureAllowed).
     private fun maybeCapturePublishedListing(url: String) {
         if (hasCaptured || activeDraftId < 0) return
         val platform = activePlatform ?: return
@@ -986,21 +1143,19 @@ class MainActivity : AppCompatActivity() {
             else -> null
         }
 
-        if (listingId == null) {
-            // Diagnostic: while a KA capture is still pending, report any navigation that
-            // leaves the listing form so we can confirm KA's real post-publish URL in the
-            // Railway logs (the moment adId/s-anzeige both miss, this tells us what to add).
-            if (platform == "kleinanzeigen" && host in kleinanzeigenHosts
-                && !path.startsWith("/p-anzeige-aufgeben")) {
-                postDebug("ka_postpublish_nav", url.substringBefore('#'))
-            }
-            return
-        }
+        // Not (yet) a published listing page — keep waiting for the next navigation.
+        if (listingId == null) return
 
         // For a real /s-anzeige/ ad strip the query; for the adId confirmation page keep
         // it (the id lives in the query) so we at least record a resolvable reference.
         val cleanUrl = if (url.contains("/s-anzeige/")) url.substringBefore('?').substringBefore('#')
                        else url.substringBefore('#')
+
+        // Reached by publishing, not by browsing? Otherwise keep waiting (a later page
+        // of the real publish may still qualify).
+        val armed = publishArmedAt > 0L &&
+            SystemClock.elapsedRealtime() - publishArmedAt <= PUBLISH_ARM_TTL_MS
+        if (!captureAllowed(sessionPages, platform, listingId, armed, sessionEngineSignalsPublish == true)) return
 
         hasCaptured = true
         capturePublishedListing(activeDraftId, platform, listingId, cleanUrl, token)
@@ -1047,26 +1202,6 @@ class MainActivity : AppCompatActivity() {
         val msg = if (captured) "Artikel veröffentlicht! 🎉" else "Artikel veröffentlicht."
         Toast.makeText(this, msg, Toast.LENGTH_LONG).show()
         webView.postDelayed({ closeListingView() }, 1500)
-    }
-
-    // Unauthenticated, fire-and-forget diagnostic beacon (no listing content beyond the
-    // observed URL) so we can confirm KA's real post-publish navigation in the Railway
-    // logs without adb. Mirrors the engine's /api/telemetry/debug beacon.
-    private fun postDebug(event: String, detail: String) {
-        try {
-            val json = JSONObject().apply {
-                put("event", event)
-                put("url", detail)
-                put("source", "android")
-            }.toString()
-            val body = json.toRequestBody("application/json; charset=utf-8".toMediaTypeOrNull())
-            okHttpClient.newCall(
-                Request.Builder().url("$backendUrl/api/telemetry/debug").post(body).build()
-            ).enqueue(object : Callback {
-                override fun onFailure(call: Call, e: IOException) {}
-                override fun onResponse(call: Call, response: Response) { response.close() }
-            })
-        } catch (e: Exception) { /* diagnostic is best-effort */ }
     }
 
     private fun checkCameraPermission() {

@@ -9,8 +9,8 @@ const API_ORIGIN = 'https://api.velosia.henrikheil.net'
 const CSP = [
   "default-src 'self'",
   "script-src 'self' https://accounts.google.com/gsi/client",
-  "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://accounts.google.com/gsi/style",
-  "font-src 'self' data: https://fonts.gstatic.com",
+  "style-src 'self' 'unsafe-inline' https://accounts.google.com/gsi/style",
+  "font-src 'self' data:",
   `img-src 'self' data: blob: ${API_ORIGIN} https://*.googleusercontent.com`,
   `connect-src 'self' ${API_ORIGIN} https://accounts.google.com/gsi/`,
   "frame-src https://accounts.google.com/gsi/",
