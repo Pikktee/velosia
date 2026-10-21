@@ -1,45 +1,41 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { X, Send, AlertTriangle, CheckCircle, Loader } from 'lucide-react';
 import html2canvas from 'html2canvas';
 import { submitBugReport } from '../utils/api';
 
 export default function BugReportModal({ onClose, currentView }) {
   const [description, setDescription] = useState('');
-  const [screenshotBase64, setScreenshotBase64] = useState(null);
-  const [isCapturing, setIsCapturing] = useState(false);
+  const [isCapturing, setIsCapturing] = useState(true);
+  const [captureFailed, setCaptureFailed] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState(null);
   const [success, setSuccess] = useState(false);
-  const [sendScreenshot, setSendScreenshot] = useState(true);
+  // DSGVO: Die Einwilligung zum Mitsenden muss aktiv erteilt werden – das
+  // Kästchen ist daher nie vorab angehakt (EuGH Planet49).
+  const [sendScreenshot, setSendScreenshot] = useState(false);
+  // Promise auf den Screenshot (JPEG-Data-URL oder null). Aufgenommen wird beim
+  // Öffnen, damit er die Seite so zeigt, wie sie beim Problem aussah (inkl. evtl.
+  // Fehler-Toast). Er bleibt nur im Speicher dieses Dialogs, verlässt das Gerät
+  // ausschließlich bei gesetztem Haken und wird beim Schließen verworfen.
+  const screenshotRef = useRef(null);
 
-  // Auto-capture screenshot on mount in the background
   useEffect(() => {
-    captureScreen();
+    if (screenshotRef.current) return; // StrictMode mountet doppelt – nur einmal aufnehmen
+    // Der Dialog selbst ist per data-html2canvas-ignore ausgenommen.
+    screenshotRef.current = html2canvas(document.body, {
+      useCORS: true,
+      allowTaint: true,
+      scale: 0.8, // reduce scale for faster capture and smaller payload
+      logging: false,
+    })
+      .then((canvas) => canvas.toDataURL('image/jpeg', 0.7)) // compress to jpeg for efficiency
+      .catch((err) => {
+        console.error('Failed to capture screenshot in background:', err);
+        setCaptureFailed(true);
+        return null;
+      })
+      .finally(() => setIsCapturing(false));
   }, []);
-
-  const captureScreen = async () => {
-    setIsCapturing(true);
-    try {
-      // Temporarily mark the modal overlay to be ignored by html2canvas
-      const modalOverlay = document.querySelector('.bug-modal-overlay');
-      if (modalOverlay) {
-        modalOverlay.setAttribute('data-html2canvas-ignore', 'true');
-      }
-      
-      const canvas = await html2canvas(document.body, {
-        useCORS: true,
-        allowTaint: true,
-        scale: 0.8, // reduce scale for faster capture and smaller payload
-        logging: false,
-      });
-      const base64 = canvas.toDataURL('image/jpeg', 0.7); // compress to jpeg for efficiency
-      setScreenshotBase64(base64);
-    } catch (err) {
-      console.error('Failed to capture screenshot in background:', err);
-    } finally {
-      setIsCapturing(false);
-    }
-  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -69,11 +65,15 @@ export default function BugReportModal({ onClose, currentView }) {
     };
 
     try {
+      // Ohne Haken geht kein Screenshot mit – auch kein bereits aufgenommener.
+      // Mit Haken auf eine evtl. noch laufende Aufnahme warten, statt ihn still
+      // wegzulassen.
+      const screenshot = sendScreenshot ? await screenshotRef.current : null;
       await submitBugReport({
         title: generatedTitle,
         description,
         device_info: JSON.stringify(deviceInfo),
-        screenshot_base64: sendScreenshot ? screenshotBase64 : null
+        screenshot_base64: screenshot || null
       });
       setSuccess(true);
       setTimeout(() => {
@@ -87,7 +87,7 @@ export default function BugReportModal({ onClose, currentView }) {
   };
 
   return (
-    <div className="bug-modal-overlay">
+    <div className="bug-modal-overlay" data-html2canvas-ignore="true">
       <div className="glass-panel bug-modal-content fade-in">
         <div className="bug-modal-header">
           <h2>Problem melden</h2>
@@ -144,7 +144,11 @@ export default function BugReportModal({ onClose, currentView }) {
                 }}
               />
               <label htmlFor="bug-send-screenshot" style={{ margin: 0, cursor: 'pointer', userSelect: 'none', fontSize: '0.9rem', color: 'var(--text-secondary)' }}>
-                Screenshot dieses Bildschirms mitsenden {isCapturing && <span style={{ color: 'var(--text-muted)', fontSize: '0.8rem' }}>(wird geladen...)</span>}
+                Screenshot dieses Bildschirms mitsenden {sendScreenshot && isCapturing && <span style={{ color: 'var(--text-muted)', fontSize: '0.8rem' }}>(wird geladen...)</span>}
+                {sendScreenshot && captureFailed && <span style={{ color: 'var(--text-muted)', fontSize: '0.8rem' }}>(konnte nicht erstellt werden)</span>}
+                <span style={{ display: 'block', marginTop: '0.2rem', color: 'var(--text-muted)', fontSize: '0.8rem' }}>
+                  Zeigt die Seite hinter diesem Fenster und kann persönliche Angaben enthalten.
+                </span>
               </label>
             </div>
 
