@@ -36,7 +36,7 @@
   // and in the extension it is a persistent content script — never redefine.
   if (window.__velosia && window.__velosia.__loaded) return;
 
-  var VERSION = "2.7.55";
+  var VERSION = "2.7.56";
   var KA_TITLE_MAX = 65;
 
   // Cut at the last word boundary within `max`; hard cut if that loses too much.
@@ -298,10 +298,6 @@
     } catch (e) {}
   }
 
-  // Structural photo-step diagnostics (no content) — sent as a ka_photo_probe beacon
-  // by the form flow, so a failed upload on a phone shows up in the Railway logs.
-  var lastPhotoDiag = null;
-
   // The photo section around the upload input: climb until the ancestor carries the
   // section heading ("Bilder"/"Fotos"), so previews rendered NEXT to the dropzone count.
   function photoSection(input) {
@@ -340,36 +336,20 @@
   async function commitFilesToInput(input, dt, allowDrop) {
     var section = allowDrop ? photoSection(input) : null;
     var before = allowDrop ? photoPreviewCount(section) : 0;
-    lastPhotoDiag = {
-      files: dt.files.length,
-      fileInputs: document.querySelectorAll("input[type='file']").length,
-      accept: String(input.accept || "").slice(0, 60),
-      previewsBefore: before
-    };
     try {
       input.files = dt.files;
       input.dispatchEvent(new Event("input", { bubbles: true }));
       input.dispatchEvent(new Event("change", { bubbles: true }));
-    } catch (e) { lastPhotoDiag.error = "set_files"; return false; }
+    } catch (e) { return false; }
     if (!allowDrop) return true;
 
     await sleep(300);
-    lastPhotoDiag.filesLeft = input.files ? input.files.length : -1;
-    if (await waitForPreviewGrowth(section, before, 6000)) {
-      lastPhotoDiag.via = "change";
-      return true;
-    }
+    if (await waitForPreviewGrowth(section, before, 6000)) return true;
     try {
       var zone = input.closest("[class*='dashed'], [class*='drop'], [class*='Drop'], [class*='upload'], [class*='Upload']") || input.parentElement;
       fireDropEvent(zone, dt);
-      lastPhotoDiag.dropFired = true;
     } catch (e) {}
-    if (await waitForPreviewGrowth(section, before, 6000)) {
-      lastPhotoDiag.via = "drop";
-      return true;
-    }
-    lastPhotoDiag.via = "none";
-    lastPhotoDiag.previewsAfter = photoPreviewCount(section);
+    if (await waitForPreviewGrowth(section, before, 6000)) return true;
     return false;
   }
 
@@ -940,15 +920,12 @@
   // (connector-insensitive) match. KA only filters on a real InputEvent — a plain
   // Event("input") does NOT — and we also fire key events for keyup-based filters.
   // Filtering dodges the full-list render that on mobile left the brand unmatched.
-  // Never commits a non-exact brand. `options` is only used for an optional beacon.
-  async function selectKleinanzeigenBrand(brand, options) {
-    // Emit exactly one structural diagnostic per call (no listing content beyond the
-    // brand length) so the Railway logs reveal WHERE the brand step bails on mobile —
-    // the previous probe only fired mid-loop and so never arrived when the function
-    // returned early. reason tells us: no control / no input / no matching option.
+  // Never commits a non-exact brand.
+  async function selectKleinanzeigenBrand(brand) {
+    // Uniform failure result; reason tells us where the brand step bailed:
+    // no control / no input / no matching option / clicked but not committed.
     function bail(reason, extra) {
       var detail = extra ? Object.keys(extra).map(function (k) { return k + "=" + extra[k]; }).join(" ") : "";
-      try { sendDebug(Object.assign({ event: "ka_brand_probe", reason: reason, brandLen: String(brand || "").length }, extra || {}), options); } catch (e) {}
       return { ok: false, reason: reason, detail: detail };
     }
     if (!brand) return bail("no_brand_value");
@@ -1012,7 +989,7 @@
       return { ok: true };
     }
     // Clicked the right option but KA didn't commit it — return failure (brand stays
-    // manual) and let the cheap probe record it, rather than a false "Alles ausgefüllt".
+    // manual) rather than a false "Alles ausgefüllt".
     return bail("clicked_no_commit", { optText: norm(opt.textContent).slice(0, 18), ctrlVal: (control.value || "").slice(0, 18) });
   }
 
@@ -1611,18 +1588,6 @@
     }
     if (!picked) {
       vintedDiagPicker(logName);
-      if (opts.exact) {
-        var openSheet = vintedOpenPickerFor(fieldLabel);
-        try {
-          sendDebug({
-            event: "vinted_spec_probe", field: logName, reason: "no_option",
-            opener: (opener.tagName || "") + ":" + norm(opener.textContent || "").slice(0, 40),
-            sheet: !!openSheet,
-            sheetText: openSheet ? norm(openSheet.textContent || "").slice(0, 160) : null,
-            cands: candidates.join("|")
-          }, lastAutofillOptions);
-        } catch (e) {}
-      }
       console.log("Velosia Vinted: " + logName + "-Option (" + candidates.join("/") + ") nicht gefunden");
       return false;
     }
@@ -1646,9 +1611,6 @@
       "' -> " + (verified ? "übernommen" : "Klick OHNE Übernahme (Feld unverändert)"));
     return !!verified;
   }
-
-  // Options of the running autofill, so deep helpers can send a diagnostic beacon.
-  var lastAutofillOptions = null;
 
   // The option sheet that is open RIGHT NOW for this field: on screen and titled with
   // the field label. Vinted keeps closed sheets mounted, so a document-wide search for
@@ -2187,7 +2149,6 @@
     // path everywhere (it uploads ALL draft photos and needs no user gesture); the
     // native chooser is only a fallback for environments without DataTransfer.
     setBackdrop("Fotos werden übertragen …");
-    lastPhotoDiag = null;
     var photos = 0;
     // Kleinanzeigen's new react-dropzone uploader also accepts a 'drop' fallback.
     var allowDrop = platform === "kleinanzeigen";
@@ -2204,10 +2165,6 @@
     // 3) Last-resort native file chooser.
     if (photos === 0 && options.imageMode === "native") photos = triggerNativeFileChooser();
     try { console.log("Velosia: Fotos übertragen -> " + photos + " (Modus " + options.imageMode + ")"); } catch (e) {}
-    if (platform === "kleinanzeigen") {
-      sendDebug(Object.assign({ event: "ka_photo_probe", photos: photos, bridged: bridged },
-        lastPhotoDiag || { fileInputs: document.querySelectorAll("input[type='file']").length }), options);
-    }
 
     // Look the fields up again AFTER the photo step — the form may have re-mounted
     // its inputs, leaving references from before the upload detached.
@@ -2313,9 +2270,9 @@
         // nothing to do
       } else if (kaBrand && !alreadyFilled("marke")) {
         // selectKleinanzeigenBrand returns {ok, reason, detail}; on failure the brand
-        // stays manual (the cheap ka_brand_probe beacon still records the bail reason).
+        // stays manual.
         var br = { ok: false };
-        try { br = await selectKleinanzeigenBrand(kaBrand, options); } catch (e) { br = { ok: false }; }
+        try { br = await selectKleinanzeigenBrand(kaBrand); } catch (e) { br = { ok: false }; }
         fields.brand = !!(br && br.ok);
         if (br && br.ok) filled.push("Marke");
         else manual.push("Marke");
@@ -2477,21 +2434,6 @@
     } catch (e) { /* telemetry is best-effort, never block autofill */ }
   }
 
-  // Temporary, UNAUTHENTICATED diagnostic beacon (no listing content — only a short
-  // event tag + observed request method/url) so we can confirm publish detection in
-  // the Railway logs without adb. Unauthenticated on purpose: it must still report
-  // even if the auth token is missing (the very failure mode we are chasing).
-  function sendDebug(payload, options) {
-    try {
-      if (!options || !options.backendUrl) return;
-      payload.engine_version = VERSION;
-      fetch(options.backendUrl + "/api/telemetry/debug", {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload), keepalive: true
-      }).catch(function () {});
-    } catch (e) {}
-  }
-
   // ----------------------------------------------------------------------------
   // Published-listing capture — read the public listing id/URL after publishing
   // (no login, no form crawl) and report it so the dashboard can track status.
@@ -2578,7 +2520,6 @@
       captured = true;
       var listingUrl = listingUrlFrom(item);
       console.log("Velosia: Vinted-Item erkannt -> id=" + item.id + " url=" + listingUrl);
-      sendDebug({ event: "vinted_item_captured", id: String(item.id), url: listingUrl }, options);
       // Backend capture (works on desktop too; idempotent server-side). Skipped when
       // no token was passed and the native shell captures instead (newer app builds).
       var nb = nativeBridge("onListingPublished");
@@ -2611,25 +2552,10 @@
       return null;
     }
 
-    // Report the response shape (keys only, no content) so we can confirm where the
-    // id lives if extraction ever misses. Temporary diagnostic.
-    function reportShape(url, data) {
-      try {
-        var keys = (data && typeof data === "object") ? Object.keys(data).slice(0, 40) : [];
-        var item = data && (data.item || data);
-        var itemKeys = (item && typeof item === "object") ? Object.keys(item).slice(0, 40) : [];
-        sendDebug({
-          event: "vinted_create_response", url: url, keys: keys, itemKeys: itemKeys,
-          itemId: (item && item.id != null) ? String(item.id) : null
-        }, options);
-      } catch (e) {}
-    }
-
     // A POST/PUT to a Vinted /api/ path is a publish candidate. EXCLUDE our own
-    // backend calls (telemetry/listing capture) — otherwise the debug beacon's own
-    // POST is seen as a candidate and loops.
+    // backend calls (telemetry/listing capture) — they go through the same patched
+    // fetch and must never be inspected as a Vinted publish.
     var backendUrl = options.backendUrl || "";
-    var dbgCount = 0;
     function isCandidate(url, method) {
       url = url || "";
       if (!/post|put/i.test(method || "") || !/\/api\//i.test(url)) return false;
@@ -2640,10 +2566,6 @@
     function noteCandidate(method, url) {
       if (captured || !isCandidate(url, method)) return;
       console.log("Velosia: Vinted-Publish-Request beobachtet -> " + method + " " + url);
-      if (dbgCount < 30) {
-        dbgCount++;
-        sendDebug({ event: "vinted_publish_request", method: method, url: url }, options);
-      }
     }
 
     // --- Patch fetch: inspect POST/PUT responses to Vinted's API. ---
@@ -2661,7 +2583,6 @@
                 p.then(function (resp) {
                   try {
                     resp.clone().json().then(function (data) {
-                      reportShape(url, data);
                       var item = itemFromJson(data);
                       if (item) fire(item);
                     }).catch(function () {});
@@ -2696,7 +2617,6 @@
                 self.addEventListener("load", function () {
                   try {
                     var data = JSON.parse(self.responseText);
-                    reportShape(self.__velosiaUrl, data);
                     var item = itemFromJson(data);
                     if (item) fire(item);
                   } catch (e) {}
@@ -2727,7 +2647,6 @@
   // ----------------------------------------------------------------------------
 
   async function autofill(draft, options) {
-    lastAutofillOptions = options || null;
     options = options || {};
     if (typeof draft === "string") {
       try { draft = JSON.parse(draft); } catch (e) { draft = {}; }
