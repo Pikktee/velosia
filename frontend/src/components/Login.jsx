@@ -1,6 +1,35 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useEffectEvent, useRef } from 'react';
 import { Mail, Lock, Sparkles, AlertCircle, CheckCircle } from 'lucide-react';
 import { loginUser, registerUser, getAuthConfig, loginWithGoogle } from '../utils/api';
+import { loadGoogleIdentity } from '../utils/loadGoogleIdentity';
+
+// Shared look of the browser Google button (idle/loading <button> and the
+// decorative face beneath Google's invisible iframe once GSI is loaded).
+const GOOGLE_BUTTON_FACE = {
+  width: '100%',
+  height: '100%',
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  gap: '0.75rem',
+  background: 'rgba(255, 255, 255, 0.03)',
+  border: '1px solid var(--glass-border)',
+  borderRadius: 'var(--radius-sm)',
+  color: 'var(--text-primary)',
+  fontFamily: 'var(--font-title)',
+  fontWeight: '600',
+  fontSize: '0.9rem',
+  boxSizing: 'border-box'
+};
+
+const GoogleLogo = () => (
+  <svg width="18" height="18" viewBox="0 0 18 18" style={{ flexShrink: 0 }} aria-hidden="true">
+    <path d="M17.64 9.2c0-.637-.057-1.251-.164-1.84H9v3.481h4.844c-.209 1.125-.843 2.078-1.796 2.717v2.258h2.908c1.702-1.567 2.684-3.874 2.684-6.615z" fill="#4285F4" />
+    <path d="M9 18c2.43 0 4.467-.806 5.956-2.184l-2.908-2.258c-.806.54-1.837.86-3.048.86-2.344 0-4.328-1.584-5.036-3.711H.957v2.332A8.997 8.997 0 009 18z" fill="#34A853" />
+    <path d="M3.964 10.707a5.416 5.416 0 01-.282-1.707c0-.593.102-1.17.282-1.707V4.961H.957A8.996 8.996 0 000 9c0 1.452.348 2.827.957 4.039l3.007-2.332z" fill="#FBBC05" />
+    <path d="M9 3.58c1.321 0 2.508.454 3.44 1.345l2.582-2.58C13.463.896 11.426 0 9 0 5.044 0 1.636 2.278.957 5.58l3.007 2.332C4.672 5.164 6.656 3.58 9 3.58z" fill="#EA4335" />
+  </svg>
+);
 
 export default function Login({ onLoginSuccess }) {
   const isAndroidApp = typeof window.VelosiaBridge !== 'undefined';
@@ -11,6 +40,21 @@ export default function Login({ onLoginSuccess }) {
   const [error, setError] = useState(null);
   const [success, setSuccess] = useState(null);
   const [googleClientId, setGoogleClientId] = useState('');
+  // Browser only (DSGVO): Google's GSI script is loaded on the user's first click,
+  // never on page load. 'idle' → 'loading' → 'ready'. If it was already loaded
+  // earlier in this page session (e.g. Login remounted), start as 'ready'.
+  const [googleState, setGoogleState] = useState(() =>
+    typeof window.google !== 'undefined' && window.google.accounts?.id ? 'ready' : 'idle'
+  );
+  const googleButtonRef = useRef(null);
+  const mountedRef = useRef(false);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
 
   // Load backend configuration
   useEffect(() => {
@@ -54,37 +98,60 @@ export default function Login({ onLoginSuccess }) {
     }
   };
 
-  // Render Google Button when client ID and script are ready (only in standard web browsers)
+  // GSI calls this later from Google's iframe; always use the latest handler.
+  const onGoogleCredential = useEffectEvent((response) => {
+    handleGoogleCredentialResponse(response);
+  });
+
+  // First click (browser only): load GSI on demand. Only after this user action
+  // does the browser contact Google. The second click then hits Google's button.
+  const handleLoadGoogle = async () => {
+    if (googleState !== 'idle') return;
+    setGoogleState('loading');
+    setError(null);
+    setSuccess(null);
+    try {
+      await loadGoogleIdentity();
+      if (mountedRef.current) setGoogleState('ready');
+    } catch (loadErr) {
+      console.error("Google Identity Services konnte nicht geladen werden:", loadErr);
+      if (!mountedRef.current) return;
+      setGoogleState('idle');
+      setError('Google-Login konnte nicht geladen werden. Ein Werbe- oder Tracking-Blocker kann das verhindern – bitte erneut versuchen oder mit E-Mail anmelden.');
+    }
+  };
+
+  // Once GSI is loaded, render Google's official button invisibly on top of our
+  // styled one (only in standard web browsers). Re-runs on sign-in/register toggle.
   useEffect(() => {
-    if (!googleClientId || isAndroidApp) return;
+    if (googleState !== 'ready' || !googleClientId || isAndroidApp) return;
+    const container = googleButtonRef.current;
+    const gsi = typeof window.google !== 'undefined' ? window.google.accounts?.id : undefined;
+    if (!container || !gsi) return;
 
-    const checkGoogle = setInterval(() => {
-      if (typeof google !== 'undefined') {
-        clearInterval(checkGoogle);
-        try {
-          google.accounts.id.initialize({
-            client_id: googleClientId,
-            callback: handleGoogleCredentialResponse,
-          });
-          google.accounts.id.renderButton(
-            document.getElementById("google-signin-button"),
-            { 
-              theme: "filled_black", 
-              size: "large", 
-              width: 336,
-              text: isRegister ? "signup_with" : "signin_with",
-              shape: "rectangular",
-              logo_alignment: "center"
-            }
-          );
-        } catch (initErr) {
-          console.error("Fehler bei der Google Sign-In Initialisierung:", initErr);
+    try {
+      gsi.initialize({
+        client_id: googleClientId,
+        callback: (response) => onGoogleCredential(response),
+      });
+      gsi.renderButton(
+        container,
+        {
+          theme: "filled_black",
+          size: "large",
+          width: 336,
+          text: isRegister ? "signup_with" : "signin_with",
+          shape: "rectangular",
+          logo_alignment: "center"
         }
-      }
-    }, 100);
+      );
+    } catch (initErr) {
+      console.error("Fehler bei der Google Sign-In Initialisierung:", initErr);
+    }
 
-    return () => clearInterval(checkGoogle);
-  }, [googleClientId, isRegister, isAndroidApp]);
+    // Drop Google's iframe on toggle/unmount; the next run renders a fresh one.
+    return () => container.replaceChildren();
+  }, [googleState, googleClientId, isRegister, isAndroidApp]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -242,45 +309,50 @@ export default function Login({ onLoginSuccess }) {
                   </svg>
                   <span>{isRegister ? 'Über Google registrieren' : 'Über Google anmelden'}</span>
                 </button>
+              ) : googleState !== 'ready' ? (
+                /* Web Browser, step 1: real button that loads Google's script on demand */
+                <button
+                  type="button"
+                  onClick={handleLoadGoogle}
+                  disabled={googleState === 'loading'}
+                  aria-busy={googleState === 'loading'}
+                  style={{
+                    ...GOOGLE_BUTTON_FACE,
+                    cursor: googleState === 'loading' ? 'progress' : 'pointer',
+                    opacity: googleState === 'loading' ? 0.7 : 1
+                  }}
+                >
+                  <GoogleLogo />
+                  <span>
+                    {googleState === 'loading'
+                      ? 'Google wird geladen…'
+                      : isRegister ? 'Über Google registrieren' : 'Über Google anmelden'}
+                  </span>
+                </button>
               ) : (
-                /* Web Browser Google Button */
+                /* Web Browser, step 2: GSI loaded, Google's iframe captures the click */
                 <>
                   {/* Custom styled glassmorphic button beneath */}
-                  <div 
+                  <div
+                    aria-hidden="true"
                     style={{
+                      ...GOOGLE_BUTTON_FACE,
                       position: 'absolute',
                       top: 0,
                       left: 0,
-                      width: '100%',
-                      height: '100%',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      gap: '0.75rem',
-                      background: 'rgba(255, 255, 255, 0.03)',
-                      border: '1px solid var(--glass-border)',
-                      borderRadius: 'var(--radius-sm)',
-                      color: 'var(--text-primary)',
-                      fontFamily: 'var(--font-title)',
-                      fontWeight: '600',
-                      fontSize: '0.9rem',
-                      pointerEvents: 'none',
-                      boxSizing: 'border-box'
+                      border: '1px solid var(--primary)',
+                      pointerEvents: 'none'
                     }}
                   >
-                    <svg width="18" height="18" viewBox="0 0 18 18" style={{ flexShrink: 0 }}>
-                      <path d="M17.64 9.2c0-.637-.057-1.251-.164-1.84H9v3.481h4.844c-.209 1.125-.843 2.078-1.796 2.717v2.258h2.908c1.702-1.567 2.684-3.874 2.684-6.615z" fill="#4285F4" />
-                      <path d="M9 18c2.43 0 4.467-.806 5.956-2.184l-2.908-2.258c-.806.54-1.837.86-3.048.86-2.344 0-4.328-1.584-5.036-3.711H.957v2.332A8.997 8.997 0 009 18z" fill="#34A853" />
-                      <path d="M3.964 10.707a5.416 5.416 0 01-.282-1.707c0-.593.102-1.17.282-1.707V4.961H.957A8.996 8.996 0 000 9c0 1.452.348 2.827.957 4.039l3.007-2.332z" fill="#FBBC05" />
-                      <path d="M9 3.58c1.321 0 2.508.454 3.44 1.345l2.582-2.58C13.463.896 11.426 0 9 0 5.044 0 1.636 2.278.957 5.58l3.007 2.332C4.672 5.164 6.656 3.58 9 3.58z" fill="#EA4335" />
-                    </svg>
-                    <span>{isRegister ? 'Über Google registrieren' : 'Über Google anmelden'}</span>
+                    <GoogleLogo />
+                    <span>Weiter mit Google</span>
                   </div>
-                  
+
                   {/* Invisible official Google button iframe on top to capture clicks securely */}
-                  <div 
-                    id="google-signin-button" 
-                    style={{ 
+                  <div
+                    ref={googleButtonRef}
+                    id="google-signin-button"
+                    style={{
                       position: 'absolute',
                       top: 0,
                       left: '50%',
@@ -295,6 +367,13 @@ export default function Login({ onLoginSuccess }) {
                 </>
               )}
             </div>
+
+            {/* Browser only: say why the button needs a tap before Google is contacted */}
+            {!isAndroidApp && googleState !== 'ready' && (
+              <p style={{ margin: '0.5rem 0 0', fontSize: '0.75rem', color: 'var(--text-muted)', textAlign: 'center' }}>
+                Erst nach dem Antippen wird eine Verbindung zu Google aufgebaut.
+              </p>
+            )}
           </>
         )}
 
