@@ -2,6 +2,7 @@ import React, { useState, useEffect, useEffectEvent, useRef } from 'react';
 import { Mail, Lock, Sparkles, AlertCircle, CheckCircle } from 'lucide-react';
 import { loginUser, registerUser, getAuthConfig, loginWithGoogle } from '../utils/api';
 import { loadGoogleIdentity } from '../utils/loadGoogleIdentity';
+import LegalModal, { LegalLinks } from './LegalModal';
 
 // Shared look of the browser Google button (idle/loading <button> and the
 // decorative face beneath Google's invisible iframe once GSI is loaded).
@@ -22,6 +23,19 @@ const GOOGLE_BUTTON_FACE = {
   boxSizing: 'border-box'
 };
 
+// Inline text link that opens a legal text in the overlay.
+const LEGAL_LINK = {
+  display: 'inline',
+  background: 'transparent',
+  border: 'none',
+  color: 'var(--primary)',
+  padding: 0,
+  minHeight: 'auto',
+  font: 'inherit',
+  textDecoration: 'underline',
+  cursor: 'pointer'
+};
+
 const GoogleLogo = () => (
   <svg width="18" height="18" viewBox="0 0 18 18" style={{ flexShrink: 0 }} aria-hidden="true">
     <path d="M17.64 9.2c0-.637-.057-1.251-.164-1.84H9v3.481h4.844c-.209 1.125-.843 2.078-1.796 2.717v2.258h2.908c1.702-1.567 2.684-3.874 2.684-6.615z" fill="#4285F4" />
@@ -39,6 +53,9 @@ export default function Login({ onLoginSuccess }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [success, setSuccess] = useState(null);
+  // Legal text shown in the overlay. An overlay, not a #/datenschutz link: in the
+  // Android app every logged-out route except #/login redirects back here.
+  const [legalDoc, setLegalDoc] = useState(null);
   const [googleClientId, setGoogleClientId] = useState('');
   // Browser only (DSGVO): Google's GSI script is loaded on the user's first click,
   // never on page load. 'idle' → 'loading' → 'ready'. If it was already loaded
@@ -377,6 +394,17 @@ export default function Login({ onLoginSuccess }) {
           </>
         )}
 
+        {/* Sign-up applies to both e-mail and Google ("Über Google registrieren" creates the account too) */}
+        {isRegister && (
+          <p style={{ margin: '1.25rem 0 0', fontSize: '0.75rem', color: 'var(--text-muted)', textAlign: 'center', lineHeight: '1.5' }}>
+            Mit der Registrierung – per E-Mail oder über Google – akzeptierst du die{' '}
+            <button type="button" style={LEGAL_LINK} onClick={() => setLegalDoc('nutzungsbedingungen')}>Nutzungsbedingungen</button>{' '}
+            und bestätigst, dass du mindestens 18 Jahre alt bist. Wie wir deine Daten verarbeiten
+            (u. a. KI-Analyse deiner Fotos durch Google Gemini), steht in der{' '}
+            <button type="button" style={LEGAL_LINK} onClick={() => setLegalDoc('datenschutz')}>Datenschutzerklärung</button>.
+          </p>
+        )}
+
         {/* Form Toggle Switch */}
         <div style={{ textAlign: 'center', marginTop: '1.5rem', fontSize: '0.875rem' }}>
           <span style={{ color: 'var(--text-secondary)' }}>
@@ -394,6 +422,9 @@ export default function Login({ onLoginSuccess }) {
             {isRegister ? 'Jetzt einloggen' : 'Konto erstellen'}
           </button>
         </div>
+
+        <LegalLinks onOpen={setLegalDoc} style={{ marginTop: '1.25rem' }} />
+        {legalDoc && <LegalModal doc={legalDoc} onClose={() => setLegalDoc(null)} />}
 
       </div>
     </div>

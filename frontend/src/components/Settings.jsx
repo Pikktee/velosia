@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { User, LogOut, Trash2, AlertTriangle, Save, HelpCircle, Check, Shield, Sparkles, Euro, MapPin, Sliders, Zap, Users, ClipboardList, Bug, ChevronRight, RefreshCw, AlertCircle, KeyRound } from 'lucide-react';
 import { deleteUserAccount, updateMe, setPassword as setAccountPassword } from '../utils/api';
 import { version } from '../../package.json';
+import LegalModal, { LegalLinks } from './LegalModal';
 
 // Default style instructions per tone preset. MUST stay in sync with TONE_PRESETS
 // in backend/services/gemini_service.py — the backend uses the same texts as its
@@ -131,6 +132,8 @@ function PasswordSection() {
 
 export default function Settings({ user, onLogout, onUpdateUser, onShowBugReport }) {
   const [showConfirm, setShowConfirm] = useState(false);
+  // Legal text shown in the overlay (datenschutz | nutzungsbedingungen | impressum), or null.
+  const [legalDoc, setLegalDoc] = useState(null);
   const [deleting, setDeleting] = useState(false);
   const [saving, setSaving] = useState(false);
   const [success, setSuccess] = useState(false);
@@ -696,7 +699,9 @@ export default function Settings({ user, onLogout, onUpdateUser, onShowBugReport
 
         <div style={{ marginTop: '2.5rem', textAlign: 'center', color: 'var(--text-muted)', fontSize: '0.75rem', letterSpacing: '0.05em', fontFamily: 'var(--font-body)' }}>
           Velosia App v{version}
+          <LegalLinks onOpen={setLegalDoc} style={{ marginTop: '0.5rem', letterSpacing: 'normal' }} />
         </div>
+        {legalDoc && <LegalModal doc={legalDoc} onClose={() => setLegalDoc(null)} />}
       </div>
     </div>
   </div>

@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
-import { Sparkles, Camera, FolderHeart, ArrowRight, Globe, X, Puzzle, Mail, Check, FlaskConical, Loader2 } from 'lucide-react';
+import { Sparkles, Camera, FolderHeart, ArrowRight, Globe, Puzzle, Mail, Check, FlaskConical, Loader2 } from 'lucide-react';
 import { joinWaitlist } from '../utils/api';
-import { ImpressumContent, DatenschutzContent } from './legal';
+import LegalModal, { LegalLinks } from './LegalModal';
 
 // Small inline-code chip used inside the install guides.
 const Code = ({ children }) => (
@@ -54,15 +54,11 @@ const GooglePlayBadge = ({ onClick }) => (
   </button>
 );
 
-// Titles for the modal, keyed by the activeDoc value.
-const DOC_TITLES = {
-  impressum: 'Impressum',
-  datenschutz: 'Datenschutzerklärung',
-  'install-chrome': 'Chrome-Erweiterung installieren'
-};
+// Inline text link that opens a legal text in the overlay.
+const legalLinkStyle = { display: 'inline', background: 'transparent', border: 'none', color: 'inherit', padding: 0, font: 'inherit', textDecoration: 'underline', cursor: 'pointer' };
 
 export default function LandingPage() {
-  const [activeDoc, setActiveDoc] = useState(null); // see DOC_TITLES keys, or null
+  const [activeDoc, setActiveDoc] = useState(null); // a legal doc key (see LegalModal), 'install-chrome', or null
   const extensionDownloadUrl = '/velosia-extension.zip'; // static asset served by the frontend
 
   // Tester-waitlist form state
@@ -261,6 +257,11 @@ export default function LandingPage() {
               <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)', textAlign: 'center', lineHeight: '1.4' }}>
                 Trag dich ein – wir laden dich ein, sobald ein Testplatz frei wird.
               </span>
+              <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', textAlign: 'center', lineHeight: '1.45' }}>
+                Wir speichern deine Adresse für die Einladung und tragen sie dafür in die Testerliste
+                von Google Play ein. Mehr in der{' '}
+                <button type="button" style={legalLinkStyle} onClick={() => setActiveDoc('datenschutz')}>Datenschutzerklärung</button>.
+              </span>
             </form>
           )}
 
@@ -333,7 +334,7 @@ export default function LandingPage() {
               2. Automatische Erkennung
             </h3>
             <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', lineHeight: '1.45' }}>
-              Die integrierte Intelligenz erkennt Marke, Farbe und Zustand sekundenschnell.
+              Eine KI (Google Gemini) erkennt Marke, Farbe und Zustand sekundenschnell.
             </p>
           </div>
         </div>
@@ -422,158 +423,40 @@ export default function LandingPage() {
         borderTop: '1px solid var(--glass-border)',
         width: '100%',
         display: 'flex',
+        flexWrap: 'wrap',
         justifyContent: 'center',
         alignItems: 'center',
-        gap: '1.25rem',
+        gap: '0.5rem 1.25rem',
         fontSize: '0.8rem',
         color: 'var(--text-muted)'
       }}>
-        <button 
-          onClick={() => setActiveDoc('impressum')}
-          style={{ background: 'transparent', border: 'none', color: 'inherit', cursor: 'pointer', textDecoration: 'underline', outline: 'none', padding: '0.25rem' }}
-        >
-          Impressum
-        </button>
-        <span style={{ opacity: 0.3 }}>&bull;</span>
-        <button 
-          onClick={() => setActiveDoc('datenschutz')}
-          style={{ background: 'transparent', border: 'none', color: 'inherit', cursor: 'pointer', textDecoration: 'underline', outline: 'none', padding: '0.25rem' }}
-        >
-          Datenschutz
-        </button>
-        <span style={{ opacity: 0.3 }}>&bull;</span>
+        <LegalLinks onOpen={setActiveDoc} style={{ fontSize: '0.8rem' }} />
         <span style={{ whiteSpace: 'nowrap' }}>Made with ❤️</span>
       </footer>
 
-      {/* Legal Overlay Modal */}
-      {activeDoc && (
-        <div style={{
-          position: 'fixed',
-          top: 0,
-          left: 0,
-          width: '100vw',
-          height: '100vh',
-          background: 'rgba(7, 9, 13, 0.85)',
-          backdropFilter: 'blur(20px)',
-          WebkitBackdropFilter: 'blur(20px)',
-          zIndex: 1000,
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          padding: '1rem',
-          boxSizing: 'border-box'
-        }}>
-          <div className="glass-panel" style={{
-            width: '100%',
-            maxWidth: '550px',
-            maxHeight: '85vh',
-            display: 'flex',
-            flexDirection: 'column',
-            borderRadius: 'var(--radius-lg)',
-            overflow: 'hidden',
-            boxShadow: '0 20px 50px rgba(0, 0, 0, 0.6), 0 0 30px rgba(9, 176, 183, 0.1)'
-          }}>
-            {/* Modal Header */}
-            <div style={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              padding: '1.25rem 1.5rem',
-              borderBottom: '1px solid var(--glass-border)'
-            }}>
-              <h2 style={{
-                fontSize: '1.2rem',
-                fontFamily: 'var(--font-title)',
-                fontWeight: '800',
-                margin: 0,
-                color: 'var(--text-primary)'
-              }}>
-                {DOC_TITLES[activeDoc] || ''}
-              </h2>
-              <button 
-                onClick={() => setActiveDoc(null)}
-                style={{
-                  background: 'transparent',
-                  border: 'none',
-                  color: 'var(--text-secondary)',
-                  cursor: 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  padding: '0.25rem',
-                  borderRadius: '50%',
-                  transition: 'background 0.2s ease, color 0.2s'
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.background = 'rgba(255, 255, 255, 0.05)';
-                  e.currentTarget.style.color = '#fff';
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.background = 'transparent';
-                  e.currentTarget.style.color = 'var(--text-secondary)';
-                }}
-              >
-                <X size={18} />
-              </button>
-            </div>
-
-            {/* Modal Content */}
-            <div style={{
-              padding: '1.5rem',
-              overflowY: 'auto',
-              textAlign: 'left',
-              fontSize: '0.875rem',
-              lineHeight: '1.6',
-              color: 'var(--text-secondary)'
-            }}>
-              {activeDoc === 'impressum' ? (
-                <ImpressumContent />
-              ) : activeDoc === 'datenschutz' ? (
-                <DatenschutzContent />
-              ) : activeDoc === 'install-chrome' ? (
-                <div>
-                  <p style={{ marginBottom: '1.25rem' }}>
-                    Die Erweiterung füllt am Desktop die Formulare von Vinted und Kleinanzeigen automatisch aus. Sie funktioniert in <strong>Chrome, Edge und Brave</strong>:
-                  </p>
-                  <ol style={guideOlStyle}>
-                    <li style={guideLiStyle}>Klicke oben auf <strong>„Chrome-Erweiterung laden"</strong>. Die Datei <Code>velosia-extension.zip</Code> wird heruntergeladen.</li>
-                    <li style={guideLiStyle}><strong>Entpacke</strong> die ZIP-Datei in einen festen Ordner (Rechtsklick → „Alle extrahieren", unter macOS Doppelklick). Verschiebe den Ordner danach nicht mehr, sonst deaktiviert sich die Erweiterung.</li>
-                    <li style={guideLiStyle}>Öffne im Browser die Adresse <Code>chrome://extensions</Code> (in Edge: <Code>edge://extensions</Code>).</li>
-                    <li style={guideLiStyle}>Aktiviere oben rechts den <strong>„Entwicklermodus"</strong>.</li>
-                    <li style={guideLiStyle}>Klicke auf <strong>„Entpackte Erweiterung laden"</strong> und wähle den entpackten Ordner aus (der die Datei <Code>manifest.json</Code> enthält).</li>
-                    <li style={guideLiStyle}>Fertig – Velosia erscheint in der Symbolleiste und füllt beim Einstellen die Felder automatisch aus.</li>
-                  </ol>
-                  <p style={guideHintStyle}>
-                    Tipp: Über das Puzzle-Symbol kannst du die Erweiterung anpinnen, damit du sie immer im Blick hast.
-                  </p>
-                </div>
-              ) : null}
-            </div>
-
-            {/* Modal Footer */}
-            <div style={{
-              display: 'flex',
-              justifyContent: 'flex-end',
-              padding: '1rem 1.5rem',
-              borderTop: '1px solid var(--glass-border)',
-              background: 'rgba(255, 255, 255, 0.01)'
-            }}>
-              <button 
-                onClick={() => setActiveDoc(null)}
-                className="btn btn-secondary"
-                style={{
-                  minHeight: '36px',
-                  height: '36px',
-                  padding: '0 1.25rem',
-                  fontSize: '0.85rem'
-                }}
-              >
-                Schließen
-              </button>
-            </div>
+      {/* Overlay: legal texts, or the extension install guide */}
+      {activeDoc === 'install-chrome' ? (
+        <LegalModal title="Chrome-Erweiterung installieren" onClose={() => setActiveDoc(null)}>
+          <div>
+            <p style={{ marginBottom: '1.25rem' }}>
+              Die Erweiterung füllt am Desktop die Formulare von Vinted und Kleinanzeigen automatisch aus. Sie funktioniert in <strong>Chrome, Edge und Brave</strong>:
+            </p>
+            <ol style={guideOlStyle}>
+              <li style={guideLiStyle}>Klicke oben auf <strong>„Chrome-Erweiterung laden"</strong>. Die Datei <Code>velosia-extension.zip</Code> wird heruntergeladen.</li>
+              <li style={guideLiStyle}><strong>Entpacke</strong> die ZIP-Datei in einen festen Ordner (Rechtsklick → „Alle extrahieren", unter macOS Doppelklick). Verschiebe den Ordner danach nicht mehr, sonst deaktiviert sich die Erweiterung.</li>
+              <li style={guideLiStyle}>Öffne im Browser die Adresse <Code>chrome://extensions</Code> (in Edge: <Code>edge://extensions</Code>).</li>
+              <li style={guideLiStyle}>Aktiviere oben rechts den <strong>„Entwicklermodus"</strong>.</li>
+              <li style={guideLiStyle}>Klicke auf <strong>„Entpackte Erweiterung laden"</strong> und wähle den entpackten Ordner aus (der die Datei <Code>manifest.json</Code> enthält).</li>
+              <li style={guideLiStyle}>Fertig – Velosia erscheint in der Symbolleiste und füllt beim Einstellen die Felder automatisch aus.</li>
+            </ol>
+            <p style={guideHintStyle}>
+              Tipp: Über das Puzzle-Symbol kannst du die Erweiterung anpinnen, damit du sie immer im Blick hast.
+            </p>
           </div>
-        </div>
-      )}
+        </LegalModal>
+      ) : activeDoc ? (
+        <LegalModal doc={activeDoc} onClose={() => setActiveDoc(null)} />
+      ) : null}
     </div>
   );
 }
