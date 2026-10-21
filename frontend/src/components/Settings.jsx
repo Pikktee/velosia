@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { User, LogOut, Trash2, AlertTriangle, Save, HelpCircle, Check, Shield, Sparkles, Euro, MapPin, Sliders, Zap, Users, ClipboardList, Bug, ChevronRight, RefreshCw, AlertCircle, KeyRound } from 'lucide-react';
 import { deleteUserAccount, updateMe, setPassword as setAccountPassword } from '../utils/api';
+import DataExportSection from './DataExport';
 import { version } from '../../package.json';
 
 // Default style instructions per tone preset. MUST stay in sync with TONE_PRESETS
@@ -634,6 +635,8 @@ export default function Settings({ user, onLogout, onUpdateUser, onShowBugReport
                   </div>
                 </div>
               )}
+
+              <DataExportSection />
 
               {/* Danger Zone */}
               <div className="detail-section-unboxed" style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem', marginTop: '0.5rem' }}>

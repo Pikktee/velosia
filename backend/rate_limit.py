@@ -57,6 +57,8 @@ PLATFORM_TOKEN_USER = Policy(limit=30, window_s=3600)  # Plattform-Token je Nutz
 TELEMETRY_USER = Policy(limit=60, window_s=3600)   # Autofill-Telemetrie je Nutzer
 DEBUG_BEACON_IP = Policy(limit=120, window_s=3600) # Diagnose-Beacon je IP (nur wenn aktiviert)
 SET_PASSWORD_USER = Policy(limit=5, window_s=3600) # Passwort festlegen je Nutzer
+EXPORT_LINK_USER = Policy(limit=20, window_s=3600) # Download-Links für den Datenexport je Nutzer
+EXPORT_USER = Policy(limit=5, window_s=3600)       # Datenexport (ZIP mit allen Fotos) je Nutzer
 
 # Escape hatch for local development and tests.
 DISABLED = os.getenv("RATE_LIMIT_DISABLED", "").lower() in ("1", "true", "yes")

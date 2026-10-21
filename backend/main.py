@@ -1,16 +1,18 @@
 from fastapi import FastAPI, Depends, HTTPException, File, UploadFile, status, Form, BackgroundTasks, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, JSONResponse, Response
+from fastapi.responses import FileResponse, JSONResponse, Response, StreamingResponse
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.orm import Session
 import os
 import re
 import json
+import logging
 import time
 import asyncio
 import base64
 import binascii
 import secrets
+import zipfile
 from datetime import datetime, timedelta, timezone
 from typing import List, Optional
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -30,6 +32,7 @@ from auth_utils import (
     verify_password, get_password_hash, decode_access_token, create_user_token,
     create_platform_token, decode_platform_token, DUMMY_PASSWORD_HASH,
     ACCESS_TOKEN_EXPIRE_MINUTES, PLATFORM_TOKEN_TTL_MIN,
+    create_export_token, decode_export_token, EXPORT_TOKEN_TTL_MIN,
 )
 from google.oauth2 import id_token
 from google.auth.transport import requests as google_requests
@@ -787,6 +790,309 @@ def set_password(
     db.commit()
     db.refresh(current_user)
     return _token_response(current_user)
+
+
+# --- DATENEXPORT (Art. 15 Abs. 3, Art. 20 DSGVO) ------------------------------
+# A copy of everything stored for the account, as a ZIP: the data as JSON plus
+# the draft photos and bug report screenshots.
+#
+# Downloaded through a short-lived link (POST /api/auth/me/export-link) rather
+# than fetch() with the Bearer header: the Android WebView cannot save files (no
+# DownloadListener, blob: navigation is blocked). A tapped link to the API host
+# opens in the system browser there, which downloads the file — no app release
+# needed. That browser has no session, so the link carries its own export token
+# (auth_utils.create_export_token).
+
+_EXPORT_JSON_NAME = "velosia-daten.json"
+_EXPORT_README_NAME = "LIESMICH.txt"
+_EXPORT_README = """Velosia – Export deiner Daten
+=============================
+
+Dieses Archiv enthält eine Kopie aller Daten, die Velosia zu deinem Konto
+speichert (Auskunft nach Art. 15 DSGVO, Datenübertragbarkeit nach Art. 20 DSGVO).
+
+velosia-daten.json
+  konto           Profil, Einstellungen und KI-Nutzung (Anzahl Analysen, Token).
+                  Dein Passwort ist nur als Prüfwert (Hash) gespeichert und
+                  deshalb nicht enthalten.
+  entwuerfe       Alle Angebote: Texte, Kategorien, Preis, Merkmale,
+                  Preisvergleich und – falls veröffentlicht – Anzeigen-ID, Link
+                  und zuletzt abgefragter Status auf Kleinanzeigen bzw. Vinted.
+                  "image_files" nennt die zugehörigen Fotos in diesem Archiv.
+  fehlerberichte  Deine gemeldeten Probleme samt Geräteangaben.
+  warteliste      Deine Anmeldung zur Tester-Warteliste, falls vorhanden.
+  telemetrie      Technische Protokolle der automatischen Formularausfüllung:
+                  welche Felder gefunden wurden, ohne Inhalte deiner Angebote.
+
+fotos/            Die Fotos deiner Angebote, so wie Velosia sie speichert
+                  (ohne Kamera- und Standortdaten, ggf. verkleinert).
+fehlerberichte/   Screenshots, die du an Fehlerberichte angehängt hast.
+
+Zeitangaben sind in UTC (koordinierte Weltzeit).
+"""
+
+# Columns left out of the export: credentials and security internals, the
+# owner id (always the exporting account) and raw upload paths (the files
+# themselves are in the ZIP). Every other column — including ones added later —
+# is exported automatically, so the copy stays complete.
+_EXPORT_EXCLUDED = {
+    "users": {"hashed_password", "token_version"},
+    "drafts": {"user_id", "image_path", "image_paths"},
+    "bug_reports": {"user_id", "screenshot_path"},
+    "autofill_events": {"user_id"},
+    "waitlist_entries": set(),
+}
+_EXPORT_CHUNK = 256 * 1024
+
+
+def _iso(dt: Optional[datetime]) -> Optional[str]:
+    """Naive UTC timestamp (the convention of all created_at columns) as ISO 8601."""
+    return dt.replace(microsecond=0).isoformat() + "Z" if dt else None
+
+
+def _json_or_raw(value):
+    """Columns holding JSON text come out as structure, anything else as stored."""
+    if not value or not isinstance(value, str):
+        return value
+    try:
+        return json.loads(value)
+    except Exception:
+        return value
+
+
+def _export_row(row) -> dict:
+    excluded = _EXPORT_EXCLUDED.get(row.__tablename__, set())
+    out = {}
+    for col in row.__table__.columns:
+        if col.key in excluded:
+            continue
+        value = getattr(row, col.key)
+        out[col.key] = _iso(value) if isinstance(value, datetime) else value
+    return out
+
+
+def _upload_local_path(path: Optional[str]) -> Optional[str]:
+    """Local file behind an /uploads/... path, or None if it no longer exists."""
+    if not path or not isinstance(path, str):
+        return None
+    local = os.path.join(UPLOAD_DIR, os.path.basename(path.split("?", 1)[0]))
+    return local if os.path.isfile(local) else None
+
+
+def _collect_export(db: Session, user: models.User):
+    """Everything stored for `user`: (JSON-ready dict, [(name in ZIP, local file)])."""
+    files = []
+
+    def add_file(path: Optional[str], stem: str) -> Optional[str]:
+        local = _upload_local_path(path)
+        if not local:
+            return None
+        name = stem + (os.path.splitext(local)[1].lower() or ".jpg")
+        files.append((name, local))
+        return name
+
+    drafts = []
+    for draft in sorted(user.drafts, key=lambda d: d.id):
+        row = _export_row(draft)
+        row["attributes"] = _json_or_raw(row.get("attributes"))
+        row["sources"] = _json_or_raw(row.get("sources"))
+        images = []
+        for path in dict.fromkeys(_draft_files(draft)):
+            name = add_file(path, f"fotos/entwurf-{draft.id}-{len(images) + 1}")
+            if name:
+                images.append(name)
+        row["image_files"] = images
+        drafts.append(row)
+
+    bugs = []
+    for bug in (
+        db.query(models.BugReport)
+        .filter(models.BugReport.user_id == user.id)
+        .order_by(models.BugReport.id)
+        .all()
+    ):
+        row = _export_row(bug)
+        row["device_info"] = _json_or_raw(row.get("device_info"))
+        row["screenshot_file"] = add_file(bug.screenshot_path, f"fehlerberichte/bericht-{bug.id}")
+        bugs.append(row)
+
+    email = normalize_email(user.email)
+    waitlist = [
+        _export_row(entry)
+        for entry in db.query(models.WaitlistEntry).filter(
+            func.lower(func.trim(models.WaitlistEntry.email)) == email
+        ).all()
+    ] if email else []
+
+    events = [
+        _export_row(ev)
+        for ev in db.query(models.AutofillEvent)
+        .filter(models.AutofillEvent.user_id == user.id)
+        .order_by(models.AutofillEvent.created_at, models.AutofillEvent.id)
+        .all()
+    ]
+
+    payload = {
+        "export": {
+            "created_at": _iso(datetime.utcnow()),
+            "app_version": app.version,
+            "format_version": 1,
+            "readme": _EXPORT_README_NAME,
+        },
+        "konto": _export_row(user),
+        "entwuerfe": drafts,
+        "fehlerberichte": bugs,
+        "warteliste": waitlist,
+        "telemetrie": events,
+    }
+    return payload, files
+
+
+class _ZipSink:
+    """Write-only target for zipfile. Without tell()/seek() zipfile writes a
+    streamable archive (data descriptors), so the ZIP goes out while it is
+    being built instead of piling up in memory or on disk."""
+
+    def __init__(self):
+        self._parts = []
+
+    def write(self, data) -> int:
+        self._parts.append(bytes(data))
+        return len(data)
+
+    def flush(self) -> None:
+        pass
+
+    def take(self) -> bytes:
+        data = b"".join(self._parts)
+        self._parts.clear()
+        return data
+
+
+def _export_zip_stream(payload: dict, files: list):
+    sink = _ZipSink()
+    with zipfile.ZipFile(sink, "w", compression=zipfile.ZIP_DEFLATED) as zf:
+        zf.writestr(_EXPORT_README_NAME, _EXPORT_README)
+        zf.writestr(_EXPORT_JSON_NAME, json.dumps(payload, ensure_ascii=False, indent=2))
+        yield sink.take()
+        for name, local in files:
+            try:
+                info = zipfile.ZipInfo.from_file(local, name, strict_timestamps=False)
+                info.compress_type = zipfile.ZIP_STORED  # JPEGs don't compress any further
+                with open(local, "rb") as src, zf.open(info, "w") as dst:
+                    while True:
+                        chunk = src.read(_EXPORT_CHUNK)
+                        if not chunk:
+                            break
+                        dst.write(chunk)
+                        yield sink.take()
+            except OSError as e:
+                # Deleted in the meantime (e.g. the draft was just removed): left out.
+                print(f"[export] Datei übersprungen: {e.strerror}", flush=True)
+    yield sink.take()
+
+
+def _export_link_error(status_code: int, text: str, headers: Optional[dict] = None) -> Response:
+    """The download link opens in a browser tab, so problems are shown as a
+    short plain-text page rather than as JSON."""
+    return Response(content=text, status_code=status_code,
+                    media_type="text/plain; charset=utf-8", headers=headers)
+
+
+@app.post("/api/auth/me/export-link", response_model=schemas.ExportLinkResponse)
+def create_export_link(
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    """Short-lived download link for the data export, plus its size, so the
+    client can show what is about to be downloaded (photos can be many MB)."""
+    rate_limit.enforce(
+        "export_link", str(current_user.id), rate_limit.EXPORT_LINK_USER,
+        "Zu viele Export-Anfragen. Bitte warte einen Moment.",
+    )
+    payload, files = _collect_export(db, current_user)
+    size = len(json.dumps(payload, ensure_ascii=False, indent=2).encode()) + len(_EXPORT_README.encode())
+    for _name, local in files:
+        try:
+            size += os.path.getsize(local)
+        except OSError:
+            pass
+    return schemas.ExportLinkResponse(
+        url=f"/api/auth/me/export?t={create_export_token(current_user)}",
+        expires_in=EXPORT_TOKEN_TTL_MIN * 60,
+        draft_count=len(payload["entwuerfe"]),
+        photo_count=len(files),
+        size_bytes=size,
+    )
+
+
+class _RedactExportLinkFilter(logging.Filter):
+    """uvicorn's access log prints the full URL. The export link's token opens
+    the account's data for a few minutes, so it is blanked out before the line
+    reaches the (Railway) logs."""
+
+    _TOKEN = re.compile(r"([?&]t=)[^&\s]+")
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        args = record.args
+        if isinstance(args, tuple) and len(args) >= 3 and isinstance(args[2], str) and "t=" in args[2]:
+            record.args = args[:2] + (self._TOKEN.sub(r"\1…", args[2]),) + args[3:]
+        return True
+
+
+logging.getLogger("uvicorn.access").addFilter(_RedactExportLinkFilter())
+
+_optional_bearer = HTTPBearer(auto_error=False)
+
+
+@app.get("/api/auth/me/export")
+def export_my_data(
+    t: Optional[str] = None,
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(_optional_bearer),
+    db: Session = Depends(get_db),
+):
+    """The caller's data as a ZIP (see _EXPORT_README). Authorised by the
+    download link's token (`t`, from /api/auth/me/export-link) or a session token."""
+    if t:
+        claims = decode_export_token(t)
+        user = db.get(models.User, claims["uid"]) if claims else None
+        if (
+            not user
+            or claims.get("ver") != int(user.token_version or 0)
+            or _issued_before_account(claims, user)
+        ):
+            return _export_link_error(
+                401, "Dieser Download-Link ist abgelaufen oder ungültig. "
+                     "Bitte starte den Export in Velosia neu.",
+            )
+        if getattr(user, "is_blocked", False):
+            return _export_link_error(403, "Dieses Konto wurde gesperrt.")
+    elif credentials:
+        user = _user_from_access_token(credentials.credentials, db)
+    else:
+        raise _auth_error()
+
+    # Every export reads all of the account's photos off the volume.
+    try:
+        rate_limit.enforce(
+            "export", str(user.id), rate_limit.EXPORT_USER,
+            "Zu viele Exporte in kurzer Zeit. Bitte versuche es später noch einmal.",
+        )
+    except HTTPException as e:
+        if t:
+            return _export_link_error(e.status_code, e.detail, e.headers)
+        raise
+
+    payload, files = _collect_export(db, user)
+    filename = f"velosia-daten-{datetime.utcnow():%Y-%m-%d}.zip"
+    return StreamingResponse(
+        _export_zip_stream(payload, files),
+        media_type="application/zip",
+        headers={
+            "Content-Disposition": f'attachment; filename="{filename}"',
+            "Cache-Control": "no-store",
+        },
+    )
 
 
 @app.get("/api/auth/config")
@@ -2009,6 +2315,96 @@ async def _start_status_poller():
     asyncio.create_task(_status_poll_loop())
 
 
+# --- SPEICHERFRISTEN (Art. 5 Abs. 1 lit. e DSGVO) -----------------------------
+# Data that is not part of an account the user keeps (drafts and profile live
+# until the account is deleted, see purge_user) is deleted after a fixed time.
+# All retention periods are defined here, in days, overridable per env;
+# 0 switches a period off. The privacy policy (frontend/src/components/legal.jsx)
+# states the same values — change both together.
+
+
+def _retention_days(env: str, default: int, minimum: int = 1) -> int:
+    days = int(os.getenv(env, str(default)))
+    return 0 if days <= 0 else max(days, minimum)
+
+
+# Autofill telemetry carries the user id. The anomaly check only looks at the
+# most recent events, so older ones serve no purpose.
+RETENTION_TELEMETRY_DAYS = _retention_days("RETENTION_TELEMETRY_DAYS", 90)
+# Bug reports incl. their screenshot files.
+RETENTION_BUG_REPORTS_DAYS = _retention_days("RETENTION_BUG_REPORTS_DAYS", 365)
+# Tester waitlist sign-ups (e-mail address + note), counted from the sign-up.
+RETENTION_WAITLIST_DAYS = _retention_days("RETENTION_WAITLIST_DAYS", 365)
+# Fired maintainer alerts. At least 2 days: the alert cooldowns (up to 24 h)
+# read the latest entry per signal from this table.
+RETENTION_ALERT_LOGS_DAYS = _retention_days("RETENTION_ALERT_LOGS_DAYS", 90, minimum=2)
+
+_RETENTION_INTERVAL_H = max(1, int(os.getenv("RETENTION_INTERVAL_H", "24")))
+# Counts what is due and logs it, deletes nothing (e.g. before the first deploy).
+_RETENTION_DRY_RUN = os.getenv("RETENTION_DRY_RUN", "").lower() in ("1", "true", "yes")
+
+
+def purge_expired_records(now: Optional[datetime] = None) -> dict:
+    """Delete every row past its retention period (and the screenshot files of
+    deleted bug reports). Returns the counts per table; logs counts only, never
+    the rows themselves."""
+    from database import SessionLocal
+    now = now or datetime.utcnow()
+    db = SessionLocal()
+    counts = {}
+    files = []
+    try:
+        for label, model, days in (
+            ("Telemetrie-Einträge", models.AutofillEvent, RETENTION_TELEMETRY_DAYS),
+            ("Fehlerberichte", models.BugReport, RETENTION_BUG_REPORTS_DAYS),
+            ("Wartelisten-Einträge", models.WaitlistEntry, RETENTION_WAITLIST_DAYS),
+            ("Alert-Logs", models.AlertLog, RETENTION_ALERT_LOGS_DAYS),
+        ):
+            if not days:
+                continue
+            expired = db.query(model).filter(model.created_at < now - timedelta(days=days))
+            if model is models.BugReport:
+                files.extend(p for (p,) in expired.with_entities(models.BugReport.screenshot_path) if p)
+            counts[label] = expired.count() if _RETENTION_DRY_RUN else expired.delete(synchronize_session=False)
+        if _RETENTION_DRY_RUN:
+            db.rollback()
+        else:
+            db.commit()
+    except Exception as e:
+        db.rollback()
+        print(f"[retention] Aufräumen fehlgeschlagen: {e}", flush=True)
+        return {}
+    finally:
+        db.close()
+
+    # Files last: if the commit failed, the reports (and their screenshots) still exist.
+    if not _RETENTION_DRY_RUN:
+        _remove_upload_files(files)
+    summary = ", ".join(f"{n} {label}" for label, n in counts.items()) or "keine Frist aktiv"
+    if _RETENTION_DRY_RUN:
+        print(f"[retention] Probelauf (RETENTION_DRY_RUN), fällig wären: {summary}, "
+              f"{len(files)} Screenshot-Dateien.", flush=True)
+    else:
+        print(f"[retention] gelöscht: {summary}, {len(files)} Screenshot-Dateien.", flush=True)
+    return counts
+
+
+async def _retention_loop():
+    # Shortly after startup, so a deploy applies changed periods right away.
+    await asyncio.sleep(120)
+    while True:
+        try:
+            await asyncio.to_thread(purge_expired_records)
+        except Exception as e:
+            print(f"[retention] Loop-Fehler: {e}", flush=True)
+        await asyncio.sleep(_RETENTION_INTERVAL_H * 3600)
+
+
+@app.on_event("startup")
+async def _start_retention_job():
+    asyncio.create_task(_retention_loop())
+
+
 # --- BUG REPORT ENDPOINTS (SECURED) ---
 
 @app.post("/api/bugs", response_model=schemas.BugReportResponse, status_code=status.HTTP_201_CREATED)
@@ -2116,6 +2512,24 @@ def list_waitlist(
     if not current_user.is_admin:
         raise HTTPException(status_code=403, detail="Not authorized")
     return db.query(models.WaitlistEntry).order_by(models.WaitlistEntry.created_at.desc()).all()
+
+
+@app.delete("/api/waitlist/{entry_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_waitlist_entry(
+    entry_id: int,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    """Admin-only: remove a sign-up (e.g. on request, or once the person is a
+    tester). Entries older than RETENTION_WAITLIST_DAYS go automatically."""
+    if not current_user.is_admin:
+        raise HTTPException(status_code=403, detail="Not authorized")
+    entry = db.get(models.WaitlistEntry, entry_id)
+    if not entry:
+        raise HTTPException(status_code=404, detail="Eintrag wurde nicht gefunden.")
+    db.delete(entry)
+    db.commit()
+    return None
 
 
 # --- Admin user management ---------------------------------------------------

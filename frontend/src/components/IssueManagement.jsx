@@ -7,7 +7,7 @@ import {
 } from 'lucide-react';
 import {
   getBugReports, deleteBugReport, getImageUrl,
-  getWaitlist, getAdminUsers, setUserBlocked, deleteUser
+  getWaitlist, deleteWaitlistEntry, getAdminUsers, setUserBlocked, deleteUser
 } from '../utils/api';
 
 const formatDate = (dateStr) => {
@@ -79,6 +79,15 @@ export default function IssueManagement({ user, onBack, initialTab = 'users' }) 
     onConfirm: async () => {
       try { await deleteBugReport(id); setIssues(prev => prev.filter(i => i.id !== id)); }
       catch (err) { showError(err.message || 'Fehler beim Löschen.'); }
+    }
+  });
+
+  const confirmDeleteWaitlist = (entry) => setConfirm({
+    title: 'Eintrag löschen?',
+    message: `„${entry.email}" wird von der Warteliste entfernt.`,
+    onConfirm: async () => {
+      try { await deleteWaitlistEntry(entry.id); setWaitlist(prev => prev.filter(w => w.id !== entry.id)); }
+      catch (err) { showError(err.message || 'Löschen fehlgeschlagen.'); }
     }
   });
 
@@ -182,7 +191,7 @@ export default function IssueManagement({ user, onBack, initialTab = 'users' }) 
       ) : (
         <>
           {tab === 'bugs' && <BugsTab issues={issues} onDelete={confirmDeleteBug} onZoom={setActiveScreenshot} />}
-          {tab === 'waitlist' && <WaitlistTab entries={waitlist} onCopy={copyWaitlistEmails} copied={copied} />}
+          {tab === 'waitlist' && <WaitlistTab entries={waitlist} onCopy={copyWaitlistEmails} copied={copied} onDelete={confirmDeleteWaitlist} />}
           {tab === 'users' && <UsersTab users={users} onToggleBlock={toggleBlock} onDelete={confirmDeleteUser} />}
         </>
       )}
@@ -274,7 +283,7 @@ function BugsTab({ issues, onDelete, onZoom }) {
 }
 
 // ------------------------------------------------------------------ Waitlist
-function WaitlistTab({ entries, onCopy, copied }) {
+function WaitlistTab({ entries, onCopy, copied, onDelete }) {
   if (entries.length === 0) {
     return (
       <div className="glass-panel" style={{ padding: '4rem 2rem', textAlign: 'center', borderRadius: 'var(--radius-md)' }}>
@@ -308,8 +317,13 @@ function WaitlistTab({ entries, onCopy, copied }) {
             <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.9rem', wordBreak: 'break-all' }}>
               <Mail size={14} style={{ color: 'var(--primary)', flexShrink: 0 }} /> {e.email}
             </span>
-            <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
-              {formatDate(e.created_at)}
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.6rem', flexShrink: 0 }}>
+              <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
+                {formatDate(e.created_at)}
+              </span>
+              <button onClick={() => onDelete(e)} title="Löschen" aria-label={`${e.email} löschen`} style={iconBtn('var(--danger, #ef4444)')}>
+                <Trash2 size={16} />
+              </button>
             </span>
           </div>
         ))}

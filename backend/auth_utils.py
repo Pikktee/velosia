@@ -51,6 +51,12 @@ ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "1440
 PLATFORM_TOKEN_TTL_MIN = int(os.getenv("PLATFORM_TOKEN_TTL_MIN", "180"))
 PLATFORM_SCOPE = "platform"
 
+# Download link for the data export (see create_export_token). It is opened in
+# the system browser, which carries no session, so the link itself must be the
+# credential: valid for one account, for the export only, for a few minutes.
+EXPORT_TOKEN_TTL_MIN = int(os.getenv("EXPORT_TOKEN_TTL_MIN", "10"))
+EXPORT_SCOPE = "export"
+
 
 def derive_key(label: bytes) -> bytes:
     """Purpose-specific subkey of SECRET_KEY, so that a value signed for one
@@ -60,6 +66,7 @@ def derive_key(label: bytes) -> bytes:
 
 
 _PLATFORM_KEY = derive_key(b"velosia/platform-token/v1")
+_EXPORT_KEY = derive_key(b"velosia/export-token/v1")
 
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
@@ -146,5 +153,35 @@ def decode_platform_token(token: str) -> Optional[dict]:
     if payload.get("scope") != PLATFORM_SCOPE:
         return None
     if not isinstance(payload.get("uid"), int) or not isinstance(payload.get("did"), int):
+        return None
+    return payload
+
+
+def create_export_token(user) -> str:
+    """Token for the data export download link (GET /api/auth/me/export?t=…).
+
+    The Android app cannot download files from its WebView, so the link is
+    opened in the system browser, where no session exists. Signed with its own
+    derived key: it opens nothing but the export, and only until it expires."""
+    now = _now()
+    return jwt.encode(
+        {
+            "uid": user.id,
+            "ver": int(user.token_version or 0),
+            "scope": EXPORT_SCOPE,
+            "iat": now,
+            "exp": now + timedelta(minutes=EXPORT_TOKEN_TTL_MIN),
+        },
+        _EXPORT_KEY,
+        algorithm=ALGORITHM,
+    )
+
+
+def decode_export_token(token: str) -> Optional[dict]:
+    try:
+        payload = jwt.decode(token, _EXPORT_KEY, algorithms=[ALGORITHM])
+    except jwt.PyJWTError:
+        return None
+    if payload.get("scope") != EXPORT_SCOPE or not isinstance(payload.get("uid"), int):
         return None
     return payload
