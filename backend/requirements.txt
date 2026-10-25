@@ -13,4 +13,4 @@ beautifulsoup4==4.15.0
 requests==2.34.2
 curl-cffi==0.15.0
 email-validator==2.3.0
-psycopg2-binary==2.9.12
+psycopg2-binary==2.9.13
