@@ -181,6 +181,44 @@ export const getMe = async () => {
   return response.json();
 };
 
+// Sliding session: a session token lives SESSION_TTL_DAYS (backend, 30 days)
+// and is swapped for a fresh one while the app is in use, so only an account
+// left unused that long has to sign in again. At most every few hours — the
+// renewal only needs to happen well before the token expires.
+const SESSION_REFRESH_AFTER_S = 6 * 60 * 60;
+
+const tokenIssuedAt = (token) => {
+  try {
+    const payload = JSON.parse(atob(token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')));
+    return typeof payload.iat === 'number' ? payload.iat : null;
+  } catch (e) {
+    return null;
+  }
+};
+
+// Returns the new token, or null when no refresh was due or it failed. A failure
+// never logs out: a token that is really invalid is caught by getMe (401).
+export const refreshSessionIfDue = async () => {
+  const token = authToken;
+  if (!token) return null;
+  const iat = tokenIssuedAt(token);
+  if (iat !== null && Date.now() / 1000 - iat < SESSION_REFRESH_AFTER_S) return null;
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/auth/refresh`, {
+      method: 'POST',
+      headers: getHeaders(),
+    });
+    if (!response.ok) return null;
+    const data = await response.json();
+    // Logged out (or switched account) while the request was running.
+    if (authToken !== token) return null;
+    setAuthToken(data.access_token);
+    return data.access_token;
+  } catch (e) {
+    return null;
+  }
+};
+
 export const updateMe = async (settingsData) => {
   const response = await fetch(`${API_BASE_URL}/api/auth/me`, {
     method: 'PUT',

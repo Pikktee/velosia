@@ -43,7 +43,15 @@ def _validate_secret(key: Optional[str]) -> str:
 
 SECRET_KEY = _validate_secret(os.getenv("SECRET_KEY"))
 ALGORITHM = "HS256"
+# Lifetime of session tokens issued before 2.7.51, which carry no `iat` — only
+# used to derive their issue time from `exp`. Not the session lifetime any more.
 ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "1440")) # 1440 minutes = 24 hours
+
+# Session lifetime. Sliding: the frontend swaps its token for a fresh one
+# (POST /api/auth/refresh) whenever the app is used, so only an account left
+# unused for this long has to sign in again. Was a fixed 24 h without renewal
+# before 2.7.57, which logged everyone out after a day.
+SESSION_TTL_DAYS = int(os.getenv("SESSION_TTL_DAYS", "30"))
 
 # Short-lived, draft-scoped token handed to the platform WebView (see
 # create_platform_token). Default: 3 hours — long enough to review and publish
@@ -102,15 +110,19 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -
     return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
 
 
-def create_user_token(user) -> str:
+def create_user_token(user, signed_in_at: Optional[int] = None) -> str:
     """Session token for a user: e-mail as `sub` (kept for older clients),
     plus the account id and its token generation, so that a password/Google
-    re-link or an account deletion invalidates every token issued before."""
+    re-link or an account deletion invalidates every token issued before.
+
+    `auth` is the time of the actual sign-in (epoch seconds). A refresh keeps
+    it, so a renewed token never counts as a fresh login (set-password)."""
     return create_access_token({
         "sub": user.email,
         "uid": user.id,
         "ver": int(user.token_version or 0),
-    })
+        "auth": int(signed_in_at if signed_in_at is not None else _now().timestamp()),
+    }, timedelta(days=SESSION_TTL_DAYS))
 
 
 def decode_access_token(token: str) -> Optional[dict]:

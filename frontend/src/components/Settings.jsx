@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { User, LogOut, Trash2, AlertTriangle, Save, HelpCircle, Check, Shield, Sparkles, Euro, MapPin, Sliders, Zap, Users, ClipboardList, Bug, ChevronRight, RefreshCw, AlertCircle, KeyRound } from 'lucide-react';
 import { deleteUserAccount, updateMe, setPassword as setAccountPassword } from '../utils/api';
 import DataExportSection from './DataExport';
+import { PRICE_TYPES } from '../utils/priceType';
 import { version } from '../../package.json';
 import LegalModal, { LegalLinks } from './LegalModal';
 
@@ -150,6 +151,7 @@ export default function Settings({ user, onLogout, onUpdateUser, onShowBugReport
   const [defaultZip, setDefaultZip] = useState('');
   const [defaultShipping, setDefaultShipping] = useState('');
   const [autoSubmit, setAutoSubmit] = useState(false);
+  const [priceType, setPriceType] = useState('FIXED');
 
   // Synchronize local state when user prop changes
   useEffect(() => {
@@ -168,6 +170,7 @@ export default function Settings({ user, onLogout, onUpdateUser, onShowBugReport
       setDefaultZip(user.default_zip || '');
       setDefaultShipping(user.default_shipping || '');
       setAutoSubmit(user.auto_submit || false);
+      setPriceType(user.default_price_type || 'FIXED');
     }
   }, [user]);
 
@@ -203,7 +206,8 @@ export default function Settings({ user, onLogout, onUpdateUser, onShowBugReport
         default_zip: defaultZip,
         default_city: '', // Ort ist überflüssig, PLZ reicht
         default_shipping: defaultShipping,
-        auto_submit: autoSubmit
+        auto_submit: autoSubmit,
+        default_price_type: priceType
       });
       
       setSuccess(true);
@@ -237,10 +241,11 @@ export default function Settings({ user, onLogout, onUpdateUser, onShowBugReport
       Number(pricingOffset) !== (user.pricing_offset || 0) ||
       defaultZip !== (user.default_zip || '') ||
       defaultShipping !== (user.default_shipping || '') ||
-      autoSubmit !== (user.auto_submit || false);
+      autoSubmit !== (user.auto_submit || false) ||
+      priceType !== (user.default_price_type || 'FIXED');
     
     setHasChanges(hasDiff);
-  }, [aiTone, aiIntro, aiCustomTone, aiCustomFooter, pricingOffset, defaultZip, defaultShipping, autoSubmit, user]);
+  }, [aiTone, aiIntro, aiCustomTone, aiCustomFooter, pricingOffset, defaultZip, defaultShipping, autoSubmit, priceType, user]);
 
   // Debounced auto-save effect
   useEffect(() => {
@@ -254,11 +259,11 @@ export default function Settings({ user, onLogout, onUpdateUser, onShowBugReport
     setSaving(true);
     const delayDebounceFn = setTimeout(saveSettings, 1000); // save 1 second after last change
     return () => clearTimeout(delayDebounceFn);
-  }, [aiTone, aiIntro, aiCustomTone, aiCustomFooter, pricingOffset, defaultZip, defaultShipping, autoSubmit, hasChanges]);
+  }, [aiTone, aiIntro, aiCustomTone, aiCustomFooter, pricingOffset, defaultZip, defaultShipping, autoSubmit, priceType, hasChanges]);
 
   // Latest settings values, reachable from the unmount cleanup below.
   const latestRef = useRef({});
-  latestRef.current = { aiTone, aiIntro, aiCustomTone, aiCustomFooter, pricingOffset, defaultZip, defaultShipping, autoSubmit, hasChanges };
+  latestRef.current = { aiTone, aiIntro, aiCustomTone, aiCustomFooter, pricingOffset, defaultZip, defaultShipping, autoSubmit, priceType, hasChanges };
 
   // Flush a still-pending debounced save on unmount — e.g. the user leaves Settings
   // within the 1s debounce window, which clears the timer and loses the last change.
@@ -277,6 +282,7 @@ export default function Settings({ user, onLogout, onUpdateUser, onShowBugReport
           default_city: '',
           default_shipping: l.defaultShipping,
           auto_submit: l.autoSubmit,
+          default_price_type: l.priceType,
         }).catch(() => {});
       }
     };
@@ -541,6 +547,30 @@ export default function Settings({ user, onLogout, onUpdateUser, onShowBugReport
                     value={defaultShipping}
                     onChange={(e) => setDefaultShipping(e.target.value)}
                   />
+                </div>
+
+                <div className="form-group" style={{ marginBottom: 0 }}>
+                  <label style={{ display: 'flex', alignItems: 'center' }}>
+                    Preisart
+                    <span className="tooltip-container">
+                      <HelpCircle size={14} />
+                      <span className="tooltip-text">Vorgabe für neue Anzeigen auf Kleinanzeigen: Festpreis oder VB (Verhandlungsbasis). Im einzelnen Angebot kannst du davon abweichen. Vinted kennt keine Preisart – dort sind Preisvorschläge immer möglich.</span>
+                    </span>
+                  </label>
+                  <div className="segmented-control" role="radiogroup" aria-label="Preisart">
+                    {PRICE_TYPES.map(({ value, label }) => (
+                      <button
+                        key={value}
+                        type="button"
+                        role="radio"
+                        aria-checked={priceType === value}
+                        className={`segmented-control-btn ${priceType === value ? 'active' : ''}`}
+                        onClick={() => setPriceType(value)}
+                      >
+                        {label}
+                      </button>
+                    ))}
+                  </div>
                 </div>
 
                 <div className="form-group" style={{ marginBottom: 0 }}>

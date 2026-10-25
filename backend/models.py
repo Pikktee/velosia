@@ -27,6 +27,9 @@ class User(Base):
     # When True, autofill on Vinted/Kleinanzeigen also clicks "publish" itself.
     # Default False so the user reviews the prefilled listing and publishes manually.
     auto_submit = Column(Boolean, default=False, nullable=True)
+    # Price type preset for new listings on Kleinanzeigen: "FIXED" (Festpreis) or
+    # "NEGOTIABLE" (VB). A draft may override it (Draft.price_type).
+    default_price_type = Column(String, default="FIXED", nullable=True)
     # When True the account is suspended: login + all authenticated requests are
     # rejected. Set/cleared by an admin via /api/admin/users/{id}/block.
     is_blocked = Column(Boolean, default=False, nullable=True)
@@ -84,6 +87,9 @@ class Draft(Base):
     # Vinted category as a unique breadcrumb ("Damen > Kleidung > Jeans > Boyfriend Jeans").
     # Vinted has its own taxonomy, separate from Kleinanzeigen's `category`.
     vinted_category = Column(String, nullable=True)
+    # "FIXED" (Festpreis) / "NEGOTIABLE" (VB), or None = the account preset
+    # (User.default_price_type). Clients read price_type_effective.
+    price_type = Column(String, nullable=True)
     # True if this draft was auto-created in "Turbo" batch mode (multiple offers from one photo session)
     is_turbo = Column(Boolean, default=False, nullable=True)
 
@@ -104,6 +110,13 @@ class Draft(Base):
 
     # Relationships
     user = relationship("User", back_populates="drafts")
+
+    @property
+    def price_type_effective(self) -> str:
+        """The price type the listing is published with: the draft's own choice,
+        else the account preset, else Festpreis (the behaviour before 2.7.57)."""
+        preset = self.user.default_price_type if self.user else None
+        return self.price_type or preset or "FIXED"
 
     @property
     def category_path(self) -> Optional[str]:

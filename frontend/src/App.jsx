@@ -14,7 +14,7 @@ import BugReportModal from './components/BugReportModal';
 import IssueManagement from './components/IssueManagement';
 import Toaster from './components/Toaster';
 import { showError } from './utils/toast';
-import { getDrafts, deleteDraft, isAuthenticated, setAuthToken, getMe, uploadAndAnalyze, uploadTurbo, refreshAllListings } from './utils/api';
+import { getDrafts, deleteDraft, isAuthenticated, setAuthToken, getMe, refreshSessionIfDue, uploadAndAnalyze, uploadTurbo, refreshAllListings } from './utils/api';
 import { version } from '../package.json';
 
 
@@ -244,6 +244,7 @@ export default function App() {
       const u = await getMe();
       setUser(u);
       localStorage.setItem('velosia_user_email', u.email);
+      renewSession();
     } catch (err) {
       console.error(err);
       // Only force a logout on a genuine auth rejection. A network blip (offline,
@@ -254,6 +255,22 @@ export default function App() {
       }
     }
   };
+
+  // Keep the session alive while the app is used (see refreshSessionIfDue).
+  const renewSession = async () => {
+    const fresh = await refreshSessionIfDue();
+    if (fresh) setToken(fresh);
+  };
+
+  // The Android app is usually resumed from the background rather than reloaded,
+  // so renew on return to the foreground as well, not only on start.
+  useEffect(() => {
+    const onVisible = () => {
+      if (document.visibilityState === 'visible' && isAuthenticated()) renewSession();
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => document.removeEventListener('visibilitychange', onVisible);
+  }, []);
 
   const fetchDrafts = async () => {
     setLoading(true);

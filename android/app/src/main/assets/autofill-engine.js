@@ -633,16 +633,110 @@
     }
   }
 
-  function setKleinanzeigenFixedPrice() {
-    var radios = document.querySelectorAll("input[name='priceType']");
-    for (var i = 0; i < radios.length; i++) {
-      var r = radios[i];
-      if (r.value === "FIXED" || (r.id && (r.id.indexOf("fixed") !== -1 || r.id.indexOf("fest") !== -1))) {
-        r.checked = true;
-        r.dispatchEvent(new Event("change", { bubbles: true }));
-        return;
+  // Kleinanzeigen "Preisart": Festpreis or VB (Verhandlungsbasis). The draft
+  // carries the resolved choice (price_type_effective = the draft's own choice or
+  // the account preset); without one it stays Festpreis, as before 2.7.57.
+  // The control differs between form generations, so radios (old form:
+  // name=priceType, value FIXED/NEGOTIABLE), ARIA radios / segmented buttons, a
+  // <select> and a labelled listbox picker are all tried — matched by value and by
+  // visible text. Returns { found, ok }: ok only when the wanted option ended up
+  // selected, found when a price type control exists at all.
+  var KA_PRICE_TYPE_WORDS = {
+    FIXED: ["festpreis"],
+    NEGOTIABLE: ["vb", "verhandlungsbasis"]
+  };
+
+  function kaPriceTypeOf(text, value) {
+    var v = String(value || "").toUpperCase();
+    if (v === "FIXED" || v === "NEGOTIABLE") return v;
+    var t = norm(text);
+    for (var type in KA_PRICE_TYPE_WORDS) {
+      var words = KA_PRICE_TYPE_WORDS[type];
+      for (var i = 0; i < words.length; i++) {
+        if (t === words[i] || t.indexOf(words[i] + " ") === 0) return type;
       }
     }
+    return null;
+  }
+
+  function kaRadioLabelText(radio) {
+    var lbl = radio.id ? document.querySelector("label[for='" + radio.id + "']") : null;
+    return (lbl || radio.closest("label") || {}).textContent || "";
+  }
+
+  async function setKleinanzeigenPriceType(type) {
+    var found = false;
+
+    // 1) Native radios.
+    var radios = document.querySelectorAll("input[type='radio']");
+    for (var i = 0; i < radios.length; i++) {
+      var r = radios[i];
+      var isPriceRadio = /price|preis/i.test(r.name || "") || kaPriceTypeOf(kaRadioLabelText(r), null);
+      if (!isPriceRadio) continue;
+      var rType = kaPriceTypeOf(kaRadioLabelText(r), r.value);
+      if (!rType) continue;
+      found = true;
+      if (rType !== type) continue;
+      if (!r.checked) {
+        var rLabel = r.id ? document.querySelector("label[for='" + r.id + "']") : null;
+        try { (rLabel || r).click(); } catch (e) {}
+        await sleep(150);
+      }
+      if (!r.checked) {
+        r.checked = true;
+        r.dispatchEvent(new Event("change", { bubbles: true }));
+      }
+      return { found: true, ok: r.checked };
+    }
+
+    // 2) ARIA radios / toggle buttons ("Festpreis | VB" as a segmented control).
+    var toggles = document.querySelectorAll("[role='radio'], button[aria-pressed]");
+    for (var j = 0; j < toggles.length; j++) {
+      var tEl = toggles[j];
+      var tType = kaPriceTypeOf(tEl.textContent, tEl.getAttribute("data-value") || tEl.getAttribute("value"));
+      if (!tType || !kaVisible(tEl)) continue;
+      found = true;
+      if (tType !== type) continue;
+      var isOn = function () {
+        return tEl.getAttribute("aria-checked") === "true" || tEl.getAttribute("aria-pressed") === "true";
+      };
+      if (!isOn()) { try { tEl.click(); } catch (e) {} await sleep(150); }
+      return { found: true, ok: isOn() };
+    }
+
+    // 3) <select> offering both price types.
+    var selects = document.querySelectorAll("select");
+    for (var k = 0; k < selects.length; k++) {
+      var sel = selects[k];
+      var want = null, kinds = {};
+      for (var o = 0; o < sel.options.length; o++) {
+        var oType = kaPriceTypeOf(sel.options[o].textContent, sel.options[o].value);
+        if (oType) kinds[oType] = true;
+        if (oType === type && !want) want = sel.options[o];
+      }
+      if (!(kinds.FIXED && kinds.NEGOTIABLE)) continue;
+      found = true;
+      if (!want) return { found: true, ok: false };
+      if (sel.value !== want.value) {
+        setNativeValue(sel, want.value);
+        sel.dispatchEvent(new Event("input", { bubbles: true }));
+        sel.dispatchEvent(new Event("change", { bubbles: true }));
+      }
+      return { found: true, ok: sel.value === want.value };
+    }
+
+    // 4) New-form picker (button/combobox + listbox), found by its label.
+    var labels = ["Preisart", "Preistyp", "Art des Preises"];
+    var candidates = type === "NEGOTIABLE" ? ["VB", "Verhandlungsbasis"] : ["Festpreis"];
+    for (var m = 0; m < labels.length; m++) {
+      if (!kaFieldControl(labels[m])) continue;
+      found = true;
+      var picked = false;
+      try { picked = await selectKleinanzeigenAttribute(labels[m], candidates, false); } catch (e) { picked = false; }
+      return { found: true, ok: picked };
+    }
+
+    return { found: found, ok: false };
   }
 
   // Kleinanzeigen "Zustand" — Velosia captures the condition, so set it directly
@@ -2318,7 +2412,17 @@
 
     if (platform === "kleinanzeigen") {
       selectKleinanzeigenOffer();
-      setKleinanzeigenFixedPrice();
+      var priceType = String(draft.price_type_effective || draft.price_type || "FIXED").toUpperCase();
+      if (priceType !== "NEGOTIABLE") priceType = "FIXED";
+      var pt = { found: false, ok: false };
+      try { pt = await setKleinanzeigenPriceType(priceType); } catch (e) {}
+      // VB is a deliberate choice, so it is reported either way. Festpreis was the
+      // silent default before; it only counts as open when the control was there
+      // and could not be set.
+      if (pt.ok) filled.push(priceType === "NEGOTIABLE" ? "Preisart VB" : "Preisart Festpreis");
+      else if (priceType === "NEGOTIABLE" || pt.found) {
+        manual.push(priceType === "NEGOTIABLE" ? "Preisart „VB“" : "Preisart „Festpreis“");
+      }
       if (options.userZip) {
         var zipEl = firstBySelectors([
           "#ad-zip-code", "input[name='zipCode']", "#postad-postcode", "input[name='postcode']", "input[placeholder*='PLZ']"

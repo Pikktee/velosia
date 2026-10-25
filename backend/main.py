@@ -111,6 +111,8 @@ def run_migrations():
         ("vinted_listing_url", "VARCHAR(500)"),
         ("vinted_status", "VARCHAR(20)"),
         ("vinted_status_at", "DATETIME"),
+        # Festpreis/VB per draft (added V2.7.57); NULL = account preset
+        ("price_type", "VARCHAR(20)"),
     ]:
         try:
             db.execute(text(f"ALTER TABLE drafts ADD COLUMN {col_name} {col_type}"))
@@ -145,6 +147,8 @@ def run_migrations():
         ("ai_usage_since", "DATETIME"),
         # Token generation (see models.User.token_version)
         ("token_version", "INTEGER DEFAULT 0"),
+        # Festpreis/VB preset for new listings (added V2.7.57)
+        ("default_price_type", "VARCHAR(20) DEFAULT 'FIXED'"),
     ]:
         try:
             db.execute(text(f"ALTER TABLE users ADD COLUMN {col_name} {col_type}"))
@@ -192,7 +196,7 @@ run_migrations()
 _API_DOCS = os.getenv("ENABLE_API_DOCS", "").lower() in ("1", "true", "yes")
 app = FastAPI(
     title="Velosia API",
-    version="2.7.56",
+    version="2.7.57",
     docs_url="/docs" if _API_DOCS else None,
     redoc_url="/redoc" if _API_DOCS else None,
     openapi_url="/openapi.json" if _API_DOCS else None,
@@ -614,8 +618,17 @@ def get_platform_principal(
     return Principal(user=_user_from_access_token(token, db))
 
 
-def _token_response(user: models.User) -> dict:
-    return {"access_token": create_user_token(user), "token_type": "bearer"}
+def _token_response(user: models.User, signed_in_at: Optional[int] = None) -> dict:
+    return {"access_token": create_user_token(user, signed_in_at), "token_type": "bearer"}
+
+
+def _signed_in_at(payload: dict) -> Optional[datetime]:
+    """When the user actually signed in (naive UTC). Refreshed tokens carry it
+    as `auth`; older tokens only have their issue time, which was the sign-in."""
+    auth = payload.get("auth")
+    if isinstance(auth, (int, float)):
+        return datetime.fromtimestamp(auth, timezone.utc).replace(tzinfo=None)
+    return _issued_at(payload)
 
 
 def _draft_files(draft: models.Draft) -> list:
@@ -730,6 +743,21 @@ def login(request: Request, user_in: schemas.UserCreate, db: Session = Depends(g
 
     return _token_response(db_user)
 
+@app.post("/api/auth/refresh", response_model=schemas.Token)
+def refresh_session(
+    credentials: HTTPAuthorizationCredentials = Depends(security),
+    db: Session = Depends(get_db),
+):
+    """Swap a valid session token for a new one with the full lifetime (sliding
+    session, see SESSION_TTL_DAYS). Only session tokens qualify — a platform or
+    export token is rejected by _user_from_access_token. The sign-in time is
+    carried over, so a refresh never makes a session "fresh" for set-password."""
+    current_user = _user_from_access_token(credentials.credentials, db)
+    payload = decode_access_token(credentials.credentials) or {}
+    signed_in = _signed_in_at(payload)
+    signed_in_ts = int(signed_in.replace(tzinfo=timezone.utc).timestamp()) if signed_in else None
+    return _token_response(current_user, signed_in_ts)
+
 @app.get("/api/auth/me", response_model=None)
 def get_me(principal: Principal = Depends(get_platform_principal)):
     # A platform token only learns what the autofill needs (postcode prefill and
@@ -779,7 +807,7 @@ def set_password(
         "set_password", str(current_user.id), rate_limit.SET_PASSWORD_USER,
         "Zu viele Versuche. Bitte warte einen Moment.",
     )
-    issued = _issued_at(decode_access_token(credentials.credentials) or {})
+    issued = _signed_in_at(decode_access_token(credentials.credentials) or {})
     if issued is None or datetime.utcnow() - issued > _FRESH_LOGIN_MAX_AGE:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,

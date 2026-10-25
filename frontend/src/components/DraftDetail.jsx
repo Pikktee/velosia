@@ -4,12 +4,14 @@ import { ArrowLeft, Copy, Check, ExternalLink, Monitor, RefreshCw, AlertCircle, 
 import { updateDraft, getImageUrl, getPlatformToken, uploadDraftImages, deleteDraftImage, regenerateDraftField, refreshListingStatus, setListingStatus } from '../utils/api';
 import { statusMeta, listingPlatforms, TERMINAL } from '../utils/listingStatus';
 import { showError } from '../utils/toast';
+import { PRICE_TYPES } from '../utils/priceType';
 
 export default function DraftDetail({ draft, onBack, onUpdateSuccess }) {
   const [title, setTitle] = useState(draft.title || '');
   const [description, setDescription] = useState(draft.description || '');
   const [condition, setCondition] = useState(draft.condition || 'Gut');
   const [price, setPrice] = useState(draft.price || 0);
+  const [priceType, setPriceType] = useState(draft.price_type_effective || 'FIXED');
   
   const [saveStatus, setSaveStatus] = useState('saved'); // 'saved', 'saving', 'error'
   const [hasChanges, setHasChanges] = useState(false);
@@ -150,6 +152,22 @@ export default function DraftDetail({ draft, onBack, onUpdateSuccess }) {
     } catch (err) {
       console.error(err);
       setSaveStatus('error');
+    }
+  };
+
+  // Festpreis/VB is a single tap, so it is saved right away instead of riding on
+  // the debounced text save.
+  const handlePriceTypeChange = async (value) => {
+    if (value === priceType) return;
+    const previous = priceType;
+    setPriceType(value);
+    try {
+      const updated = await updateDraft(draft.id, { price_type: value });
+      onUpdateSuccess(updated);
+    } catch (err) {
+      console.error(err);
+      setPriceType(previous);
+      showError('Die Preisart konnte nicht gespeichert werden.');
     }
   };
 
@@ -543,7 +561,7 @@ export default function DraftDetail({ draft, onBack, onUpdateSuccess }) {
 
               <div className="copy-item">
                 <div className="copy-label">Preis</div>
-                <div className="copy-value price">{price} €</div>
+                <div className="copy-value price">{price} €{priceType === 'NEGOTIABLE' ? ' VB' : ''}</div>
                 <button 
                   className={`copy-btn ${copiedField === 'price' ? 'success' : ''}`}
                   onClick={() => copyToClipboard(price.toString(), 'price')}
@@ -777,6 +795,23 @@ export default function DraftDetail({ draft, onBack, onUpdateSuccess }) {
             min="0"
             step="1"
           />
+          <div className="segmented-control" role="radiogroup" aria-label="Preisart" style={{ marginTop: '0.5rem' }}>
+            {PRICE_TYPES.map(({ value, label }) => (
+              <button
+                key={value}
+                type="button"
+                role="radio"
+                aria-checked={priceType === value}
+                className={`segmented-control-btn ${priceType === value ? 'active' : ''}`}
+                onClick={() => handlePriceTypeChange(value)}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+          <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.35rem' }}>
+            {draft.price_type ? 'Gilt für Kleinanzeigen.' : 'Vorgabe aus deinen Einstellungen · gilt für Kleinanzeigen.'}
+          </div>
         </div>
 
         {/* Condition */}

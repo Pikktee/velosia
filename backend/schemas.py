@@ -12,6 +12,8 @@ _SHORT = 200
 _SETTING_TEXT = 1000
 _DESCRIPTION = 5000
 Platform = Literal["vinted", "kleinanzeigen"]
+# Kleinanzeigen price type: Festpreis / VB (Verhandlungsbasis).
+PriceType = Literal["FIXED", "NEGOTIABLE"]
 
 # Auth Token Schemas
 class Token(BaseModel):
@@ -51,6 +53,7 @@ class UserResponse(UserBase):
     default_city: Optional[str] = None
     default_shipping: Optional[str] = None
     auto_submit: Optional[bool] = False
+    default_price_type: Optional[str] = "FIXED"
     is_admin: Optional[bool] = False
 
     class Config:
@@ -90,6 +93,7 @@ class UserUpdate(BaseModel):
     default_city: Optional[str] = Field(None, max_length=100)
     default_shipping: Optional[str] = Field(None, max_length=_SHORT)
     auto_submit: Optional[bool] = None
+    default_price_type: Optional[PriceType] = None
 
 # Draft Schemas
 class DraftBase(BaseModel):
@@ -101,6 +105,7 @@ class DraftBase(BaseModel):
     sources: Optional[str] = None # JSON string: [{"title": "...", "price": 12.0, "url": "..."}]
     attributes: Optional[str] = None # JSON string: {"Größe": "M", "Marke": "Nike", ...}
     vinted_category: Optional[str] = None # Vinted breadcrumb: "Damen > Kleidung > Jeans > Boyfriend Jeans"
+    price_type: Optional[str] = None # "FIXED" | "NEGOTIABLE" | None (= account preset)
     image_paths: Optional[str] = None
     is_turbo: Optional[bool] = False
 
@@ -118,6 +123,8 @@ class DraftUpdate(DraftBase):
     attributes: Optional[str] = Field(None, max_length=4000)
     vinted_category: Optional[str] = Field(None, max_length=300)
     image_paths: Optional[str] = Field(None, max_length=10_000)
+    # None resets the draft to the account preset.
+    price_type: Optional[PriceType] = None
 
 class DraftResponse(DraftBase):
     id: int
@@ -128,6 +135,9 @@ class DraftResponse(DraftBase):
     category_path: Optional[str] = None
     # Vinted catalog path (e.g. "1904/4/183/1839"), derived from vinted_category.
     vinted_path: Optional[str] = None
+    # price_type, or the account preset when the draft has none (Kleinanzeigen
+    # "Festpreis"/"VB"). This is what the autofill engine sets.
+    price_type_effective: Optional[str] = None
     # Published-listing tracking (filled once a listing goes live).
     ka_listing_id: Optional[str] = None
     ka_listing_url: Optional[str] = None
