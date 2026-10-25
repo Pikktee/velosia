@@ -14,8 +14,8 @@
     <android.webkit.WebView
         android:id="@+id/webView"
         android:layout_width="match_parent"
-        android:layout_height="match_parent"
-        app:layout_constraintBottom_toBottomOf="parent"
+        android:layout_height="0dp"
+        app:layout_constraintBottom_toTopOf="@id/updateBar"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toTopOf="parent" />
@@ -33,5 +33,77 @@
         app:iconTint="#FFFFFF"
         app:layout_constraintTop_toTopOf="parent"
         app:layout_constraintEnd_toEndOf="parent" />
+
+    <!-- In-app update bar ("Neue Version wird geladen" with percentage and progress
+         line, then "Neue Version ist geladen · Neu starten"). Below the WebView, not
+         over it: the WebView shrinks while it shows, so the frontend's bottom nav and
+         the platform forms are never covered. Gone = WebView reaches the bottom. -->
+    <FrameLayout
+        android:id="@+id/updateBar"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_marginHorizontal="12dp"
+        android:layout_marginVertical="8dp"
+        android:background="@drawable/update_bar_bg"
+        android:clipToOutline="true"
+        android:visibility="gone"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center_vertical"
+            android:minHeight="52dp"
+            android:orientation="horizontal"
+            android:paddingStart="16dp"
+            android:paddingEnd="6dp">
+
+            <TextView
+                android:id="@+id/updateBarText"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="Neue Version wird geladen"
+                android:textColor="#e5eef0"
+                android:textSize="14sp" />
+
+            <!-- Percentage while loading. Fixed to the width of "100 %" (minEms + tabular
+                 digits), so the sentence never jumps when the number appears. -->
+            <TextView
+                android:id="@+id/updateBarPercent"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:fontFeatureSettings="tnum"
+                android:gravity="end"
+                android:minEms="3"
+                android:paddingHorizontal="10dp"
+                android:textColor="#b3e5eef0"
+                android:textSize="14sp" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/updateBarAction"
+                style="@style/Widget.Material3.Button.TextButton"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Neu starten"
+                android:textColor="#09b0b7"
+                android:textStyle="bold"
+                android:visibility="gone" />
+        </LinearLayout>
+
+        <!-- Sits on the bottom edge and adds no height of its own. -->
+        <com.google.android.material.progressindicator.LinearProgressIndicator
+            android:id="@+id/updateBarProgress"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_gravity="bottom"
+            android:indeterminate="true"
+            app:indicatorColor="#09b0b7"
+            app:trackColor="#1fffffff"
+            app:trackCornerRadius="0dp"
+            app:trackThickness="3dp" />
+    </FrameLayout>
 
 </androidx.constraintlayout.widget.ConstraintLayout>

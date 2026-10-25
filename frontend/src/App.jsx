@@ -13,6 +13,8 @@ import LegalPage from './components/LegalPage';
 import BugReportModal from './components/BugReportModal';
 import IssueManagement from './components/IssueManagement';
 import Toaster from './components/Toaster';
+import WhatsNewSheet from './components/WhatsNewSheet';
+import { seedWhatsNewIfFresh, takeWhatsNew } from './utils/whatsNew';
 import { showError } from './utils/toast';
 import { getDrafts, deleteDraft, isAuthenticated, setAuthToken, getMe, refreshSessionIfDue, uploadAndAnalyze, uploadTurbo, refreshAllListings } from './utils/api';
 import { version } from '../package.json';
@@ -70,6 +72,9 @@ export default function App() {
   // the user sees which offers were generated, then the marking clears itself.
   const [flashDraftIds, setFlashDraftIds] = useState([]);
   const [showUpdateBanner, setShowUpdateBanner] = useState(false);
+  // "Neu in Velosia" after an update: checked once per page load, on the list.
+  const [whatsNew, setWhatsNew] = useState(null);
+  const whatsNewChecked = useRef(false);
   const [latestVersion, setLatestVersion] = useState(version);
   const longPressTimer = useRef(null);
   // When the user publishes via the platform WebView, DraftDetail stores the draft
@@ -150,6 +155,21 @@ export default function App() {
     window.addEventListener('velosia-version-received', handleVersionReceived);
     return () => window.removeEventListener('velosia-version-received', handleVersionReceived);
   }, []);
+
+  // Before any login can happen: a fresh install only records the current version,
+  // so its first login does not look like an update (see utils/whatsNew.js).
+  useEffect(() => {
+    seedWhatsNewIfFresh();
+  }, []);
+
+  // Show the news once the logged-in list is settled — not over the skeleton and
+  // not while the app is restoring a draft after a publish round-trip.
+  useEffect(() => {
+    if (whatsNewChecked.current || !token || view !== 'list' || loading || pendingReturnDraftId != null) return;
+    whatsNewChecked.current = true;
+    const news = takeWhatsNew();
+    if (news) setWhatsNew(news);
+  }, [token, view, loading, pendingReturnDraftId]);
 
   // After returning from a platform publish WebView, the dashboard reloads fresh.
   // Once the drafts are loaded, restore the detail view of the draft we were
@@ -852,6 +872,8 @@ export default function App() {
       )}
 
       <Toaster />
+
+      {whatsNew && <WhatsNewSheet news={whatsNew} onClose={() => setWhatsNew(null)} />}
 
       {showBugReportModal && (
         <BugReportModal

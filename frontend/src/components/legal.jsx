@@ -505,7 +505,12 @@ export function DatenschutzContent() {
           <li>
             <span style={code}>velosia_turbo_onboarded</span> und{' '}
             <span style={code}>velosia_detail_onboarding_shown</span> – ob ein Hinweis schon
-            angezeigt wurde.
+            angezeigt wurde,
+          </li>
+          <li>
+            <span style={code}>velosia_seen_version</span> und{' '}
+            <span style={code}>velosia_seen_app_version</span> – welche Version du zuletzt
+            gesehen hast, damit „Neu in Velosia“ nach einem Update nur einmal erscheint.
           </li>
         </ul>
         <Steckbrief
@@ -541,7 +546,8 @@ export function DatenschutzContent() {
           <li>
             <strong>Updates:</strong> Beim Start und beim Zurückkehren in die App fragt sie über die
             Update-Schnittstelle von Google Play, ob eine neue Version bereitsteht. Herunterladen und
-            Installieren übernimmt Google Play.
+            Installieren übernimmt Google Play. Damit die App nicht bei jedem Start erneut fragt, merkt
+            sie sich auf dem Gerät, zu welcher Version und wann sie zuletzt gefragt hat.
           </li>
           <li>
             <strong>Autofill-Engine:</strong> Die App lädt die aktuelle Version der Engine von

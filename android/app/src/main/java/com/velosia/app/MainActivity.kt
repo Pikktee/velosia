@@ -14,6 +14,7 @@ import android.util.Log
 import android.view.View
 import android.view.ViewGroup
 import android.webkit.*
+import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.OnBackPressedCallback
 import androidx.appcompat.app.AppCompatActivity
@@ -25,13 +26,13 @@ import androidx.core.view.WindowInsetsCompat
 import com.google.android.gms.auth.api.signin.GoogleSignIn
 import com.google.android.gms.auth.api.signin.GoogleSignInOptions
 import com.google.android.gms.common.api.ApiException
+import com.google.android.material.button.MaterialButton
 import com.google.android.material.floatingactionbutton.ExtendedFloatingActionButton
-import com.google.android.material.snackbar.Snackbar
+import com.google.android.material.progressindicator.LinearProgressIndicator
 import com.google.android.play.core.appupdate.AppUpdateManager
 import com.google.android.play.core.appupdate.AppUpdateManagerFactory
 import com.google.android.play.core.install.InstallStateUpdatedListener
 import com.google.android.play.core.install.model.AppUpdateType
-import com.google.android.play.core.install.model.InstallStatus
 import com.google.android.play.core.install.model.UpdateAvailability
 import okhttp3.*
 import okhttp3.MediaType.Companion.toMediaTypeOrNull
@@ -256,12 +257,28 @@ class MainActivity : AppCompatActivity() {
     // Google Play In-App Updates. Replaces the former self-download/-install OTA
     // mechanism: when distributed via Play, Play itself performs the download and
     // install — we only detect availability and prompt the user (flexible flow).
+    //
+    // Play shows no progress of its own for a flexible update, so the app draws it: a
+    // bar at the bottom ("Neue Version wird geladen" + percentage + progress line, then
+    // "Neue Version ist geladen · Neu starten"). Same build-up as in Maptale; the pure
+    // state logic lives in UpdateProgress.kt.
     private lateinit var appUpdateManager: AppUpdateManager
     private val RC_APP_UPDATE = 9003
+    private lateinit var updateBar: View
+    private lateinit var updateBarText: TextView
+    private lateinit var updateBarPercent: TextView
+    private lateinit var updateBarAction: MaterialButton
+    private lateinit var updateBarProgress: LinearProgressIndicator
+    // Current download state from Play (null = nothing to show). UI thread only.
+    private var updateDownload: UpdateDownload? = null
+    // Whether the WebView shows the Velosia frontend (not a Vinted/KA page). The bar
+    // hides on platform pages: a tempting "Neu starten" there would throw away a
+    // half-filled listing form. It comes back on the return to the dashboard.
+    private var onDashboard = true
+    private val updatePrefs by lazy { getSharedPreferences("velosia-update", MODE_PRIVATE) }
     private val installStateListener = InstallStateUpdatedListener { state ->
-        if (state.installStatus() == InstallStatus.DOWNLOADED) {
-            showUpdateDownloadedPrompt()
-        }
+        val next = downloadState(state.installStatus(), state.bytesDownloaded(), state.totalBytesToDownload())
+        runOnUiThread { setUpdateDownload(next) }
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -290,6 +307,16 @@ class MainActivity : AppCompatActivity() {
 
         webView = findViewById(R.id.webView)
         fabClose = findViewById(R.id.fabClose)
+        updateBar = findViewById(R.id.updateBar)
+        updateBarText = findViewById(R.id.updateBarText)
+        updateBarPercent = findViewById(R.id.updateBarPercent)
+        updateBarAction = findViewById(R.id.updateBarAction)
+        updateBarProgress = findViewById(R.id.updateBarProgress)
+        // Installing is always the user's action: it restarts the app.
+        updateBarAction.setOnClickListener {
+            setUpdateDownload(null)
+            appUpdateManager.completeUpdate()
+        }
 
         // Enable remote inspection of the WebView (chrome://inspect) and route the
         // engine's console logs to Logcat — but ONLY on a debuggable build. On the
@@ -407,6 +434,8 @@ class MainActivity : AppCompatActivity() {
                 // Allow the user to bail out of any external listing page at any time
                 val isDashboard = url.startsWith(frontendUrl)
                 fabClose.visibility = if (isDashboard) View.GONE else View.VISIBLE
+                onDashboard = isDashboard
+                renderUpdateBar()
 
                 maybeTriggerAutofill(url)
             }
@@ -802,6 +831,8 @@ class MainActivity : AppCompatActivity() {
         hasCaptured = false
         resetCaptureGate()
         fabClose.visibility = View.GONE
+        onDashboard = true
+        renderUpdateBar()
         webView.loadUrl(frontendUrl)
     }
 
@@ -1355,19 +1386,36 @@ class MainActivity : AppCompatActivity() {
     // Ask the Play Store whether a newer version of the app is live. This only
     // works for Play-installed builds — Play performs the actual download/install
     // (flexible flow); on dev or sideloaded builds the request fails silently and
-    // nothing is shown to the user.
+    // nothing is shown to the user. Once per version every UPDATE_REASK_MS: whoever
+    // says "Nein danke" means this version, and Play updates it on its own anyway.
     private fun checkForUpdates() {
         appUpdateManager.appUpdateInfo
             .addOnSuccessListener { info ->
+                setUpdateDownload(downloadState(info.installStatus(), info.bytesDownloaded(), info.totalBytesToDownload()))
                 val updateAvailable = info.updateAvailability() == UpdateAvailability.UPDATE_AVAILABLE
-                if (updateAvailable && info.isUpdateTypeAllowed(AppUpdateType.FLEXIBLE)) {
+                val version = info.availableVersionCode().toLong()
+                val asked = alreadyAsked(
+                    version,
+                    updatePrefs.getLong("askedVersion", 0L),
+                    updatePrefs.getLong("askedAt", 0L),
+                    System.currentTimeMillis()
+                )
+                if (updateAvailable && info.isUpdateTypeAllowed(AppUpdateType.FLEXIBLE) && !asked) {
                     try {
-                        appUpdateManager.startUpdateFlowForResult(
+                        val started = appUpdateManager.startUpdateFlowForResult(
                             info,
                             AppUpdateType.FLEXIBLE,
                             this,
                             RC_APP_UPDATE
                         )
+                        // Marked on OPENING, not on the result: a "Nein danke" needs no
+                        // reaction, a yes reports itself through the install listener.
+                        if (started) {
+                            updatePrefs.edit()
+                                .putLong("askedVersion", version)
+                                .putLong("askedAt", System.currentTimeMillis())
+                                .apply()
+                        }
                     } catch (e: Exception) {
                         // IntentSender failure — keep the current version silently.
                     }
@@ -1378,23 +1426,61 @@ class MainActivity : AppCompatActivity() {
             }
     }
 
-    // A flexible update downloads in the background; once Play reports it ready we
-    // prompt the user to restart so Play can finish installing it.
-    private fun showUpdateDownloadedPrompt() {
-        Snackbar.make(webView, "Update heruntergeladen.", Snackbar.LENGTH_INDEFINITE)
-            .setAction("Neu starten") { appUpdateManager.completeUpdate() }
-            .show()
+    private fun setUpdateDownload(next: UpdateDownload?) {
+        if (next == updateDownload) return
+        updateDownload = next
+        renderUpdateBar()
+    }
+
+    // Draw the bar for the current state. While loading there is no button (nothing to
+    // do, Play keeps loading anyway); without a known size the line runs indeterminate
+    // and the number is left out. Ready gets no "später" either: the file is there, and
+    // the bar is the only place anyone learns about it.
+    private fun renderUpdateBar() {
+        if (!::updateBar.isInitialized) return
+        val state = updateDownload
+        if (state == null || !onDashboard) {
+            updateBar.visibility = View.GONE
+            return
+        }
+        when (state) {
+            is UpdateDownload.Loading -> {
+                updateBarText.text = "Neue Version wird geladen"
+                updateBarAction.visibility = View.GONE
+                updateBarPercent.visibility = View.VISIBLE
+                updateBarProgress.visibility = View.VISIBLE
+                if (state.percent == null) {
+                    updateBarPercent.text = ""
+                    if (!updateBarProgress.isIndeterminate) {
+                        // Switching modes on a visible indicator is not allowed.
+                        updateBarProgress.visibility = View.INVISIBLE
+                        updateBarProgress.isIndeterminate = true
+                        updateBarProgress.visibility = View.VISIBLE
+                    }
+                } else {
+                    updateBarPercent.text = "${state.percent} %"
+                    // setProgressCompat glides between Play's jumpy progress events and
+                    // leaves indeterminate mode on its own.
+                    updateBarProgress.setProgressCompat(state.percent, true)
+                }
+            }
+            UpdateDownload.Ready -> {
+                updateBarText.text = "Neue Version ist geladen"
+                updateBarPercent.visibility = View.GONE
+                updateBarProgress.visibility = View.GONE
+                updateBarAction.visibility = View.VISIBLE
+            }
+        }
+        updateBar.visibility = View.VISIBLE
     }
 
     override fun onResume() {
         super.onResume()
-        // If a flexible update finished downloading while the app was backgrounded,
-        // re-surface the restart prompt.
+        // A flexible update may have progressed or finished while the app was in the
+        // background; the listener only reports new events, so re-read the state.
         if (::appUpdateManager.isInitialized) {
             appUpdateManager.appUpdateInfo.addOnSuccessListener { info ->
-                if (info.installStatus() == InstallStatus.DOWNLOADED) {
-                    showUpdateDownloadedPrompt()
-                }
+                setUpdateDownload(downloadState(info.installStatus(), info.bytesDownloaded(), info.totalBytesToDownload()))
             }
         }
     }
