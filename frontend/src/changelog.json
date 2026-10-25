@@ -1,4 +1,5 @@
 [
+  { "version": "2.7.59", "fixes": true },
   {
     "version": "2.7.58",
     "items": [
@@ -9,9 +10,9 @@
   {
     "version": "2.7.57",
     "items": [
-      "Festpreis oder VB: Wähle die Preisart als Vorgabe in den Einstellungen oder für jedes Angebot einzeln. Kleinanzeigen wird passend ausgefüllt.",
-      "Du bleibst angemeldet: Die Anmeldung gilt 30 Tage und verlängert sich, solange du Velosia nutzt."
-    ]
+      "Festpreis oder VB: Wähle die Preisart als Vorgabe in den Einstellungen oder für jedes Angebot einzeln. Kleinanzeigen wird passend ausgefüllt."
+    ],
+    "fixes": true
   },
   {
     "version": "2.7.56",
