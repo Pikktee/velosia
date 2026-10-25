@@ -66,6 +66,14 @@ After a listing goes live we capture its **public listing id/URL** and track its
 
 ---
 
+## Update-Erlebnis: Fortschritt & „Neu in Velosia" (V2.7.58)
+
+*   **Update-Fortschritt (nativ, ab App-Build 2.7.58):** Play zeigt bei einem flexiblen In-App-Update selbst keinen Fortschritt. `MainActivity` zeichnet deshalb unten eine Leiste (`@id/updateBar` in `activity_main.xml`) mit „Neue Version wird geladen" + Prozent + Balken (unbestimmt, solange Play die Größe nicht kennt), danach „Neue Version ist geladen · Neu starten" (`completeUpdate()`, nur auf Tipp). Die WebView endet **über** der Leiste (nichts wird verdeckt). Auf Vinted/KA-Seiten bleibt sie aus, damit ein Neustart kein halb ausgefülltes Formular verwirft. Der Play-Dialog kommt je Version höchstens alle 3 Tage (SharedPreferences `velosia-update`). Die reine Zustandslogik steht in `UpdateProgress.kt` (Unit-Test `UpdateProgressTest`), Aufbau übernommen aus Maptale (`journey/android/.../update/`).
+*   **„Neu in Velosia" (Frontend):** Nach dem ersten Start einer neuen Version zeigt `WhatsNewSheet` einmal, was seit der zuletzt gesehenen Version neu ist (übersprungene Versionen zusammengefasst). Quelle ist **`frontend/src/changelog.json`**: je Version kurze deutsche Stichpunkte für Nutzer (`items`), Unsichtbares nur als `"fixes": true` (wird zu einer Zeile „Bugfixes und kleine Verbesserungen"; eine Version mit nur Fixes zeigt kein Sheet). Punkte, die den **neuen App-Build** brauchen, als `{"text": …, "app": true}`: sie zählen gegen die installierte App-Version (`VelosiaBridge.getAppVersion()`) und erscheinen erst, wenn Play sie ausgeliefert hat. Gemerkt wird auf dem Gerät (`velosia_seen_version`, `velosia_seen_app_version`). Eine Neuinstallation sieht nichts. Logik in `utils/whatsNew.js`.
+*   **`deploy.py` bricht ab, wenn `changelog.json` keinen gültigen Eintrag für die neue Version hat** (Ausnahme: `--no-changelog`). Den Eintrag also **vor** dem Deploy schreiben, in Nutzersprache, nicht als Commit-Text.
+
+---
+
 ## UI-Designprinzip: Progressive Disclosure
 
 Velosias Oberfläche folgt bewusst **Progressive Disclosure**: Übersichts-/Listenansichten (v. a. `DraftList`) bleiben **minimal** — Thumbnail, Titel, Datum, Preis und höchstens ein **kompakter, farbcodierter** Veröffentlichungs-Status. **Keine** abgeleiteten Zustands-Labels wie „Bereit" oder „Kategorie prüfen" in der Liste — solche Hinweise gehören eine Ebene tiefer in `DraftDetail`. Im Zweifel: Info **nicht** in die Liste, sondern ins Detail. Listen-Status-Indikatoren sollen kompakt und idealerweise wortlos sein (Plattform-Kürzel in der Status-Farbe), die volle Pro-Plattform-Aufschlüsselung lebt in der Status-Sektion von `DraftDetail`.

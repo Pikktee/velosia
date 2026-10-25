@@ -74,6 +74,40 @@ MzEp7sWplnm1jsOn3GnLnT+BeEJi/ZNw1j8ANce128N2PSnsiJ+6UjWyGQ==
 """
 
 
+# "Neu in Velosia" (frontend/src/utils/whatsNew.js) reads this file. A release without
+# an entry would show users nothing new, so main() refuses it unless --no-changelog.
+CHANGELOG = "frontend/src/changelog.json"
+
+
+def check_changelog(version, path=CHANGELOG):
+    """Return an error text if the changelog has no valid entry for `version`, else None."""
+    try:
+        with open(path, encoding="utf-8") as f:
+            entries = json.load(f)
+    except FileNotFoundError:
+        return f"{path} fehlt."
+    except json.JSONDecodeError as e:
+        # A broken file would also break the frontend build on Railway.
+        return f"{path} ist kein gültiges JSON: {e}"
+    if not isinstance(entries, list):
+        return f"{path} muss eine Liste sein."
+    for entry in entries:
+        if not isinstance(entry, dict) or entry.get("version") != version:
+            continue
+        items = entry.get("items", [])
+        ok_items = isinstance(items, list) and all(
+            (isinstance(i, str) and i.strip())
+            or (isinstance(i, dict) and isinstance(i.get("text"), str) and i["text"].strip())
+            for i in items
+        )
+        if not ok_items:
+            return f"Eintrag {version} in {path}: items müssen Texte oder {{\"text\": …, \"app\": true}} sein."
+        if not items and not entry.get("fixes"):
+            return f"Eintrag {version} in {path} ist leer (keine items, kein \"fixes\": true)."
+        return None
+    return f"Kein Eintrag für {version} in {path}."
+
+
 def build_commit_cmd(message):
     """git commit as an argument list — the message is passed verbatim."""
     return ["git", "commit", "-m", message]
@@ -383,6 +417,7 @@ def main():
     parser.add_argument("--local", action="store_true", help="Deploy directly from the local machine using Railway CLI")
     parser.add_argument("--play", action="store_true", help="Also build the signed AAB and upload it to the Play internal test track")
     parser.add_argument("--allow-new", action="store_true", help="Also commit new untracked files (they are listed before committing)")
+    parser.add_argument("--no-changelog", action="store_true", help="Release without an entry in frontend/src/changelog.json")
     parser.add_argument("version", nargs="?", help="New version to deploy (e.g. 2.0.3)")
     parser.add_argument("message", nargs="?", help="Commit/release message")
     args = parser.parse_args()
@@ -413,6 +448,17 @@ def main():
     if not re.fullmatch(r"\d+\.\d+\.\d+", new_version):
         print(f"✖ Invalid version '{new_version}' (expected MAJOR.MINOR.PATCH).")
         sys.exit(1)
+
+    # Users see "Neu in Velosia" from frontend/src/changelog.json after an update.
+    changelog_error = check_changelog(new_version)
+    if changelog_error and not args.no_changelog:
+        print(f"✖ Changelog: {changelog_error}")
+        print(f'   Ergänze z. B. {{"version": "{new_version}", "items": ["Was Nutzer merken"], "fixes": true}}')
+        print('   (nur unsichtbare Änderungen: {"version": "…", "fixes": true}; Punkte, die den neuen')
+        print('   App-Build brauchen, als {"text": "…", "app": true}) oder starte mit --no-changelog.')
+        sys.exit(1)
+    if changelog_error:
+        print(f"---> --no-changelog: {changelog_error}\n")
 
     # Determine commit message
     default_msg = f"Release {new_version}"

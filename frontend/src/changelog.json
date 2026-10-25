@@ -1,0 +1,48 @@
+[
+  {
+    "version": "2.7.58",
+    "items": [
+      "Nach jedem Update siehst du hier einmal, was sich geändert hat.",
+      { "text": "Beim App-Update siehst du, wie weit der Download ist. Danach reicht ein Tipp auf „Neu starten“.", "app": true }
+    ]
+  },
+  {
+    "version": "2.7.57",
+    "items": [
+      "Festpreis oder VB: Wähle die Preisart als Vorgabe in den Einstellungen oder für jedes Angebot einzeln. Kleinanzeigen wird passend ausgefüllt.",
+      "Du bleibst angemeldet: Die Anmeldung gilt 30 Tage und verlängert sich, solange du Velosia nutzt."
+    ]
+  },
+  {
+    "version": "2.7.56",
+    "items": [
+      "Lade alle deine Daten als ZIP herunter (Einstellungen → Datenexport).",
+      "Datenschutzerklärung, Impressum und Nutzungsbedingungen sind neu und jederzeit in den Einstellungen zu finden."
+    ],
+    "fixes": true
+  },
+  {
+    "version": "2.7.55",
+    "items": [
+      "Fehlerberichte enthalten einen Screenshot nur noch, wenn du ihn ankreuzt."
+    ],
+    "fixes": true
+  },
+  {
+    "version": "2.7.54",
+    "items": [
+      "Titel haben höchstens 65 Zeichen und passen damit immer zu Kleinanzeigen. Der Editor zählt mit."
+    ]
+  },
+  { "version": "2.7.53", "fixes": true },
+  { "version": "2.7.52", "fixes": true },
+  { "version": "2.7.51", "fixes": true },
+  { "version": "2.7.50", "fixes": true },
+  {
+    "version": "2.7.49",
+    "items": [
+      "Fotos lassen sich umsortieren und ein Titelbild festlegen. Die Reihenfolge gilt auch auf Vinted und Kleinanzeigen."
+    ],
+    "fixes": true
+  }
+]
