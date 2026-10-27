@@ -1,5 +1,12 @@
 [
   {
+    "version": "2.7.61",
+    "items": [
+      "Hast du den Preis auf Vinted oder Kleinanzeigen geändert, fragt Velosia beim Öffnen des Angebots, ob es den neuen Preis übernehmen soll."
+    ],
+    "fixes": true
+  },
+  {
     "version": "2.7.60",
     "items": [
       "„Neu einstellen“ nimmt die alte Anzeige vorher runter: Velosia öffnet sie zum Löschen und stellt danach neu ein – kein Artikel steht mehr doppelt drin.",

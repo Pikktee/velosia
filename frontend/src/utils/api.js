@@ -486,6 +486,20 @@ export const setListingStatus = async (id, platform, status) => {
   return response.json();
 };
 
+// Keep the draft's price although it was changed on the platform: the online
+// price becomes the new baseline, so the hint stays quiet until it changes again.
+export const keepListingPrice = async (id, platform) => {
+  const response = await fetch(`${API_BASE_URL}/api/listings/${id}/keep-price`, {
+    method: 'POST',
+    headers: getHeaders(),
+    body: JSON.stringify({ platform }),
+  });
+  if (!response.ok) {
+    throw new Error('Konnte nicht gespeichert werden.');
+  }
+  return response.json();
+};
+
 // Re-poll all of the user's active listings at once. Returns the full draft list.
 export const refreshAllListings = async () => {
   const response = await fetch(`${API_BASE_URL}/api/listings/refresh-all`, {

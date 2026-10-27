@@ -97,3 +97,20 @@ export const listingPlatforms = (draft) => {
   }
   return out;
 };
+
+// Prices changed on the platform itself: the price last read from the live ad
+// differs from its baseline (the price it was published with, or one the user
+// chose to keep) and from the draft's current price. Prices that differ per
+// platform on purpose stay quiet once kept. type is KA's FIXED/NEGOTIABLE.
+const samePrice = (a, b) => Math.abs(a - b) < 0.01;
+export const onlinePriceChanges = (draft, currentPrice = draft?.price) => {
+  if (!draft) return [];
+  const current = parseFloat(currentPrice) || 0;
+  return [
+    { key: 'kleinanzeigen', name: 'Kleinanzeigen', price: draft.ka_online_price, listed: draft.ka_listed_price, type: draft.ka_online_price_type, status: draft.ka_status },
+    { key: 'vinted', name: 'Vinted', price: draft.vinted_online_price, listed: draft.vinted_listed_price, type: null, status: draft.vinted_status },
+  ].filter((d) => d.price != null && d.listed != null && !TERMINAL.has(d.status)
+    && !samePrice(d.price, d.listed) && !samePrice(d.price, current));
+};
+
+export const formatEuro = (v) => `${Number.isInteger(v) ? v : v.toFixed(2).replace('.', ',')} €`;

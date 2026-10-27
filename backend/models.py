@@ -107,8 +107,9 @@ class Draft(Base):
     vinted_status_at = Column(DateTime, nullable=True)
     # Price as last read from the public listing page, so a price changed on the
     # platform can be taken over into the draft (price_type: FIXED/NEGOTIABLE).
-    # *_listed_price is the first reading after publishing — the baseline that
-    # tells a change on the platform apart from a deliberately different price.
+    # *_listed_price is the baseline: the draft price the ad was published with,
+    # or the online price the user chose to keep. An online price that differs
+    # from it was changed on the platform.
     ka_online_price = Column(Float, nullable=True)
     ka_online_price_type = Column(String, nullable=True)
     ka_listed_price = Column(Float, nullable=True)

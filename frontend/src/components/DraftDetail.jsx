@@ -2,10 +2,11 @@ import React, { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { ArrowLeft, Copy, Check, ExternalLink, Monitor, RefreshCw, AlertCircle, Trash2, Plus, Sparkles, Upload, Share2, Camera, TrendingUp, ChevronDown, ChevronLeft, ChevronRight, Star, Tag, Coins } from 'lucide-react';
 import { updateDraft, getImageUrl, getPlatformToken, uploadDraftImages, deleteDraftImage, regenerateDraftField, refreshListingStatus, setListingStatus } from '../utils/api';
-import { statusMeta, listingPlatforms, TERMINAL } from '../utils/listingStatus';
+import { statusMeta, listingPlatforms, TERMINAL, onlinePriceChanges, formatEuro } from '../utils/listingStatus';
 import { showError } from '../utils/toast';
 import { PRICE_TYPES } from '../utils/priceType';
 import RelistSheet from './RelistSheet';
+import PriceChangeSheet from './PriceChangeSheet';
 import { takePendingRelist } from '../utils/relist';
 
 export default function DraftDetail({ draft, onBack, onUpdateSuccess }) {
@@ -34,6 +35,8 @@ export default function DraftDetail({ draft, onBack, onUpdateSuccess }) {
     const platform = takePendingRelist(draft.id);
     return platform ? { platform, resumed: true } : null;
   });
+  // A price changed on the platform pops up once when the draft is opened.
+  const [priceChange, setPriceChange] = useState(() => (relist ? null : onlinePriceChanges(draft)[0] || null));
   const [showTooltip, setShowTooltip] = useState(false);
   const [startY, setStartY] = useState(0);
   const [currentY, setCurrentY] = useState(0);
@@ -461,19 +464,9 @@ export default function DraftDetail({ draft, onBack, onUpdateSuccess }) {
     );
   };
 
-  // The price as last read from each live listing. If the user changed it on the
-  // platform itself since publishing (online ≠ first reading), we offer to take it
-  // over (KA also carries Festpreis/VB). A price that differs per platform on
-  // purpose stays quiet.
-  const samePrice = (a, b) => Math.abs(a - b) < 0.01;
-  const onlinePriceDiffs = [
-    { key: 'kleinanzeigen', name: 'Kleinanzeigen', price: draft.ka_online_price, listed: draft.ka_listed_price, type: draft.ka_online_price_type, status: draft.ka_status },
-    { key: 'vinted', name: 'Vinted', price: draft.vinted_online_price, listed: draft.vinted_listed_price, type: null, status: draft.vinted_status },
-  ].filter((d) => d.price != null && d.listed != null && !TERMINAL.has(d.status)
-    && !samePrice(d.price, d.listed)
-    && (!samePrice(d.price, parseFloat(price) || 0) || (d.type && d.type !== priceType)));
-
-  const formatEuro = (v) => `${Number.isInteger(v) ? v : v.toFixed(2).replace('.', ',')} €`;
+  // Prices changed on the platform itself (see onlinePriceChanges): offered
+  // once in a sheet on opening, and as a hint under the price field.
+  const onlinePriceDiffs = onlinePriceChanges(draft, price);
 
   const applyOnlinePrice = (d) => {
     setPrice(String(d.price)); // saved by the debounced auto-save
@@ -1131,6 +1124,16 @@ export default function DraftDetail({ draft, onBack, onUpdateSuccess }) {
         title="Bild löschen?"
         message="Möchtest du dieses Bild wirklich aus dem Angebot löschen?"
       />
+
+      {priceChange && (
+        <PriceChangeSheet
+          draft={draft}
+          change={priceChange}
+          onApply={() => { applyOnlinePrice(priceChange); setPriceChange(null); }}
+          onUpdate={onUpdateSuccess}
+          onClose={() => setPriceChange(null)}
+        />
+      )}
 
       {relist && (
         <RelistSheet

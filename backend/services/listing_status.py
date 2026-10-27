@@ -207,14 +207,15 @@ def refresh_draft_status(draft, now):
         updates["ka_status"] = status
         updates["ka_status_at"] = now
         # Only overwrite a known price with a fresh reading, so a failed fetch
-        # doesn't wipe the last one. The first reading after publishing is kept
-        # as the baseline: only a later change on the platform is worth a hint
-        # (prices that differ per platform on purpose are not).
+        # doesn't wipe the last one. The baseline (*_listed_price) is the price
+        # the ad was published with, i.e. the draft's price — the engine fills in
+        # exactly that. An online price that differs from it was changed on the
+        # platform; the user can take it over or dismiss it (dismiss = new baseline).
         if price is not None:
             updates["ka_online_price"] = price
             updates["ka_online_price_type"] = price_type
             if getattr(draft, "ka_listed_price", None) is None:
-                updates["ka_listed_price"] = price
+                updates["ka_listed_price"] = getattr(draft, "price", None)
 
     v_url = listing_urls.safe_listing_url(
         listing_urls.VINTED, getattr(draft, "vinted_listing_id", None), getattr(draft, "vinted_listing_url", None)
@@ -226,6 +227,6 @@ def refresh_draft_status(draft, now):
         if price is not None:
             updates["vinted_online_price"] = price
             if getattr(draft, "vinted_listed_price", None) is None:
-                updates["vinted_listed_price"] = price
+                updates["vinted_listed_price"] = getattr(draft, "price", None)
 
     return updates

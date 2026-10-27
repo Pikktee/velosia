@@ -4168,6 +4168,26 @@ select.form-control {
 }
 .relist-ok { color: #34d399; }
 
+/* PriceChangeSheet — builds on the sync sheet. */
+.price-change-compare {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.6rem;
+  margin-bottom: 1rem;
+}
+.price-change-compare > div {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  padding: 0.7rem 0.85rem;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--glass-border);
+  background: rgba(255, 255, 255, 0.03);
+}
+.price-change-compare span { font-size: 0.75rem; color: var(--text-muted); }
+.price-change-compare strong { font-size: 1.15rem; font-weight: 600; color: var(--text-secondary); }
+.price-change-compare .price-change-new { color: var(--text-primary); }
+
 /* Price changed on the platform itself (DraftDetail, under the price field). */
 .online-price-hint {
   display: flex;

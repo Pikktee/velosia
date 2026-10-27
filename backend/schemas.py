@@ -201,6 +201,9 @@ class ListingPublishedCreate(BaseModel):
     listing_url: Optional[str] = Field(None, max_length=2048)
 
 
+class ListingPlatform(BaseModel):
+    platform: str = Field(max_length=20)   # "vinted" | "kleinanzeigen"
+
 class ListingStatusSet(BaseModel):
     platform: str = Field(max_length=20)   # "vinted" | "kleinanzeigen"
     status: str = Field(max_length=20)     # "online" | "reserviert" | "verkauft" | "geloescht"

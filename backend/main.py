@@ -128,6 +128,20 @@ def run_migrations():
             db.rollback()
             print(f"Migration note: {col_name} column might already exist. ({e})", flush=True)
 
+    # 2.7.60 took the first online price reading as baseline, so a price changed
+    # on the platform before that deploy never showed up. Once: fall back to the
+    # draft price as baseline (recomputed on the next poll).
+    marker = os.path.join("/data" if os.path.isdir("/data") else "uploads", ".listed-price-reset-v1.done")
+    if not os.path.exists(marker):
+        try:
+            db.execute(text("UPDATE drafts SET ka_listed_price = NULL, vinted_listed_price = NULL"))
+            db.commit()
+            open(marker, "w").close()
+            print("Migration: reset listed-price baselines.", flush=True)
+        except Exception as e:
+            db.rollback()
+            print(f"Migration note: listed-price reset failed. ({e})", flush=True)
+
     # User settings migrations
     for col_name, col_type in [
         ("ai_tone", "VARCHAR(50) DEFAULT 'locker'"),
@@ -202,7 +216,7 @@ run_migrations()
 _API_DOCS = os.getenv("ENABLE_API_DOCS", "").lower() in ("1", "true", "yes")
 app = FastAPI(
     title="Velosia API",
-    version="2.7.60",
+    version="2.7.61",
     docs_url="/docs" if _API_DOCS else None,
     redoc_url="/redoc" if _API_DOCS else None,
     openapi_url="/openapi.json" if _API_DOCS else None,
@@ -2172,7 +2186,7 @@ def _apply_listing_capture(draft, platform, listing_id, listing_url):
             draft.ka_listing_url = None  # belonged to the previous listing
             draft.ka_online_price = None
             draft.ka_online_price_type = None
-            draft.ka_listed_price = None
+            draft.ka_listed_price = draft.price  # the engine published this price
         draft.ka_listing_id = listing_id or draft.ka_listing_id
         draft.ka_listing_url = listing_url or draft.ka_listing_url
         draft.ka_status = listing_status.ONLINE
@@ -2181,7 +2195,7 @@ def _apply_listing_capture(draft, platform, listing_id, listing_url):
         if listing_id != draft.vinted_listing_id:
             draft.vinted_listing_url = None
             draft.vinted_online_price = None
-            draft.vinted_listed_price = None
+            draft.vinted_listed_price = draft.price
         draft.vinted_listing_id = listing_id or draft.vinted_listing_id
         draft.vinted_listing_url = listing_url or draft.vinted_listing_url
         draft.vinted_status = listing_status.ONLINE
@@ -2233,6 +2247,33 @@ _MANUAL_STATUSES = {
     listing_status.VERKAUFT,
     listing_status.GELOESCHT,
 }
+
+
+@app.post("/api/listings/{draft_id}/keep-price", response_model=schemas.DraftResponse)
+def keep_listing_price(
+    draft_id: int,
+    payload: schemas.ListingPlatform,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    """The user saw the price changed on a platform and keeps the draft's price:
+    the online price becomes the new baseline, so the hint stays quiet until the
+    price changes there again."""
+    draft = db.query(models.Draft).filter(
+        models.Draft.id == draft_id,
+        models.Draft.user_id == current_user.id,
+    ).first()
+    if not draft:
+        raise HTTPException(status_code=404, detail="Angebot wurde nicht gefunden.")
+    if payload.platform == "kleinanzeigen":
+        draft.ka_listed_price = draft.ka_online_price
+    elif payload.platform == "vinted":
+        draft.vinted_listed_price = draft.vinted_online_price
+    else:
+        raise HTTPException(status_code=400, detail="Unbekannte Plattform.")
+    db.commit()
+    db.refresh(draft)
+    return draft
 
 
 @app.post("/api/listings/{draft_id}/set-status", response_model=schemas.DraftResponse)
