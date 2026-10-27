@@ -105,6 +105,15 @@ class Draft(Base):
     vinted_listing_url = Column(String, nullable=True)
     vinted_status = Column(String, nullable=True)
     vinted_status_at = Column(DateTime, nullable=True)
+    # Price as last read from the public listing page, so a price changed on the
+    # platform can be taken over into the draft (price_type: FIXED/NEGOTIABLE).
+    # *_listed_price is the first reading after publishing — the baseline that
+    # tells a change on the platform apart from a deliberately different price.
+    ka_online_price = Column(Float, nullable=True)
+    ka_online_price_type = Column(String, nullable=True)
+    ka_listed_price = Column(Float, nullable=True)
+    vinted_online_price = Column(Float, nullable=True)
+    vinted_listed_price = Column(Float, nullable=True)
 
     created_at = Column(DateTime, default=datetime.utcnow)
 

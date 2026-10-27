@@ -5,6 +5,8 @@ import { updateDraft, getImageUrl, getPlatformToken, uploadDraftImages, deleteDr
 import { statusMeta, listingPlatforms, TERMINAL } from '../utils/listingStatus';
 import { showError } from '../utils/toast';
 import { PRICE_TYPES } from '../utils/priceType';
+import RelistSheet from './RelistSheet';
+import { takePendingRelist } from '../utils/relist';
 
 export default function DraftDetail({ draft, onBack, onUpdateSuccess }) {
   const [title, setTitle] = useState(draft.title || '');
@@ -26,6 +28,12 @@ export default function DraftDetail({ draft, onBack, onUpdateSuccess }) {
   const [settingStatus, setSettingStatus] = useState(false);
   const [showDetected, setShowDetected] = useState(false); // collapsible "Automatisch erkannt"
   const [showPublishSheet, setShowPublishSheet] = useState(false);
+  // Re-listing a still-live ad (RelistSheet). Resumed when we come back from
+  // deleting the old ad in the platform WebView.
+  const [relist, setRelist] = useState(() => {
+    const platform = takePendingRelist(draft.id);
+    return platform ? { platform, resumed: true } : null;
+  });
   const [showTooltip, setShowTooltip] = useState(false);
   const [startY, setStartY] = useState(0);
   const [currentY, setCurrentY] = useState(0);
@@ -453,6 +461,25 @@ export default function DraftDetail({ draft, onBack, onUpdateSuccess }) {
     );
   };
 
+  // The price as last read from each live listing. If the user changed it on the
+  // platform itself since publishing (online ≠ first reading), we offer to take it
+  // over (KA also carries Festpreis/VB). A price that differs per platform on
+  // purpose stays quiet.
+  const samePrice = (a, b) => Math.abs(a - b) < 0.01;
+  const onlinePriceDiffs = [
+    { key: 'kleinanzeigen', name: 'Kleinanzeigen', price: draft.ka_online_price, listed: draft.ka_listed_price, type: draft.ka_online_price_type, status: draft.ka_status },
+    { key: 'vinted', name: 'Vinted', price: draft.vinted_online_price, listed: draft.vinted_listed_price, type: null, status: draft.vinted_status },
+  ].filter((d) => d.price != null && d.listed != null && !TERMINAL.has(d.status)
+    && !samePrice(d.price, d.listed)
+    && (!samePrice(d.price, parseFloat(price) || 0) || (d.type && d.type !== priceType)));
+
+  const formatEuro = (v) => `${Number.isInteger(v) ? v : v.toFixed(2).replace('.', ',')} €`;
+
+  const applyOnlinePrice = (d) => {
+    setPrice(String(d.price)); // saved by the debounced auto-save
+    if (d.type && d.type !== priceType) handlePriceTypeChange(d.type);
+  };
+
   // Per-platform publish control. The old standalone "Status" section is gone:
   // each platform is now ONE button that doubles as its status. Not yet published
   // → the normal publish button. Already published → a grayed-out "published"
@@ -505,7 +532,18 @@ export default function DraftDetail({ draft, onBack, onUpdateSuccess }) {
               Anzeige öffnen <ExternalLink size={12} />
             </a>
           )}
-          <button className="btn-text-link" onClick={onPublish}>
+          <button
+            className="btn-text-link"
+            onClick={() => {
+              // A live ad is taken down first, so the item isn't listed twice.
+              if (p.url && !TERMINAL.has(p.status)) {
+                setShowPublishSheet(false);
+                setRelist({ platform: key, resumed: false });
+              } else {
+                onPublish();
+              }
+            }}
+          >
             Neu einstellen
           </button>
           {canMarkSold && (
@@ -812,6 +850,16 @@ export default function DraftDetail({ draft, onBack, onUpdateSuccess }) {
           <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.35rem' }}>
             {draft.price_type ? 'Gilt für Kleinanzeigen.' : 'Vorgabe aus deinen Einstellungen · gilt für Kleinanzeigen.'}
           </div>
+          {onlinePriceDiffs.map((d) => (
+            <div key={d.key} className="online-price-hint">
+              <span>
+                Auf {d.name} steht gerade <strong>{formatEuro(d.price)}{d.type === 'NEGOTIABLE' ? ' VB' : ''}</strong>
+              </span>
+              <button type="button" className="btn-text-link" onClick={() => applyOnlinePrice(d)}>
+                Übernehmen
+              </button>
+            </div>
+          ))}
         </div>
 
         {/* Condition */}
@@ -1083,6 +1131,17 @@ export default function DraftDetail({ draft, onBack, onUpdateSuccess }) {
         title="Bild löschen?"
         message="Möchtest du dieses Bild wirklich aus dem Angebot löschen?"
       />
+
+      {relist && (
+        <RelistSheet
+          draft={draft}
+          platform={relist.platform}
+          resumed={relist.resumed}
+          onPublish={() => handlePostInApp(relist.platform)}
+          onUpdate={onUpdateSuccess}
+          onClose={() => setRelist(null)}
+        />
+      )}
 
       {/* Publish Bottom Sheet Drawer */}
       {isAndroidApp && (

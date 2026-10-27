@@ -113,6 +113,12 @@ def run_migrations():
         ("vinted_status_at", "DATETIME"),
         # Festpreis/VB per draft (added V2.7.57); NULL = account preset
         ("price_type", "VARCHAR(20)"),
+        # Price read from the live listing page (added V2.7.60)
+        ("ka_online_price", "FLOAT"),
+        ("ka_online_price_type", "VARCHAR(20)"),
+        ("ka_listed_price", "FLOAT"),
+        ("vinted_online_price", "FLOAT"),
+        ("vinted_listed_price", "FLOAT"),
     ]:
         try:
             db.execute(text(f"ALTER TABLE drafts ADD COLUMN {col_name} {col_type}"))
@@ -196,7 +202,7 @@ run_migrations()
 _API_DOCS = os.getenv("ENABLE_API_DOCS", "").lower() in ("1", "true", "yes")
 app = FastAPI(
     title="Velosia API",
-    version="2.7.59",
+    version="2.7.60",
     docs_url="/docs" if _API_DOCS else None,
     redoc_url="/redoc" if _API_DOCS else None,
     openapi_url="/openapi.json" if _API_DOCS else None,
@@ -2164,6 +2170,9 @@ def _apply_listing_capture(draft, platform, listing_id, listing_url):
     if platform == "kleinanzeigen":
         if listing_id != draft.ka_listing_id:
             draft.ka_listing_url = None  # belonged to the previous listing
+            draft.ka_online_price = None
+            draft.ka_online_price_type = None
+            draft.ka_listed_price = None
         draft.ka_listing_id = listing_id or draft.ka_listing_id
         draft.ka_listing_url = listing_url or draft.ka_listing_url
         draft.ka_status = listing_status.ONLINE
@@ -2171,6 +2180,8 @@ def _apply_listing_capture(draft, platform, listing_id, listing_url):
     elif platform == "vinted":
         if listing_id != draft.vinted_listing_id:
             draft.vinted_listing_url = None
+            draft.vinted_online_price = None
+            draft.vinted_listed_price = None
         draft.vinted_listing_id = listing_id or draft.vinted_listing_id
         draft.vinted_listing_url = listing_url or draft.vinted_listing_url
         draft.vinted_status = listing_status.ONLINE

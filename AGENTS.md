@@ -48,6 +48,10 @@ After a listing goes live we capture its **public listing id/URL** and track its
 
 `Draft` gains additive columns `ka_listing_id/url/status/status_at` + `vinted_listing_id/url/status/status_at` (migrated in `main.py`), exposed in `DraftResponse`. Endpoints: `POST /api/listings/{id}/refresh-status` (one draft), `POST /api/listings/refresh-all` (the dashboard's "Status aktualisieren" button). A throttled asyncio background loop (`_status_poll_loop` → `poll_all_active_listings`, every `STATUS_POLL_INTERVAL_MIN`=360 min, requests spaced by `STATUS_POLL_SPACING_S`=4 s, terminal statuses skipped) keeps things fresh without bursts. Frontend: status badges in `DraftList`, a Status section with per-platform badge + "Anzeige öffnen" + "Neu einstellen" in `DraftDetail` (shared meta in `frontend/src/utils/listingStatus.js`).
 
+**Neu einstellen mit Löschen (V2.7.60):** „Neu einstellen" bei einer noch aktiven Anzeige (online/reserviert, URL bekannt) öffnet `RelistSheet`: erst die alte Anzeige halb-manuell löschen (`VelosiaBridge.deleteOnPlatform`, Nutzer tippt selbst), dann neu einstellen. Weil die WebView dabei die App verlässt, überbrückt der localStorage-Marker `velosia_relist` (`utils/relist.js`, 2 h gültig) die Rückkehr; `DraftDetail` nimmt ihn beim Mount auf, prüft per `refresh-status`, ob die Alte weg ist, und bietet erst dann „Jetzt neu einstellen" an. Bei verkauft/gelöscht geht „Neu einstellen" wie bisher direkt ins Formular.
+
+**Online-Preis übernehmen (V2.7.60):** Der Status-Abruf liest auch den Preis der öffentlichen Seite (KA: `adPrice`/`adPriceType` im Inline-Config-Objekt; Vinted: JSON-LD `offers.price`) → `ka_online_price`/`ka_online_price_type`/`vinted_online_price`. Der erste Wert nach dem Einstellen wird als `*_listed_price` gemerkt; `DraftDetail` zeigt unter dem Preisfeld „Auf X steht gerade … · Übernehmen" nur, wenn sich der Online-Preis **seit dem Einstellen** geändert hat und vom Angebotspreis abweicht (absichtlich verschiedene Preise je Plattform bleiben still). Ein neuer Capture setzt alle drei Felder zurück.
+
 ---
 
 ## Play-Store-Release, Store-Präsenz & Admin (V2.6)

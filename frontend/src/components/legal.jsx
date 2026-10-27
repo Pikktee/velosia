@@ -492,7 +492,7 @@ export function DatenschutzContent() {
           (localStorage) legen wir nur ab, was für die Funktion nötig ist:
         </p>
         <ul style={ul}>
-          <li><span style={code}>velosia_token</span> – dein Anmelde-Schlüssel (24 Stunden gültig); wird beim Abmelden gelöscht,</li>
+          <li><span style={code}>velosia_token</span> – dein Anmelde-Schlüssel (30 Tage gültig, verlängert sich bei Nutzung); wird beim Abmelden gelöscht,</li>
           <li>
             <span style={code}>velosia_user_email</span> – deine E-Mail-Adresse, damit die
             Browser-Erweiterung anzeigen kann, wer angemeldet ist (in der Android-App steht dort nur
@@ -501,6 +501,10 @@ export function DatenschutzContent() {
           <li>
             <span style={code}>velosia_return_draft</span> – nur Android: welches Angebot nach dem
             Inserieren wieder geöffnet wird; wird beim nächsten Öffnen der App gelöscht,
+          </li>
+          <li>
+            <span style={code}>velosia_relist</span> – nur Android: welches Angebot gerade neu
+            eingestellt wird, während du die alte Anzeige löschst; wird bei der Rückkehr gelöscht,
           </li>
           <li>
             <span style={code}>velosia_turbo_onboarded</span> und{' '}

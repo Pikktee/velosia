@@ -22,6 +22,8 @@ Kleinanzeigen
     booleans are the primary signal, the redirect/404 a fully-purged fallback.
   * KA exposes no public "sold" state (no showSoldVeil / sold flag). The word
     "verkauft" only appears as free description text and must never be matched.
+  * The same config object carries the current price: adPrice: 2300.00 and
+    adPriceType: 'NEGOTIABLE' | 'FIXED' (calibrated 2026-10).
 
 Vinted
   * Deleted item = clean 404.
@@ -29,8 +31,14 @@ Vinted
     "availability":"InStock" | "OutOfStock" | "SoldOut".
   * The embedded item JSON carries is_reserved / is_closed booleans
     (backslash-escaped inside the RSC payload).
+  * The current price is in the same JSON-LD Product: "offers":{"price":9,...}
+    (calibrated 2026-10).
+
+Besides the status we read the listing's current price, so a price the user
+changed directly on the platform can be taken over into the draft.
 """
 
+import json
 import re
 
 # Normalised status vocabulary (German, matches the UI badges).
@@ -81,8 +89,33 @@ def _ka_status(resp):
     return ONLINE
 
 
+_KA_PRICE = re.compile(r"\badPrice\s*:\s*'?(\d+(?:\.\d+)?)")
+_KA_PRICE_TYPE = re.compile(r"\badPriceType\s*:\s*'(\w+)'")
+# KA's own price types that map onto the draft's Festpreis/VB.
+_KA_PRICE_TYPES = {"FIXED", "NEGOTIABLE"}
+
+
+def _ka_offer(resp):
+    """Current price and price type of a live KA ad, or (None, None). A price of
+    0 (zu verschenken, auf Anfrage) is no usable price."""
+    if resp is None or resp.status_code != 200:
+        return None, None
+    text = getattr(resp, "text", "") or ""
+    m = _KA_PRICE.search(text)
+    price = float(m.group(1)) if m else None
+    if not price:
+        price = None
+    t = _KA_PRICE_TYPE.search(text)
+    price_type = t.group(1).upper() if t else None
+    if price_type not in _KA_PRICE_TYPES:
+        price_type = None
+    return price, price_type
+
+
 def check_kleinanzeigen(url):
-    return _ka_status(http_client.fetch(url, timeout=15))
+    """(status, price, price_type) of a KA ad."""
+    resp = http_client.fetch(url, timeout=15)
+    return (_ka_status(resp),) + _ka_offer(resp)
 
 
 # ---------------------------------------------------------------------------
@@ -120,8 +153,38 @@ def _vinted_status(resp):
     return ONLINE
 
 
+_LD_JSON = re.compile(r'<script type="application/ld\+json">(.*?)</script>', re.S)
+
+
+def _vinted_price(resp):
+    """Current price from the item's JSON-LD Product offer, or None."""
+    if resp is None or resp.status_code != 200:
+        return None
+    text = getattr(resp, "text", "") or ""
+    for block in _LD_JSON.findall(text):
+        try:
+            data = json.loads(block)
+        except ValueError:
+            continue
+        if not isinstance(data, dict) or data.get("@type") != "Product":
+            continue
+        offers = data.get("offers")
+        if isinstance(offers, list):
+            offers = offers[0] if offers else None
+        if not isinstance(offers, dict):
+            continue
+        try:
+            price = float(offers.get("price"))
+        except (TypeError, ValueError):
+            return None
+        return price if price > 0 else None
+    return None
+
+
 def check_vinted(url):
-    return _vinted_status(http_client.fetch(url, timeout=20))
+    """(status, price) of a Vinted item."""
+    resp = http_client.fetch(url, timeout=20)
+    return _vinted_status(resp), _vinted_price(resp)
 
 
 # ---------------------------------------------------------------------------
@@ -140,14 +203,29 @@ def refresh_draft_status(draft, now):
         listing_urls.KLEINANZEIGEN, getattr(draft, "ka_listing_id", None), getattr(draft, "ka_listing_url", None)
     )
     if ka_url and getattr(draft, "ka_status", None) not in TERMINAL:
-        updates["ka_status"] = check_kleinanzeigen(ka_url)
+        status, price, price_type = check_kleinanzeigen(ka_url)
+        updates["ka_status"] = status
         updates["ka_status_at"] = now
+        # Only overwrite a known price with a fresh reading, so a failed fetch
+        # doesn't wipe the last one. The first reading after publishing is kept
+        # as the baseline: only a later change on the platform is worth a hint
+        # (prices that differ per platform on purpose are not).
+        if price is not None:
+            updates["ka_online_price"] = price
+            updates["ka_online_price_type"] = price_type
+            if getattr(draft, "ka_listed_price", None) is None:
+                updates["ka_listed_price"] = price
 
     v_url = listing_urls.safe_listing_url(
         listing_urls.VINTED, getattr(draft, "vinted_listing_id", None), getattr(draft, "vinted_listing_url", None)
     )
     if v_url and getattr(draft, "vinted_status", None) not in TERMINAL:
-        updates["vinted_status"] = check_vinted(v_url)
+        status, price = check_vinted(v_url)
+        updates["vinted_status"] = status
         updates["vinted_status_at"] = now
+        if price is not None:
+            updates["vinted_online_price"] = price
+            if getattr(draft, "vinted_listed_price", None) is None:
+                updates["vinted_listed_price"] = price
 
     return updates
