@@ -152,6 +152,14 @@ class DraftResponse(DraftBase):
     ka_listed_price: Optional[float] = None
     vinted_online_price: Optional[float] = None
     vinted_listed_price: Optional[float] = None
+    ka_online_title: Optional[str] = None
+    ka_online_description: Optional[str] = None
+    ka_listed_title: Optional[str] = None
+    ka_listed_description: Optional[str] = None
+    vinted_online_title: Optional[str] = None
+    vinted_online_description: Optional[str] = None
+    vinted_listed_title: Optional[str] = None
+    vinted_listed_description: Optional[str] = None
     created_at: datetime
 
     class Config:

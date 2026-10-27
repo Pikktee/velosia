@@ -119,6 +119,15 @@ def run_migrations():
         ("ka_listed_price", "FLOAT"),
         ("vinted_online_price", "FLOAT"),
         ("vinted_listed_price", "FLOAT"),
+        # Title/description read from the live listing (added V2.7.62)
+        ("ka_online_title", "VARCHAR"),
+        ("ka_online_description", "VARCHAR"),
+        ("ka_listed_title", "VARCHAR"),
+        ("ka_listed_description", "VARCHAR"),
+        ("vinted_online_title", "VARCHAR"),
+        ("vinted_online_description", "VARCHAR"),
+        ("vinted_listed_title", "VARCHAR"),
+        ("vinted_listed_description", "VARCHAR"),
     ]:
         try:
             db.execute(text(f"ALTER TABLE drafts ADD COLUMN {col_name} {col_type}"))
@@ -216,7 +225,7 @@ run_migrations()
 _API_DOCS = os.getenv("ENABLE_API_DOCS", "").lower() in ("1", "true", "yes")
 app = FastAPI(
     title="Velosia API",
-    version="2.7.61",
+    version="2.7.62",
     docs_url="/docs" if _API_DOCS else None,
     redoc_url="/redoc" if _API_DOCS else None,
     openapi_url="/openapi.json" if _API_DOCS else None,
@@ -2178,15 +2187,24 @@ _STATUS_POLL_INTERVAL_MIN = int(os.getenv("STATUS_POLL_INTERVAL_MIN", "360"))
 _STATUS_POLL_SPACING_S = float(os.getenv("STATUS_POLL_SPACING_S", "4"))
 
 
+def _reset_online_values(draft, prefix, platform):
+    """A new listing: forget the old one's online values; the baseline is what
+    the engine just published (the draft's values)."""
+    published = listing_status.published_values(draft, platform)
+    for field in ("price", "title", "description"):
+        setattr(draft, f"{prefix}_online_{field}", None)
+        setattr(draft, f"{prefix}_listed_{field}", published[field])
+    if prefix == "ka":
+        draft.ka_online_price_type = None
+
+
 def _apply_listing_capture(draft, platform, listing_id, listing_url):
     """Store a freshly captured listing id/url and mark it online."""
     now = datetime.utcnow()
     if platform == "kleinanzeigen":
         if listing_id != draft.ka_listing_id:
             draft.ka_listing_url = None  # belonged to the previous listing
-            draft.ka_online_price = None
-            draft.ka_online_price_type = None
-            draft.ka_listed_price = draft.price  # the engine published this price
+            _reset_online_values(draft, "ka", platform)
         draft.ka_listing_id = listing_id or draft.ka_listing_id
         draft.ka_listing_url = listing_url or draft.ka_listing_url
         draft.ka_status = listing_status.ONLINE
@@ -2194,8 +2212,7 @@ def _apply_listing_capture(draft, platform, listing_id, listing_url):
     elif platform == "vinted":
         if listing_id != draft.vinted_listing_id:
             draft.vinted_listing_url = None
-            draft.vinted_online_price = None
-            draft.vinted_listed_price = draft.price
+            _reset_online_values(draft, "vinted", platform)
         draft.vinted_listing_id = listing_id or draft.vinted_listing_id
         draft.vinted_listing_url = listing_url or draft.vinted_listing_url
         draft.vinted_status = listing_status.ONLINE
@@ -2249,28 +2266,30 @@ _MANUAL_STATUSES = {
 }
 
 
-@app.post("/api/listings/{draft_id}/keep-price", response_model=schemas.DraftResponse)
+@app.post("/api/listings/{draft_id}/keep-online", response_model=schemas.DraftResponse)
+@app.post("/api/listings/{draft_id}/keep-price", response_model=schemas.DraftResponse)  # 2.7.61 clients
 def keep_listing_price(
     draft_id: int,
     payload: schemas.ListingPlatform,
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user),
 ):
-    """The user saw the price changed on a platform and keeps the draft's price:
-    the online price becomes the new baseline, so the hint stays quiet until the
-    price changes there again."""
+    """The user saw changes made on a platform and keeps the draft as it is: the
+    online values become the new baseline, so the hint stays quiet until they
+    change there again."""
     draft = db.query(models.Draft).filter(
         models.Draft.id == draft_id,
         models.Draft.user_id == current_user.id,
     ).first()
     if not draft:
         raise HTTPException(status_code=404, detail="Angebot wurde nicht gefunden.")
-    if payload.platform == "kleinanzeigen":
-        draft.ka_listed_price = draft.ka_online_price
-    elif payload.platform == "vinted":
-        draft.vinted_listed_price = draft.vinted_online_price
-    else:
+    prefix = {"kleinanzeigen": "ka", "vinted": "vinted"}.get(payload.platform)
+    if not prefix:
         raise HTTPException(status_code=400, detail="Unbekannte Plattform.")
+    for field in ("price", "title", "description"):
+        online = getattr(draft, f"{prefix}_online_{field}")
+        if online is not None:
+            setattr(draft, f"{prefix}_listed_{field}", online)
     db.commit()
     db.refresh(draft)
     return draft

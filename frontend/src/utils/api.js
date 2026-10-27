@@ -486,10 +486,10 @@ export const setListingStatus = async (id, platform, status) => {
   return response.json();
 };
 
-// Keep the draft's price although it was changed on the platform: the online
-// price becomes the new baseline, so the hint stays quiet until it changes again.
-export const keepListingPrice = async (id, platform) => {
-  const response = await fetch(`${API_BASE_URL}/api/listings/${id}/keep-price`, {
+// Keep the draft as it is although it was edited on the platform: the online
+// values become the new baseline, so the hint stays quiet until they change again.
+export const keepOnlineChanges = async (id, platform) => {
+  const response = await fetch(`${API_BASE_URL}/api/listings/${id}/keep-online`, {
     method: 'POST',
     headers: getHeaders(),
     body: JSON.stringify({ platform }),

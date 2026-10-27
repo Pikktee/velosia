@@ -2,12 +2,14 @@ import React, { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { ArrowLeft, Copy, Check, ExternalLink, Monitor, RefreshCw, AlertCircle, Trash2, Plus, Sparkles, Upload, Share2, Camera, TrendingUp, ChevronDown, ChevronLeft, ChevronRight, Star, Tag, Coins } from 'lucide-react';
 import { updateDraft, getImageUrl, getPlatformToken, uploadDraftImages, deleteDraftImage, regenerateDraftField, refreshListingStatus, setListingStatus } from '../utils/api';
-import { statusMeta, listingPlatforms, TERMINAL, onlinePriceChanges, formatEuro } from '../utils/listingStatus';
+import { statusMeta, listingPlatforms, TERMINAL, onlineChanges } from '../utils/listingStatus';
 import { showError } from '../utils/toast';
 import { PRICE_TYPES } from '../utils/priceType';
 import RelistSheet from './RelistSheet';
-import PriceChangeSheet from './PriceChangeSheet';
+import OnlineChangesSheet from './OnlineChangesSheet';
 import { takePendingRelist } from '../utils/relist';
+
+const ONLINE_FIELD_LABELS = [['price', 'Preis'], ['title', 'Titel'], ['description', 'Beschreibung']];
 
 export default function DraftDetail({ draft, onBack, onUpdateSuccess }) {
   const [title, setTitle] = useState(draft.title || '');
@@ -35,8 +37,8 @@ export default function DraftDetail({ draft, onBack, onUpdateSuccess }) {
     const platform = takePendingRelist(draft.id);
     return platform ? { platform, resumed: true } : null;
   });
-  // A price changed on the platform pops up once when the draft is opened.
-  const [priceChange, setPriceChange] = useState(() => (relist ? null : onlinePriceChanges(draft)[0] || null));
+  // Edits made on the platform pop up once when the draft is opened.
+  const [onlineChange, setOnlineChange] = useState(() => (relist ? null : onlineChanges(draft)[0] || null));
   const [showTooltip, setShowTooltip] = useState(false);
   const [startY, setStartY] = useState(0);
   const [currentY, setCurrentY] = useState(0);
@@ -464,13 +466,32 @@ export default function DraftDetail({ draft, onBack, onUpdateSuccess }) {
     );
   };
 
-  // Prices changed on the platform itself (see onlinePriceChanges): offered
-  // once in a sheet on opening, and as a hint under the price field.
-  const onlinePriceDiffs = onlinePriceChanges(draft, price);
+  // Edits made on the platform itself (see onlineChanges): offered once in a
+  // sheet on opening; closed without a choice, a banner above the form keeps it.
+  const pendingOnline = onlineChanges(draft, { title, description, price })[0] || null;
 
-  const applyOnlinePrice = (d) => {
-    setPrice(String(d.price)); // saved by the debounced auto-save
-    if (d.type && d.type !== priceType) handlePriceTypeChange(d.type);
+  // Take over everything that was changed online, in one save.
+  const applyOnlineChanges = async (change) => {
+    const { changes } = change;
+    const patch = {
+      title: changes.title ?? title,
+      description: changes.description ?? description,
+      condition,
+      price: changes.price ?? (parseFloat(price) || 0),
+    };
+    if (changes.price != null && change.type && change.type !== priceType) patch.price_type = change.type;
+    try {
+      const updated = await updateDraft(draft.id, patch);
+      setTitle(patch.title);
+      setDescription(patch.description);
+      setPrice(patch.price);
+      if (patch.price_type) setPriceType(patch.price_type);
+      onUpdateSuccess(updated);
+      setOnlineChange(null);
+    } catch (err) {
+      console.error(err);
+      showError('Die Änderungen konnten nicht übernommen werden.', () => applyOnlineChanges(change));
+    }
   };
 
   // Per-platform publish control. The old standalone "Status" section is gone:
@@ -749,6 +770,13 @@ export default function DraftDetail({ draft, onBack, onUpdateSuccess }) {
   const renderFormFields = () => {
     return (
       <div className="detail-section-unboxed" style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+        {pendingOnline && !onlineChange && (
+          <button type="button" className="online-change-banner" onClick={() => setOnlineChange(pendingOnline)}>
+            <span>Auf {pendingOnline.name} geändert: {ONLINE_FIELD_LABELS.filter(([f]) => f in pendingOnline.changes).map(([, l]) => l).join(', ')}</span>
+            <strong>Ansehen</strong>
+          </button>
+        )}
+
         {/* Title */}
         <div className="form-group" style={{ marginBottom: 0 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem', flexWrap: 'wrap', gap: '0.5rem' }}>
@@ -843,16 +871,6 @@ export default function DraftDetail({ draft, onBack, onUpdateSuccess }) {
           <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.35rem' }}>
             {draft.price_type ? 'Gilt für Kleinanzeigen.' : 'Vorgabe aus deinen Einstellungen · gilt für Kleinanzeigen.'}
           </div>
-          {onlinePriceDiffs.map((d) => (
-            <div key={d.key} className="online-price-hint">
-              <span>
-                Auf {d.name} steht gerade <strong>{formatEuro(d.price)}{d.type === 'NEGOTIABLE' ? ' VB' : ''}</strong>
-              </span>
-              <button type="button" className="btn-text-link" onClick={() => applyOnlinePrice(d)}>
-                Übernehmen
-              </button>
-            </div>
-          ))}
         </div>
 
         {/* Condition */}
@@ -1125,13 +1143,13 @@ export default function DraftDetail({ draft, onBack, onUpdateSuccess }) {
         message="Möchtest du dieses Bild wirklich aus dem Angebot löschen?"
       />
 
-      {priceChange && (
-        <PriceChangeSheet
+      {onlineChange && (
+        <OnlineChangesSheet
           draft={draft}
-          change={priceChange}
-          onApply={() => { applyOnlinePrice(priceChange); setPriceChange(null); }}
+          change={onlineChange}
+          onApply={() => applyOnlineChanges(onlineChange)}
           onUpdate={onUpdateSuccess}
-          onClose={() => setPriceChange(null)}
+          onClose={() => setOnlineChange(null)}
         />
       )}
 

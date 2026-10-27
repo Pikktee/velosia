@@ -98,19 +98,37 @@ export const listingPlatforms = (draft) => {
   return out;
 };
 
-// Prices changed on the platform itself: the price last read from the live ad
-// differs from its baseline (the price it was published with, or one the user
-// chose to keep) and from the draft's current price. Prices that differ per
-// platform on purpose stay quiet once kept. type is KA's FIXED/NEGOTIABLE.
+// Edits made on the platform itself (price, title, description): a value last
+// read from the live ad differs from its baseline (what the engine published, or
+// what the user chose to keep) and from the draft's current value. Values that
+// differ per platform on purpose stay quiet once kept. Texts are compared with
+// whitespace collapsed, since the platforms reflow line breaks.
 const samePrice = (a, b) => Math.abs(a - b) < 0.01;
-export const onlinePriceChanges = (draft, currentPrice = draft?.price) => {
+const sameText = (a, b) => String(a || '').replace(/\s+/g, ' ').trim() === String(b || '').replace(/\s+/g, ' ').trim();
+
+export const onlineChanges = (draft, current = draft) => {
   if (!draft) return [];
-  const current = parseFloat(currentPrice) || 0;
-  return [
-    { key: 'kleinanzeigen', name: 'Kleinanzeigen', price: draft.ka_online_price, listed: draft.ka_listed_price, type: draft.ka_online_price_type, status: draft.ka_status },
-    { key: 'vinted', name: 'Vinted', price: draft.vinted_online_price, listed: draft.vinted_listed_price, type: null, status: draft.vinted_status },
-  ].filter((d) => d.price != null && d.listed != null && !TERMINAL.has(d.status)
-    && !samePrice(d.price, d.listed) && !samePrice(d.price, current));
+  const platforms = [
+    { key: 'kleinanzeigen', name: 'Kleinanzeigen', prefix: 'ka', status: draft.ka_status, type: draft.ka_online_price_type },
+    { key: 'vinted', name: 'Vinted', prefix: 'vinted', status: draft.vinted_status, type: null },
+  ];
+  return platforms.filter((p) => !TERMINAL.has(p.status)).map((p) => {
+    const changes = {};
+    const online = (f) => draft[`${p.prefix}_online_${f}`];
+    const listed = (f) => draft[`${p.prefix}_listed_${f}`];
+    const price = online('price');
+    if (price != null && listed('price') != null
+        && !samePrice(price, listed('price')) && !samePrice(price, parseFloat(current?.price) || 0)) {
+      changes.price = price;
+    }
+    ['title', 'description'].forEach((f) => {
+      const value = online(f);
+      if (value != null && listed(f) != null && !sameText(value, listed(f)) && !sameText(value, current?.[f])) {
+        changes[f] = value;
+      }
+    });
+    return { key: p.key, name: p.name, type: p.type, changes };
+  }).filter((p) => Object.keys(p.changes).length > 0);
 };
 
 export const formatEuro = (v) => `${Number.isInteger(v) ? v : v.toFixed(2).replace('.', ',')} €`;

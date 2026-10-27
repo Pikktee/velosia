@@ -115,6 +115,15 @@ class Draft(Base):
     ka_listed_price = Column(Float, nullable=True)
     vinted_online_price = Column(Float, nullable=True)
     vinted_listed_price = Column(Float, nullable=True)
+    # Same for title and description (V2.7.62).
+    ka_online_title = Column(String, nullable=True)
+    ka_online_description = Column(String, nullable=True)
+    ka_listed_title = Column(String, nullable=True)
+    ka_listed_description = Column(String, nullable=True)
+    vinted_online_title = Column(String, nullable=True)
+    vinted_online_description = Column(String, nullable=True)
+    vinted_listed_title = Column(String, nullable=True)
+    vinted_listed_description = Column(String, nullable=True)
 
     created_at = Column(DateTime, default=datetime.utcnow)
 
