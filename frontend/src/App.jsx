@@ -46,12 +46,30 @@ export default function App() {
   const isAndroidApp = typeof window.VelosiaBridge !== 'undefined';
   const [token, setToken] = useState(null);
   const [user, setUser] = useState(null);
-  const [view, setView] = useState('list'); // 'capture', 'list', 'detail', 'analyzing'
+  // Back from a platform WebView (publishing, opening or deleting an ad): the
+  // frontend reloads fresh, and DraftDetail left the draft id in this marker. Read
+  // once and cleared at once. When the device copy of the list has the draft, its
+  // detail view is the very first paint — no flash of the list; the fetch on start
+  // refreshes it a moment later.
+  const [returnTo] = useState(() => {
+    let id = null;
+    try {
+      const v = localStorage.getItem('velosia_return_draft');
+      if (v) localStorage.removeItem('velosia_return_draft');
+      id = v ? parseInt(v, 10) : null;
+    } catch {
+      return null;
+    }
+    if (id == null || Number.isNaN(id)) return null;
+    const cached = isAuthenticated() ? readDraftCache().find((d) => d.id === id) : null;
+    return { id, draft: cached || null };
+  });
+  const [view, setView] = useState(returnTo?.draft ? 'detail' : 'list'); // 'capture', 'list', 'detail', 'analyzing'
   const [adminTab, setAdminTab] = useState('users');
   // The last known list from the device shows at once; the fetch on start then
   // replaces it (see utils/draftCache.js).
   const [drafts, setDrafts] = useState(() => (isAuthenticated() ? readDraftCache() : []));
-  const [selectedDraft, setSelectedDraft] = useState(null);
+  const [selectedDraft, setSelectedDraft] = useState(returnTo?.draft || null);
   // Start in loading state so the very first paint shows the skeleton list,
   // not a flash of the empty-state onboarding screen before drafts arrive.
   const [loading, setLoading] = useState(isAuthenticated());
@@ -81,19 +99,8 @@ export default function App() {
   const whatsNewChecked = useRef(false);
   const [latestVersion, setLatestVersion] = useState(version);
   const longPressTimer = useRef(null);
-  // When the user publishes via the platform WebView, DraftDetail stores the draft
-  // id here. On returning to the dashboard (the WebView reloads fresh), we restore
-  // that draft's detail view instead of dropping the user on the list. Read once at
-  // mount and cleared immediately so it doesn't re-trigger on later renders.
-  const [pendingReturnDraftId, setPendingReturnDraftId] = useState(() => {
-    try {
-      const v = localStorage.getItem('velosia_return_draft');
-      if (v) localStorage.removeItem('velosia_return_draft');
-      return v ? parseInt(v, 10) : null;
-    } catch (e) {
-      return null;
-    }
-  });
+  // Draft to restore once the fresh list is in (see returnTo above).
+  const [pendingReturnDraftId, setPendingReturnDraftId] = useState(returnTo?.id ?? null);
 
 
   // Track previous view for closing camera/getting back
@@ -189,8 +196,15 @@ export default function App() {
     if (pendingReturnDraftId == null || loading) return;
     const d = drafts.find((x) => x.id === pendingReturnDraftId);
     if (d) {
-      setSelectedDraft(d);
-      setView('detail');
+      if (!returnTo?.draft) {
+        // Not on the device yet: open it now that the list is in.
+        setSelectedDraft(d);
+        setView('detail');
+      } else {
+        // Already shown from the device copy: swap in the fresh draft, unless the
+        // user has moved on in the meantime.
+        setSelectedDraft((cur) => (cur && cur.id === d.id ? d : cur));
+      }
     }
     setPendingReturnDraftId(null);
   }, [pendingReturnDraftId, loading, drafts]);
