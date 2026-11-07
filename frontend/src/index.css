@@ -5601,3 +5601,33 @@ a.settings-row { text-decoration: none; }
 /* Mitwachsende Textfelder (V2.7.87): kein Scrollen im Feld, die Seite scrollt */
 textarea.form-control.autogrow { resize: none; overflow: hidden; }
 textarea.form-control.autogrow.single { min-height: 48px; line-height: 1.4; }
+
+/* Beschreibung: Vorschau statt Riesenfeld (V2.7.88) */
+.desc-preview {
+  min-height: 138px;
+  max-height: 172px; /* ~6 Zeilen */
+  overflow: hidden;
+  white-space: pre-wrap;
+  word-break: break-word;
+  line-height: 1.5;
+  cursor: text;
+  -webkit-mask-image: linear-gradient(180deg, #000 70%, transparent);
+  mask-image: linear-gradient(180deg, #000 70%, transparent);
+}
+.desc-preview.open { max-height: none; -webkit-mask-image: none; mask-image: none; }
+.desc-preview.busy { opacity: 0.6; }
+.desc-more {
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  min-height: 36px;
+  margin-top: 0.15rem;
+  padding: 0 0.25rem;
+  background: none;
+  border: none;
+  color: var(--primary);
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+}

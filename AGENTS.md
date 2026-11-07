@@ -103,6 +103,8 @@ Velosias Oberfläche folgt bewusst **Progressive Disclosure**: Übersichts-/List
 
 ---
 
+**Beschreibung als Vorschau + Rückgängig (V2.7.88):** Die Beschreibung zeigt außerhalb der Bearbeitung eine ~6-zeilige Vorschau (`.desc-preview`, weich ausgeblendet, „Mehr anzeigen“ nur zum Lesen); ein Tipp öffnet das mitwachsende Feld mit dem Cursor an der Tippstelle (`caretOffsetAt`, `AutoTextarea focusAt`), Verlassen klappt wieder zu. Weil Text automatisch gespeichert wird, bietet `changeText` nach einem großen Löschen (≥ 40 Zeichen oder mehr als die Hälfte, als ein Schwung innerhalb von 4 s) und `handleRegenerateField` nach dem KI-Ersetzen einen Toast „… · Rückgängig“ (7 s), der den alten Text zurücksetzt (Autosave speichert ihn).
+
 **Textfelder wachsen mit (V2.7.87):** `components/AutoTextarea.jsx` statt `<input>`/`<textarea>` für Titel und Beschreibung (DraftDetail) und die drei Anzeigentext-Felder (Einstellungen): Höhe = Inhalt, kein Scrollen im Feld, die Seite scrollt. `singleLine` (Titel): bricht um, keine Zeilenumbrüche, Enter schließt die Tastatur.
 
 ---

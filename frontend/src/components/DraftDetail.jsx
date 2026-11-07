@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useLayoutEffect } from 'react';
 import AutoTextarea from './AutoTextarea';
 import { createPortal } from 'react-dom';
 import { ArrowLeft, Copy, Check, ExternalLink, Monitor, RefreshCw, AlertCircle, Trash2, Plus, Sparkles, Share2, Camera, TrendingUp, ChevronDown, ChevronLeft, ChevronRight, Star, Tag, Coins, ArrowUp, ArrowUpRight, MoreVertical } from 'lucide-react';
@@ -12,6 +12,30 @@ import OnlineChangesSheet from './OnlineChangesSheet';
 import { takePendingRelist, takeRecheck, rememberRecheck } from '../utils/relist';
 
 const SOURCES_SHOWN = 5;
+
+// Character offset in `box`'s text at a tap/click, so editing starts where the
+// user tapped (falls back to the end).
+function caretOffsetAt(e, box, fallback) {
+  try {
+    let node = null;
+    let offset = 0;
+    if (document.caretRangeFromPoint) {
+      const r = document.caretRangeFromPoint(e.clientX, e.clientY);
+      if (r) { node = r.startContainer; offset = r.startOffset; }
+    } else if (document.caretPositionFromPoint) {
+      const p = document.caretPositionFromPoint(e.clientX, e.clientY);
+      if (p) { node = p.offsetNode; offset = p.offset; }
+    }
+    if (!node || !box || !box.contains(node) || node.nodeType !== 3) return fallback;
+    // Text before this node inside the box (React may split the text).
+    let before = 0;
+    const walker = document.createTreeWalker(box, NodeFilter.SHOW_TEXT);
+    for (let n = walker.nextNode(); n && n !== node; n = walker.nextNode()) before += n.nodeValue.length;
+    return before + offset;
+  } catch {
+    return fallback;
+  }
+}
 const RETURN_SPOT_KEY = 'velosia_return_spot';
 
 // Where the user was in this draft before leaving for a platform page (read once).
@@ -62,6 +86,17 @@ export default function DraftDetail({ draft, onBack, onUpdateSuccess, onDelete }
   const contentRef = useRef(null);
   const [returnSpot] = useState(() => takeReturnSpot(draft.id));
   const [showAllSources, setShowAllSources] = useState(!!returnSpot?.allSources);
+
+  // Beschreibung: a short preview until it is tapped for editing.
+  const [editingDesc, setEditingDesc] = useState(false);
+  const [descOpen, setDescOpen] = useState(false);
+  const [descClamped, setDescClamped] = useState(false);
+  const [descCaret, setDescCaret] = useState(0);
+  const descPreviewRef = useRef(null);
+  useLayoutEffect(() => {
+    const el = descPreviewRef.current;
+    if (el && !descOpen) setDescClamped(el.scrollHeight > el.clientHeight + 2);
+  });
   useEffect(() => {
     if (!returnSpot?.y) return undefined;
     const go = () => { if (contentRef.current) contentRef.current.scrollTop = returnSpot.y; };
@@ -503,9 +538,39 @@ export default function DraftDetail({ draft, onBack, onUpdateSuccess, onDelete }
     setImageToDelete(null);
   };
 
+  // Text edits save themselves, so a slip (select all + delete) is saved too. A
+  // large deletion therefore offers „Rückgängig“ for a few seconds; small edits
+  // stay quiet.
+  const undoBase = useRef({});
+  const offerUndo = (field, previous, message) => {
+    const setter = field === 'title' ? setTitle : setDescription;
+    showToast(message, {
+      duration: 7000,
+      action: { label: 'Rückgängig', onClick: () => setter(previous) },
+    });
+  };
+  const changeText = (field, next) => {
+    const prev = field === 'title' ? title : description;
+    const setter = field === 'title' ? setTitle : setDescription;
+    const lost = prev.length - next.length;
+    // Remember the text before a burst of deleting, so one undo restores it all.
+    const now = Date.now();
+    const base = undoBase.current[field];
+    if (!base || now - base.at > 4000) undoBase.current[field] = { text: prev, at: now, offered: false };
+    else undoBase.current[field].at = now;
+    const b = undoBase.current[field];
+    const gone = b.text.length - next.length;
+    if (!b.offered && lost > 0 && (gone >= 40 || (b.text.length >= 20 && next.length < b.text.length * 0.5))) {
+      b.offered = true;
+      offerUndo(field, b.text, field === 'title' ? 'Titel gelöscht' : 'Text gelöscht');
+    }
+    setter(next);
+  };
+
   const handleRegenerateField = async (field) => {
     if (regeneratingField) return;
     setRegeneratingField(field);
+    const before = field === 'title' ? title : description;
     try {
       const updated = await regenerateDraftField(draft.id, field);
       if (field === 'title') {
@@ -514,6 +579,9 @@ export default function DraftDetail({ draft, onBack, onUpdateSuccess, onDelete }
         setDescription(updated.description || '');
       }
       onUpdateSuccess(updated);
+      if (before.trim()) {
+        offerUndo(field, before, field === 'title' ? 'Titel neu erstellt' : 'Beschreibung neu erstellt');
+      }
     } catch (err) {
       console.error(err);
       showError(`KI-Neugenerierung fehlgeschlagen: ${err.message}`, () => handleRegenerateField(field));
@@ -923,7 +991,7 @@ export default function DraftDetail({ draft, onBack, onUpdateSuccess, onDelete }
             id="edit-title"
             className="form-control"
             value={title}
-            onChange={(e) => setTitle(e.target.value.substring(0, 65))}
+            onChange={(e) => changeText('title', e.target.value.substring(0, 65))}
             placeholder={regeneratingField === 'title' ? "Generiere..." : "Titel für die Anzeige..."}
             disabled={regeneratingField === 'title'}
             style={{ opacity: regeneratingField === 'title' ? 0.6 : 1 }}
@@ -952,16 +1020,43 @@ export default function DraftDetail({ draft, onBack, onUpdateSuccess, onDelete }
               )}
             </button>
           </div>
-          <AutoTextarea
-            id="edit-desc"
-            className="form-control"
-            maxLength={5000}
-            value={description}
-            onChange={(e) => setDescription(e.target.value)}
-            placeholder={regeneratingField === 'description' ? "Generiere..." : "Verkaufsbeschreibung schreiben..."}
-            disabled={regeneratingField === 'description'}
-            style={{ opacity: regeneratingField === 'description' ? 0.6 : 1, minHeight: '138px' }}
-          />
+          {editingDesc || !description ? (
+            <AutoTextarea
+              id="edit-desc"
+              className="form-control"
+              maxLength={5000}
+              value={description}
+              focusAt={editingDesc ? descCaret : null}
+              onChange={(e) => changeText('description', e.target.value)}
+              onBlur={() => { setEditingDesc(false); setDescOpen(false); }}
+              placeholder={regeneratingField === 'description' ? "Generiere..." : "Verkaufsbeschreibung schreiben..."}
+              disabled={regeneratingField === 'description'}
+              style={{ opacity: regeneratingField === 'description' ? 0.6 : 1, minHeight: '138px' }}
+            />
+          ) : (
+            <>
+              {/* Preview: a few lines, a tap edits; „Mehr anzeigen“ only reads. */}
+              <div
+                id="edit-desc"
+                role="textbox"
+                tabIndex={0}
+                aria-label="Beschreibung bearbeiten"
+                aria-multiline="true"
+                className={`form-control desc-preview${descOpen ? ' open' : ''}${regeneratingField === 'description' ? ' busy' : ''}`}
+                ref={descPreviewRef}
+                onClick={(e) => { setDescCaret(caretOffsetAt(e, descPreviewRef.current, description.length)); setEditingDesc(true); }}
+                onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); setDescCaret(description.length); setEditingDesc(true); } }}
+              >
+                {description}
+              </div>
+              {(descClamped || descOpen) && (
+                <button type="button" className="desc-more" onClick={() => setDescOpen((v) => !v)}>
+                  {descOpen ? 'Weniger anzeigen' : 'Mehr anzeigen'}
+                  <ChevronDown size={15} style={{ transform: descOpen ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s ease' }} />
+                </button>
+              )}
+            </>
+          )}
         </div>
 
         {/* Price */}
