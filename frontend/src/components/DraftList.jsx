@@ -100,17 +100,16 @@ export default function DraftList({ drafts, isLoading, loadError = false, onRetr
     if (!isPulling) return;
     setIsPulling(false);
     if (pullY >= 60) {
-      handleRefresh(true);
+      handleRefresh();
     }
     setPullY(0);
   };
   const anyListing = drafts.some(hasListing);
 
-  // One spinner per refresh: the pull indicator when pulled, else the header icon.
-  const [pulledRefresh, setPulledRefresh] = useState(false);
-  const handleRefresh = async (byPull = false) => {
+  // One spinner per refresh: the pull indicator only follows the finger; once
+  // released, the header icon (right) spins. The indicator would sit over the count.
+  const handleRefresh = async () => {
     if (refreshing || !onRefreshStatuses) return;
-    setPulledRefresh(byPull === true);
     setRefreshing(true);
     try {
       const data = await onRefreshStatuses();
@@ -272,14 +271,8 @@ export default function DraftList({ drafts, isLoading, loadError = false, onRetr
       style={{ display: 'flex', flexDirection: 'column', flex: 1, height: '100%', overflow: 'hidden' }}
     >
       <div 
-        className={`ptr-indicator${pullY > 0 ? ' visible' : ''}${refreshing && pulledRefresh ? ' refreshing' : ''}`}
-        style={
-          refreshing && pulledRefresh
-            ? { transform: 'translateX(-50%) translateY(50px)', opacity: 1, zIndex: 110 } 
-            : pullY > 0 
-              ? { transform: `translateX(-50%) translateY(${pullY}px)`, zIndex: 110 } 
-              : { zIndex: 110 }
-        }
+        className={`ptr-indicator${pullY > 0 ? ' visible' : ''}`}
+        style={pullY > 0 ? { transform: `translateX(-50%) translateY(${pullY}px)`, zIndex: 110 } : { zIndex: 110 }}
       >
         <RefreshCw size={16} />
       </div>
@@ -315,12 +308,12 @@ export default function DraftList({ drafts, isLoading, loadError = false, onRetr
               {anyListing && onRefreshStatuses && (
                 <button
                   className="status-refresh-btn icon-only"
-                  onClick={() => handleRefresh(false)}
+                  onClick={handleRefresh}
                   disabled={refreshing}
                   title="Status aller Angebote aktualisieren"
                   aria-label="Status aller Angebote aktualisieren"
                 >
-                  <RefreshCw size={16} className={refreshing && !pulledRefresh ? 'spin' : ''} />
+                  <RefreshCw size={16} className={refreshing ? 'spin' : ''} />
                 </button>
               )}
             </div>
