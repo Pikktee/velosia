@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { ArrowLeft, Copy, Check, ExternalLink, Monitor, RefreshCw, AlertCircle, Trash2, Plus, Sparkles, Share2, Camera, TrendingUp, ChevronDown, ChevronLeft, ChevronRight, Star, Tag, Coins, ArrowUp, ArrowUpRight, MoreVertical } from 'lucide-react';
 import { updateDraft, getImageUrl, getPlatformToken, uploadDraftImages, deleteDraftImage, regenerateDraftField, refreshListingStatus, setListingStatus } from '../utils/api';
-import { statusMeta, listingPlatforms, TERMINAL, onlineChanges, detailSummary } from '../utils/listingStatus';
+import { statusMeta, listingPlatforms, TERMINAL, onlineChanges, detailSummary, platformDeleteUrl } from '../utils/listingStatus';
 import { StatusSheet, PublishSheet, PlatformMark } from './ListingSheets';
 import { showError } from '../utils/toast';
 import { PRICE_TYPES } from '../utils/priceType';
@@ -328,9 +328,9 @@ export default function DraftDetail({ draft, onBack, onUpdateSuccess, onDelete }
     if (bridge && typeof bridge.deleteOnPlatform === 'function') {
       rememberRecheck(draft.id);
       try { localStorage.setItem('velosia_return_draft', String(draft.id)); } catch (e) { /* ignore */ }
-      bridge.deleteOnPlatform(draft.id, p.key, p.url || '', '');
+      bridge.deleteOnPlatform(draft.id, p.key, platformDeleteUrl(p.key, p.url, draft.ka_listing_id), '');
     } else if (p.url) {
-      window.open(p.url, '_blank', 'noopener');
+      window.open(platformDeleteUrl(p.key, p.url, draft.ka_listing_id), '_blank', 'noopener');
     }
   };
 

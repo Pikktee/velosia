@@ -192,3 +192,15 @@ export const relistPriceOptions = (price) => {
   const opts = [{ value: p, hint: 'aktuell' }, { value: round(p * 0.95), hint: '−5 %' }, { value: round(p * 0.9), hint: '−10 %' }];
   return opts.filter((o, i) => opts.findIndex((x) => x.value === o.value) === i);
 };
+
+// Where to delete a live ad. Kleinanzeigen's public ad page has no delete
+// control, its own-ads list ("Meine Anzeigen") has one per ad; the fragment
+// tells the app which ad to point at (the app ≥ 2.7.73 scrolls there and
+// highlights "Löschen"; older apps just open the list). Vinted: the ad itself.
+export const platformDeleteUrl = (platform, url, listingId) => {
+  if (platform === 'kleinanzeigen') {
+    const id = listingId || (String(url || '').match(/\/s-anzeige\/(?:[^/]+\/)?(\d{1,15})/) || [])[1];
+    if (id) return `https://www.kleinanzeigen.de/m-meine-anzeigen.html#velosia-ad=${id}`;
+  }
+  return url || '';
+};

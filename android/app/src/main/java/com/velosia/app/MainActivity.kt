@@ -57,6 +57,8 @@ class MainActivity : AppCompatActivity() {
     private var activeDraftJson: String? = null
     private var activePlatform: String? = null
     @Volatile private var activeDraftId: Int = -1
+    // Deleting a Kleinanzeigen ad: the ad to point at once "Meine Anzeigen" has loaded.
+    @Volatile private var pendingFocusAdId: String? = null
     // The bearer token handed over by the frontend when the user starts a post (a
     // short-lived, draft-scoped platform token, or the account token from older
     // frontends). Only used natively for /api/auth/me, /api/drafts/{id},
@@ -438,6 +440,7 @@ class MainActivity : AppCompatActivity() {
                 renderUpdateBar()
 
                 maybeTriggerAutofill(url)
+                maybeFocusOwnListing(url)
             }
         }
 
@@ -620,12 +623,18 @@ class MainActivity : AppCompatActivity() {
                 resetCaptureGate()
                 authToken = null
                 activeDraftId = draftId
+                // Kleinanzeigen's public ad page has no delete control, its own-ads list
+                // has one per ad: open that list and point at the ad once it is loaded
+                // (onPageFinished). The id comes from the ad URL or from the list URL's
+                // #velosia-ad=<id> fragment (frontend ≥ 2.7.73).
+                val target = if (platform == "kleinanzeigen") kaDeleteTarget(listingUrl) else null
+                pendingFocusAdId = target?.second
                 Toast.makeText(
                     this@MainActivity,
-                    "Anzeige öffnen – du bestätigst das Löschen selbst.",
+                    if (target != null) "Tippe bei der markierten Anzeige auf „Löschen“." else "Anzeige öffnen – du bestätigst das Löschen selbst.",
                     Toast.LENGTH_LONG
                 ).show()
-                webView.loadUrl(listingUrl)
+                webView.loadUrl(target?.first ?: listingUrl)
             }
         }
 
@@ -996,6 +1005,32 @@ class MainActivity : AppCompatActivity() {
         webView.evaluateJavascript(engine) {
             // The draft only goes into a listing-form page of the platforms.
             if (formPageOf(webView.url) != FormPage.NONE) webView.evaluateJavascript(caller, null)
+        }
+    }
+
+    // ("Meine Anzeigen" URL, ad id) for deleting a Kleinanzeigen ad, or null.
+    private fun kaDeleteTarget(url: String): Pair<String, String>? {
+        val uri = parseUri(url) ?: return null
+        val id = Regex("^/s-anzeige/(?:[^/]+/)?(\\d{1,15})").find(uri.path ?: "")?.groupValues?.get(1)
+            ?: Regex("velosia-ad=(\\d{1,15})").find(uri.fragment ?: "")?.groupValues?.get(1)
+            ?: return null
+        return Pair("https://www.kleinanzeigen.de/m-meine-anzeigen.html", id)
+    }
+
+    // On "Meine Anzeigen" after a delete request: scroll to the ad and pulse its
+    // "Löschen" button (engine's focusOwnListing). The user taps it themself.
+    private fun maybeFocusOwnListing(url: String) {
+        val id = pendingFocusAdId ?: return
+        val uri = parseUri(url) ?: return
+        if (uri.host?.lowercase() !in kleinanzeigenHosts || uri.path != "/m-meine-anzeigen.html") return
+        pendingFocusAdId = null
+        val engine = readEngineJs()
+        if (engine.isEmpty()) return
+        webView.evaluateJavascript(engine) {
+            webView.evaluateJavascript(
+                "window.__velosia && window.__velosia.focusOwnListing && window.__velosia.focusOwnListing('$id');",
+                null
+            )
         }
     }
 

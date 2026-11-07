@@ -43,7 +43,7 @@
   // and in the extension it is a persistent content script — never redefine.
   if (window.__velosia && window.__velosia.__loaded) return;
 
-  var VERSION = "2.7.63";
+  var VERSION = "2.7.73";
   var KA_TITLE_MAX = 65;
 
   // Cut at the last word boundary within `max`; hard cut if that loses too much.
@@ -3132,8 +3132,64 @@
     return result;
   }
 
+  // ── Delete a live ad: point at the right row on "Meine Anzeigen" ───────────
+  // Kleinanzeigen's public ad page has no delete control; its own-ads list does —
+  // one <li data-adid="…"> per ad with a "Löschen" button (checked live 2026-11).
+  // The app opens that list and calls this: scroll to the ad, frame it and pulse
+  // its "Löschen" button. Deleting stays the user's tap — nothing is clicked here.
+  function focusOwnListing(adId) {
+    adId = String(adId || "").replace(/\D/g, "");
+    if (!adId) return false;
+    if (!document.getElementById("velosia-focus-style")) {
+      var st = document.createElement("style");
+      st.id = "velosia-focus-style";
+      st.textContent = "@keyframes velosia-focus-pulse{0%,100%{box-shadow:0 0 0 3px rgba(239,68,68,.9)}50%{box-shadow:0 0 0 7px rgba(239,68,68,.35)}}";
+      (document.head || document.documentElement).appendChild(st);
+    }
+    function visible(el) {
+      var r = el.getBoundingClientRect();
+      return r.width > 0 && r.height > 0 && getComputedStyle(el).visibility !== "hidden";
+    }
+    function buttonNamed(row, re) {
+      var els = row.querySelectorAll("button, a");
+      for (var i = 0; i < els.length; i++) {
+        if (re.test((els[i].textContent || "").trim()) && visible(els[i])) return els[i];
+      }
+      return null;
+    }
+    function chip(text) {
+      var old = document.getElementById("velosia-focus-chip");
+      if (old) old.remove();
+      var c = document.createElement("div");
+      c.id = "velosia-focus-chip";
+      c.textContent = text;
+      c.style.cssText = "position:fixed;left:50%;bottom:24px;transform:translateX(-50%);z-index:2147483646;max-width:86vw;padding:12px 18px;border-radius:14px;background:#10141c;color:#f8fafc;font:600 15px/1.35 -apple-system,BlinkMacSystemFont,sans-serif;box-shadow:0 10px 30px rgba(0,0,0,.45);border:1px solid rgba(9,176,183,.5);text-align:center";
+      c.addEventListener("click", function () { c.remove(); });
+      document.body.appendChild(c);
+      setTimeout(function () { if (c.parentNode) c.remove(); }, 7000);
+    }
+    var tries = 0;
+    (function look() {
+      var row = document.querySelector('li[data-adid="' + adId + '"]');
+      if (!row) {
+        if (++tries < 40) return setTimeout(look, 250);
+        chip("Anzeige nicht gefunden – vielleicht ist sie schon gelöscht.");
+        return;
+      }
+      row.style.outline = "3px solid #09b0b7";
+      row.style.outlineOffset = "4px";
+      row.style.borderRadius = "12px";
+      var del = buttonNamed(row, /^löschen$/i) || buttonNamed(row, /^mehr$/i);
+      if (del) del.style.animation = "velosia-focus-pulse 1.3s ease-in-out infinite";
+      row.scrollIntoView({ block: "center", behavior: "smooth" });
+      chip(del && /mehr/i.test(del.textContent) ? "Tippe auf „Mehr“ und dann auf „Löschen“." : "Tippe auf „Löschen“.");
+    })();
+    return true;
+  }
+
   window.__velosia = {
     __loaded: true,
+    focusOwnListing: focusOwnListing,
     version: VERSION,
     autofill: autofill,
     detectPlatform: detectPlatform,

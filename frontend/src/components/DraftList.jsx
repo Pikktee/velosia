@@ -2,7 +2,7 @@ import React, { useRef, useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Sparkles, Trash2, ChevronRight, RefreshCw, AlertTriangle, Clock, Coins, X, Check } from 'lucide-react';
 import { getThumbUrl } from '../utils/api';
-import { statusMeta, hasListing, listingPlatforms, draftSection, crossPostConflict, listingAgeDays, STALE_DAYS } from '../utils/listingStatus';
+import { statusMeta, hasListing, listingPlatforms, draftSection, crossPostConflict, listingAgeDays, STALE_DAYS, platformDeleteUrl } from '../utils/listingStatus';
 
 // dd.mm for compact list signals.
 const fmtShort = (iso) => {
@@ -802,9 +802,9 @@ function CrossPostSheet({ conflict, onClose }) {
         && window.VelosiaBridge
         && typeof window.VelosiaBridge.deleteOnPlatform === 'function') {
       // The app only opens the ad here; it needs no API token for that.
-      window.VelosiaBridge.deleteOnPlatform(draft.id, live.key, live.url || '', '');
+      window.VelosiaBridge.deleteOnPlatform(draft.id, live.key, platformDeleteUrl(live.key, live.url, draft.ka_listing_id), '');
     } else if (live.url) {
-      window.open(live.url, '_blank', 'noopener');
+      window.open(platformDeleteUrl(live.key, live.url, draft.ka_listing_id), '_blank', 'noopener');
     }
     onClose();
   };

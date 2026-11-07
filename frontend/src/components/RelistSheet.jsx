@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { RefreshCw, Check } from 'lucide-react';
 import { refreshListingStatus } from '../utils/api';
-import { listingPlatforms, isActive, relistPriceOptions } from '../utils/listingStatus';
+import { listingPlatforms, isActive, relistPriceOptions, platformDeleteUrl } from '../utils/listingStatus';
 import { PLATFORM_NAMES, rememberRelist } from '../utils/relist';
 import Sheet from './Sheet';
 
@@ -46,7 +46,7 @@ export default function RelistSheet({ draft, platform, resumed, initialPrice, on
   }, []);
 
   const handleDelete = () => {
-    const url = listing?.url || '';
+    const url = platformDeleteUrl(platform, listing?.url, draft.ka_listing_id);
     const bridge = typeof window !== 'undefined' ? window.VelosiaBridge : null;
     if (bridge && typeof bridge.deleteOnPlatform === 'function') {
       rememberRelist(draft.id, platform, price);

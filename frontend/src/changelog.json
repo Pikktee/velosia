@@ -1,5 +1,12 @@
 [
   {
+    "version": "2.7.73",
+    "items": [
+      { "text": "Anzeige auf Kleinanzeigen löschen: Velosia springt in „Meine Anzeigen“ direkt zu deiner Anzeige und markiert „Löschen“.", "app": true }
+    ],
+    "fixes": true
+  },
+  {
     "version": "2.7.72",
     "items": ["„Angebot löschen“ findest du jetzt im Menü ⋮ oben rechts."]
   },
