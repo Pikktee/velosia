@@ -12,7 +12,7 @@ import { takePendingRelist, takeRecheck, rememberRecheck } from '../utils/relist
 
 const ONLINE_FIELD_LABELS = [['price', 'Preis'], ['title', 'Titel'], ['description', 'Beschreibung']];
 
-export default function DraftDetail({ draft, onBack, onUpdateSuccess }) {
+export default function DraftDetail({ draft, onBack, onUpdateSuccess, onDelete }) {
   const [title, setTitle] = useState(draft.title || '');
   const [description, setDescription] = useState(draft.description || '');
   const [condition, setCondition] = useState(draft.condition || 'Gut');
@@ -33,6 +33,7 @@ export default function DraftDetail({ draft, onBack, onUpdateSuccess }) {
   const [showDetected, setShowDetected] = useState(false); // collapsible "Automatisch erkannt"
   // 'status' (Deine Anzeigen) | 'publish' (Einstellen auf) | null
   const [sheet, setSheet] = useState(null);
+  const [confirmDeleteDraft, setConfirmDeleteDraft] = useState(false);
   // Platform whose live ad is being opened — shows a loading ring on its icon
   // until the WebView leaves the page.
   const [opening, setOpening] = useState(null);
@@ -1131,6 +1132,11 @@ export default function DraftDetail({ draft, onBack, onUpdateSuccess }) {
           {renderPriceComparison()}
           {renderDetectedInfo()}
           {!isAndroidApp && renderPublishingAssist()}
+          {onDelete && (
+            <button type="button" className="detail-delete-btn" onClick={() => setConfirmDeleteDraft(true)}>
+              <Trash2 size={16} /> Angebot löschen
+            </button>
+          )}
         </div>
       </div>
 
@@ -1224,6 +1230,15 @@ export default function DraftDetail({ draft, onBack, onUpdateSuccess }) {
         </div>
       )}
       <CustomConfirmModal 
+        isOpen={confirmDeleteDraft}
+        onClose={() => setConfirmDeleteDraft(false)}
+        onConfirm={() => { setConfirmDeleteDraft(false); onDelete(); }}
+        title="Angebot löschen?"
+        message={listed.some((p) => !TERMINAL.has(p.status))
+          ? `Noch online auf ${listed.filter((p) => !TERMINAL.has(p.status)).map((p) => p.name).join(' und ')}. Die Anzeige dort bleibt bestehen.`
+          : 'Das lässt sich nicht rückgängig machen.'}
+      />
+      <CustomConfirmModal
         isOpen={showDeleteConfirm}
         onClose={handleCancelDeleteImage}
         onConfirm={handleConfirmDeleteImage}

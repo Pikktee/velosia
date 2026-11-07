@@ -1,4 +1,11 @@
 [
+  {
+    "version": "2.7.71",
+    "items": [
+      "Angebot löschen direkt in der Angebotsansicht, ganz unten.",
+      "Anzeigen auf Kleinanzeigen und Vinted löschst du über „Deine Anzeigen“."
+    ]
+  },
   { "version": "2.7.70", "fixes": true },
   { "version": "2.7.69", "fixes": true },
   {

@@ -1,4 +1,4 @@
-import { ArrowUpRight, ChevronRight, CircleCheck, RefreshCw, Repeat } from 'lucide-react';
+import { ArrowUpRight, ChevronRight, CircleCheck, RefreshCw, Repeat, Trash2 } from 'lucide-react';
 import {
   listingPlatforms, statusMeta, isActive, publishedDays, crossPostConflict, formatEuro, STALE_DAYS,
   PLATFORM_KEYS, PLATFORM_LETTER, PLATFORM_LABEL,
@@ -93,10 +93,19 @@ export function StatusSheet({ draft, priceType, refreshing, settingStatus, openi
                   <Repeat size={15} /> {active ? 'Neu einstellen' : 'Nochmal einstellen'}
                 </button>
               </div>
-              {p.key === 'kleinanzeigen' && active && !isConflict && (
-                <button className="sheet-text-btn small" disabled={settingStatus} onClick={() => onMarkSold(p.key)}>
-                  <CircleCheck size={14} /> Als verkauft markieren
-                </button>
+              {active && !isConflict && (
+                <div className="listing-card-more">
+                  {p.key === 'kleinanzeigen' && (
+                    <button className="sheet-text-btn small" disabled={settingStatus} onClick={() => onMarkSold(p.key)}>
+                      <CircleCheck size={14} /> Als verkauft markieren
+                    </button>
+                  )}
+                  {p.url && (
+                    <button className="sheet-text-btn small danger" onClick={() => onDelete(p)}>
+                      <Trash2 size={14} /> Anzeige löschen
+                    </button>
+                  )}
+                </div>
               )}
             </div>
           );

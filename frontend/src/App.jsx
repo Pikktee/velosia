@@ -770,6 +770,7 @@ export default function App() {
                 fetchDrafts(); // Sync changes
               }}
               onUpdateSuccess={handleUpdateSuccess}
+              onDelete={() => handleDeleteDraft(selectedDraft.id)}
             />
           )}
 
