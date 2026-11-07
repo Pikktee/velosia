@@ -384,11 +384,25 @@ export default function App() {
 
   // Multi-select delete from the list: one request, then drop the rows. Throws
   // so the list can keep its selection when it failed.
+  // Optimistic: the rows go at once; if the request fails they come back.
   const handleBulkDelete = async (ids) => {
-    const deleted = await bulkDeleteDrafts(ids);
-    const gone = new Set(deleted);
-    setDrafts((prev) => prev.filter((d) => !gone.has(d.id)));
-    return deleted;
+    const gone = new Set(ids);
+    let removed = [];
+    setDrafts((prev) => {
+      removed = prev.filter((d) => gone.has(d.id));
+      return prev.filter((d) => !gone.has(d.id));
+    });
+    try {
+      return await bulkDeleteDrafts(ids);
+    } catch (err) {
+      setDrafts((prev) => {
+        const have = new Set(prev.map((d) => d.id));
+        const back = removed.filter((d) => !have.has(d.id));
+        return [...prev, ...back].sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+      });
+      showError(`${ids.length === 1 ? 'Das Angebot konnte' : 'Die Angebote konnten'} nicht gelöscht werden.`, () => handleBulkDelete(ids));
+      throw err;
+    }
   };
 
   // --- Camera button: short tap = normal capture, long press = Turbo mode ---

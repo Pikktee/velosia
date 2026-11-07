@@ -54,20 +54,21 @@ export default function DraftList({ drafts, isLoading, loadError = false, onRetr
 
   const selectedLive = drafts.filter((d) => selected.has(d.id) && draftSection(d) === 'active').length;
 
-  const handleBulkDelete = async () => {
+  // Optimistic: the dialog closes at once and the rows fold away; the request
+  // runs behind it (App drops the rows and puts them back if it fails).
+  const [leaving, setLeaving] = useState(() => new Set());
+  const handleBulkDelete = () => {
     if (bulkDeleting || !onBulkDelete) return;
-    setBulkDeleting(true);
+    const ids = [...selected];
     setBulkError(null);
-    try {
-      await onBulkDelete([...selected]);
-      setConfirmBulk(false);
-      clearSelection();
-    } catch (err) {
-      console.error(err);
-      setBulkError('Löschen fehlgeschlagen. Bitte prüfe deine Verbindung und versuch es nochmal.');
-    } finally {
-      setBulkDeleting(false);
-    }
+    setConfirmBulk(false);
+    clearSelection();
+    setLeaving(new Set(ids));
+    setTimeout(() => {
+      Promise.resolve(onBulkDelete(ids))
+        .catch((err) => console.error(err))
+        .finally(() => setLeaving(new Set()));
+    }, 260);
   };
   const [conflict, setConflict] = useState(null);
   const [pullY, setPullY] = useState(0);
@@ -99,14 +100,17 @@ export default function DraftList({ drafts, isLoading, loadError = false, onRetr
     if (!isPulling) return;
     setIsPulling(false);
     if (pullY >= 60) {
-      handleRefresh();
+      handleRefresh(true);
     }
     setPullY(0);
   };
   const anyListing = drafts.some(hasListing);
 
-  const handleRefresh = async () => {
+  // One spinner per refresh: the pull indicator when pulled, else the header icon.
+  const [pulledRefresh, setPulledRefresh] = useState(false);
+  const handleRefresh = async (byPull = false) => {
     if (refreshing || !onRefreshStatuses) return;
+    setPulledRefresh(byPull === true);
     setRefreshing(true);
     try {
       const data = await onRefreshStatuses();
@@ -268,9 +272,9 @@ export default function DraftList({ drafts, isLoading, loadError = false, onRetr
       style={{ display: 'flex', flexDirection: 'column', flex: 1, height: '100%', overflow: 'hidden' }}
     >
       <div 
-        className={`ptr-indicator${pullY > 0 ? ' visible' : ''}${refreshing ? ' refreshing' : ''}`}
+        className={`ptr-indicator${pullY > 0 ? ' visible' : ''}${refreshing && pulledRefresh ? ' refreshing' : ''}`}
         style={
-          refreshing 
+          refreshing && pulledRefresh
             ? { transform: 'translateX(-50%) translateY(50px)', opacity: 1, zIndex: 110 } 
             : pullY > 0 
               ? { transform: `translateX(-50%) translateY(${pullY}px)`, zIndex: 110 } 
@@ -311,12 +315,12 @@ export default function DraftList({ drafts, isLoading, loadError = false, onRetr
               {anyListing && onRefreshStatuses && (
                 <button
                   className="status-refresh-btn icon-only"
-                  onClick={handleRefresh}
+                  onClick={() => handleRefresh(false)}
                   disabled={refreshing}
                   title="Status aller Angebote aktualisieren"
                   aria-label="Status aller Angebote aktualisieren"
                 >
-                  <RefreshCw size={16} className={refreshing ? 'spin' : ''} />
+                  <RefreshCw size={16} className={refreshing && !pulledRefresh ? 'spin' : ''} />
                 </button>
               )}
             </div>
@@ -337,6 +341,7 @@ export default function DraftList({ drafts, isLoading, loadError = false, onRetr
               selecting={selecting}
               selected={selected.has(draft.id)}
               onToggleSelect={onBulkDelete ? toggleSelected : null}
+              leaving={leaving.has(draft.id)}
             />
           ))}
         </ul>
@@ -376,7 +381,7 @@ export default function DraftList({ drafts, isLoading, loadError = false, onRetr
 const LONG_PRESS_MS = 450;
 const LONG_PRESS_SLOP = 10; // px of finger movement that still counts as holding still
 
-function DraftListItem({ draft, onSelect, onDelete, flash = false, selecting = false, selected = false, onToggleSelect = null }) {
+function DraftListItem({ draft, onSelect, onDelete, flash = false, selecting = false, selected = false, onToggleSelect = null, leaving = false }) {
   const [swipeOffset, setSwipeOffset] = useState(0);
   const [thumbLoaded, setThumbLoaded] = useState(false);
   const longPressTimer = useRef(null);
@@ -610,7 +615,7 @@ function DraftListItem({ draft, onSelect, onDelete, flash = false, selecting = f
   return (
     <li 
       ref={itemRef}
-      className="draft-list-item-container-wrap"
+      className={`draft-list-item-container-wrap${leaving ? ' leaving' : ''}`}
     >
       {/* Background delete action (red bar with stationary trash icon) */}
       <div 

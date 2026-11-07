@@ -5406,3 +5406,18 @@ button.detail-header-titles:active { background: rgba(255, 255, 255, 0.05); }
 }
 .detail-menu-item:active { background: rgba(255, 255, 255, 0.06); }
 .detail-menu-item.danger { color: #fca5a5; }
+
+/* Sammel-Löschen: Zeilen klappen weg, bevor sie aus der Liste fallen (V2.7.75) */
+.draft-list-item-container-wrap {
+  transition: opacity 0.22s ease, transform 0.22s ease, max-height 0.26s ease, margin 0.26s ease;
+  max-height: 400px;
+}
+.draft-list-item-container-wrap.leaving {
+  opacity: 0;
+  transform: translateX(-24px) scale(0.98);
+  max-height: 0;
+  margin-top: 0 !important;
+  margin-bottom: 0 !important;
+  overflow: hidden;
+  pointer-events: none;
+}

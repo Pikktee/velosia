@@ -1,5 +1,12 @@
 [
   {
+    "version": "2.7.75",
+    "items": [
+      "„Status aktualisieren“ ist deutlich schneller.",
+      "Mehrere Angebote löschen geht jetzt sofort, ohne Warten."
+    ]
+  },
+  {
     "version": "2.7.74",
     "items": [
       { "text": "Anzeige auf Kleinanzeigen löschen geht jetzt mit einem Tipp: Velosia fragt direkt „Anzeige löschen?“.", "app": true }

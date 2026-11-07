@@ -229,7 +229,7 @@ run_migrations()
 _API_DOCS = os.getenv("ENABLE_API_DOCS", "").lower() in ("1", "true", "yes")
 app = FastAPI(
     title="Velosia API",
-    version="2.7.74",
+    version="2.7.75",
     docs_url="/docs" if _API_DOCS else None,
     redoc_url="/redoc" if _API_DOCS else None,
     openapi_url="/openapi.json" if _API_DOCS else None,
@@ -2390,6 +2390,10 @@ def refresh_listing_status(
     return draft
 
 
+_REFRESH_WORKERS = 4
+_REFRESH_FRESH_S = 60
+
+
 @app.post("/api/listings/refresh-all", response_model=List[schemas.DraftResponse])
 def refresh_all_listings(
     db: Session = Depends(get_db),
@@ -2401,15 +2405,39 @@ def refresh_all_listings(
         models.Draft.user_id == current_user.id,
     ).order_by(models.Draft.created_at.desc()).all()
 
-    for draft in drafts:
-        has_listing = (draft.ka_listing_url or draft.ka_listing_id
-                       or draft.vinted_listing_url or draft.vinted_listing_id)
-        if not has_listing:
-            continue
-        updates = listing_status.refresh_draft_status(draft, datetime.utcnow())
-        if updates:
-            _apply_status_updates(draft, updates)
-            db.commit()
+    now = datetime.utcnow()
+
+    def needs_poll(draft):
+        # Only live listings (sold/deleted are final) not read in the last minute —
+        # the detail view and the 6-h poller keep many of them fresh already.
+        for prefix in ("ka", "vinted"):
+            if not (getattr(draft, f"{prefix}_listing_url") or getattr(draft, f"{prefix}_listing_id")):
+                continue
+            if getattr(draft, f"{prefix}_status") in listing_status.TERMINAL:
+                continue
+            at = getattr(draft, f"{prefix}_status_at")
+            if at is None or (now - at).total_seconds() > _REFRESH_FRESH_S:
+                return True
+        return False
+
+    todo = [d for d in drafts if needs_poll(d)]
+    # A few pages at a time instead of one after another: 20 listings took ~20 s
+    # serially (each request carries a polite random delay). Still gentle — at
+    # most _REFRESH_WORKERS concurrent reads of the user's own public ads. The
+    # threads only fetch; the session is touched on this thread alone.
+    if todo:
+        with ThreadPoolExecutor(max_workers=min(_REFRESH_WORKERS, len(todo))) as pool:
+            futures = {pool.submit(listing_status.refresh_draft_status, d, now): d for d in todo}
+            results = []
+            for fut in as_completed(futures):
+                try:
+                    results.append((futures[fut], fut.result()))
+                except Exception as e:
+                    print(f"[refresh-all] Abruf fehlgeschlagen: {e}", flush=True)
+        for draft, updates in results:
+            if updates:
+                _apply_status_updates(draft, updates)
+        db.commit()
     return drafts
 
 
