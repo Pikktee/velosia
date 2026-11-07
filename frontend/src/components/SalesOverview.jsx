@@ -53,7 +53,7 @@ export default function SalesOverview({ drafts }) {
       </h3>
 
       {total.count === 0 ? (
-        <p className="sales-empty">Sobald etwas als verkauft markiert ist, siehst du hier deine Erlöse.</p>
+        <p className="sales-empty">Hier erscheinen deine Verkäufe.</p>
       ) : (
         <>
           <div className="sales-hero">

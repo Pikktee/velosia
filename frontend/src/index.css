@@ -5529,3 +5529,22 @@ button.detail-header-titles:active { background: rgba(255, 255, 255, 0.05); }
 }
 .sales-total strong { color: var(--text-primary); font-family: var(--font-title); font-size: 1rem; font-variant-numeric: tabular-nums; }
 .sales-total-count { margin-left: auto; color: var(--text-muted); }
+
+/* Einstellungen: aufklappbare Zeile (Passwort festlegen) — V2.7.83 */
+.settings-row {
+  width: 100%;
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0 1rem;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--glass-border);
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--text-primary);
+  font-family: var(--font-title);
+  font-size: 0.95rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+.settings-row:active { background: rgba(255, 255, 255, 0.06); }

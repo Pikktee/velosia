@@ -41,6 +41,7 @@ const PASSWORD_MIN_LENGTH = 6;
 // e-mail/password login (needed by the browser extension). The server accepts it
 // only shortly after a sign-in and then ends all other sessions.
 function PasswordSection() {
+  const [open, setOpen] = useState(false);
   const [password, setPassword] = useState('');
   const [confirm, setConfirm] = useState('');
   const [busy, setBusy] = useState(false);
@@ -61,7 +62,7 @@ function PasswordSection() {
       await setAccountPassword(password);
       setPassword('');
       setConfirm('');
-      setMessage({ type: 'ok', text: 'Passwort gespeichert. Andere Geräte und die Browser-Erweiterung musst du neu anmelden.' });
+      setMessage({ type: 'ok', text: 'Gespeichert. Andere Geräte und die Erweiterung neu anmelden.' });
     } catch (err) {
       setMessage({ type: 'error', text: err.message || 'Das Passwort konnte nicht gespeichert werden.' });
     } finally {
@@ -77,16 +78,20 @@ function PasswordSection() {
     }
   };
 
-  return (
-    <div className="detail-section-unboxed" style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-      <h3 className="detail-section-title" style={{ margin: 0 }}>
+  // Rarely needed (Google sign-in + browser extension), so it starts folded.
+  if (!open) {
+    return (
+      <button type="button" className="settings-row" onClick={() => setOpen(true)}>
         <KeyRound size={18} style={{ color: 'var(--primary)' }} />
         <span>Passwort festlegen</span>
-      </h3>
+        <ChevronRight size={16} style={{ opacity: 0.4, marginLeft: 'auto' }} />
+      </button>
+    );
+  }
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
       <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', margin: 0, lineHeight: 1.4 }}>
-        Nötig, wenn du dich mit Google anmeldest und die Browser-Erweiterung nutzen möchtest
-        (dort gibt es nur die Anmeldung mit E-Mail und Passwort). Aus Sicherheitsgründen geht das
-        nur kurz nach einer Anmeldung – melde dich sonst einmal ab und wieder an.
+        Für die Browser-Erweiterung, wenn du dich mit Google anmeldest. Geht nur kurz nach dem Anmelden.
       </p>
       <input
         type="password"
@@ -382,48 +387,128 @@ export default function Settings({ user, drafts = [], onLogout, onUpdateUser, on
             {/* Left Column */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
 
-              <SalesOverview drafts={drafts} />
-
-              {/* Section: Profil & Sitzung */}
+              {/* Section: Verkaufsvorgaben */}
               <div className="detail-section-unboxed" style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
                 <h3 className="detail-section-title" style={{ margin: 0 }}>
-                  <User size={18} style={{ color: 'var(--primary)' }} />
-                  <span>Konto &amp; Sitzung</span>
+                  <Sliders size={18} style={{ color: 'var(--primary)' }} />
+                  <span>Verkaufsvorgaben</span>
                 </h3>
                 
-                <div className="profile-header-info" style={{ marginBottom: '0.25rem' }}>
-                  <div className="profile-avatar-wrapper">
-                    <User size={26} />
-                  </div>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.2rem', minWidth: 0, flex: 1 }}>
-                    <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.08em', fontWeight: 'bold' }}>Eingeloggt als</span>
-                    <span style={{ fontSize: '1.15rem', fontWeight: '700', color: 'var(--text-primary)', wordBreak: 'break-all', fontFamily: 'var(--font-title)' }}>{user.email}</span>
+                <div className="form-group" style={{ marginBottom: 0 }}>
+                  <label style={{ display: 'flex', alignItems: 'center' }}>
+                    Postleitzahl (PLZ)
+                    <span className="tooltip-container">
+                      <HelpCircle size={14} />
+                      <span className="tooltip-text">Wird beim Einstellen eingetragen.</span>
+                    </span>
+                  </label>
+                  <input
+                    type="text"
+                    className="form-control"
+                    placeholder="z.B. 10115"
+                    maxLength={20}
+                    value={defaultZip}
+                    onChange={(e) => setDefaultZip(e.target.value)}
+                  />
+                </div>
+
+                <div className="form-group" style={{ marginBottom: 0 }}>
+                  <label style={{ display: 'flex', alignItems: 'center' }}>
+                    Standard-Versandart
+                    <span className="tooltip-container">
+                      <HelpCircle size={14} />
+                      <span className="tooltip-text">Deine übliche Versandart.</span>
+                    </span>
+                  </label>
+                  <input
+                    type="text"
+                    className="form-control"
+                    placeholder="z.B. DHL Paket versichert"
+                    maxLength={200}
+                    value={defaultShipping}
+                    onChange={(e) => setDefaultShipping(e.target.value)}
+                  />
+                </div>
+
+                <div className="form-group" style={{ marginBottom: 0 }}>
+                  <label style={{ display: 'flex', alignItems: 'center' }}>
+                    Preisart
+                    <span className="tooltip-container">
+                      <HelpCircle size={14} />
+                      <span className="tooltip-text">Vorgabe für Kleinanzeigen, pro Angebot änderbar. Vinted kennt keine Preisart.</span>
+                    </span>
+                  </label>
+                  <div className="segmented-control" role="radiogroup" aria-label="Preisart">
+                    {PRICE_TYPES.map(({ value, label }) => (
+                      <button
+                        key={value}
+                        type="button"
+                        role="radio"
+                        aria-checked={priceType === value}
+                        className={`segmented-control-btn ${priceType === value ? 'active' : ''}`}
+                        onClick={() => setPriceType(value)}
+                      >
+                        {label}
+                      </button>
+                    ))}
                   </div>
                 </div>
 
-                <button
-                  type="button"
-                  onClick={onShowBugReport}
-                  className="btn btn-secondary"
-                  style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem', borderColor: 'var(--glass-border)', minHeight: '44px', marginBottom: '0.75rem', background: 'rgba(255, 255, 255, 0.03)' }}
-                >
-                  <HelpCircle size={18} style={{ color: 'var(--primary)' }} />
-                  Problem melden
-                </button>
+                <div className="form-group" style={{ marginBottom: 0 }}>
+                  <label style={{ display: 'flex', alignItems: 'center' }}>
+                    Preis-Offset (%)
+                    <span className="tooltip-container">
+                      <HelpCircle size={14} />
+                      <span className="tooltip-text">Passt den KI-Preisvorschlag an, z. B. −10 für schnelleren Verkauf.</span>
+                    </span>
+                  </label>
+                  <input
+                    type="number"
+                    className="form-control"
+                    placeholder="z.B. -10"
+                    value={pricingOffset}
+                    onChange={(e) => setPricingOffset(e.target.value)}
+                  />
+                </div>
 
-                <button
-                  type="button"
-                  onClick={onLogout}
-                  className="btn btn-secondary"
-                  style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem', borderColor: 'var(--glass-border)', minHeight: '44px' }}
-                >
-                  <LogOut size={18} />
-                  Abmelden
-                </button>
+                <div className="form-group" style={{ marginBottom: 0 }}>
+                  <label style={{ display: 'flex', alignItems: 'center' }}>
+                    Automatisch veröffentlichen
+                    <span className="tooltip-container">
+                      <HelpCircle size={14} />
+                      <span className="tooltip-text">Velosia tippt nach dem Ausfüllen selbst auf Veröffentlichen.</span>
+                    </span>
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => setAutoSubmit(!autoSubmit)}
+                    style={{
+                      display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                      gap: '0.75rem', width: '100%', padding: '0.75rem 0.9rem',
+                      background: autoSubmit ? 'var(--primary-glow)' : 'rgba(255,255,255,0.03)',
+                      border: `1px solid ${autoSubmit ? 'var(--primary)' : 'var(--glass-border)'}`,
+                      borderRadius: '10px', cursor: 'pointer', transition: 'all 0.2s ease'
+                    }}
+                  >
+                    <span style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.85rem', color: 'var(--text-secondary)', textAlign: 'left', lineHeight: 1.3 }}>
+                      <Zap size={16} style={{ color: autoSubmit ? 'var(--primary)' : 'var(--text-muted)', flexShrink: 0 }} />
+                      {autoSubmit ? 'Sofort online' : 'Du prüfst selbst'}
+                    </span>
+                    <span style={{
+                      flexShrink: 0, width: '44px', height: '26px', borderRadius: '99px',
+                      background: autoSubmit ? 'var(--primary)' : 'rgba(255,255,255,0.15)',
+                      position: 'relative', transition: 'all 0.2s ease'
+                    }}>
+                      <span style={{
+                        position: 'absolute', top: '3px', left: autoSubmit ? '21px' : '3px',
+                        width: '20px', height: '20px', borderRadius: '50%', background: '#fff',
+                        transition: 'all 0.2s ease', boxShadow: '0 1px 3px rgba(0,0,0,0.3)'
+                      }} />
+                    </span>
+                  </button>
+                </div>
               </div>
 
-              <PasswordSection />
- 
               {/* Section: Anzeigentext — the final description is assembled top to
                   bottom as Einleitung + KI-Text + Abschluss (intro and footer are
                   fixed verbatim text; only the KI-Text middle is AI-written). */}
@@ -439,7 +524,7 @@ export default function Settings({ user, drafts = [], onLogout, onUpdateUser, on
                     Einleitung
                     <span className="tooltip-container">
                       <HelpCircle size={14} />
-                      <span className="tooltip-text">Fester Text, der unverändert über jeder Beschreibung steht. Die KI weiß davon und vermeidet Dopplungen. Leer lassen = die KI beginnt selbst passend.</span>
+                      <span className="tooltip-text">Steht unverändert über jeder Beschreibung. Leer: Die KI beginnt selbst.</span>
                     </span>
                   </label>
                   <textarea
@@ -459,7 +544,7 @@ export default function Settings({ user, drafts = [], onLogout, onUpdateUser, on
                       KI-Text
                       <span className="tooltip-container">
                         <HelpCircle size={14} />
-                        <span className="tooltip-text">Stil-/Tonfall-Anweisung für den von der KI geschriebenen Mittelteil. Wähle eine Vorlage oder formuliere frei — sobald du den Text änderst, springt die Vorlage auf „Individuell". Feste Regeln (keine Hashtags, Struktur) ergänzt Velosia automatisch.</span>
+                        <span className="tooltip-text">Stil und Tonfall für den KI-Teil. Vorlage wählen oder frei formulieren.</span>
                       </span>
                     </label>
                     <select
@@ -490,7 +575,7 @@ export default function Settings({ user, drafts = [], onLogout, onUpdateUser, on
                     Abschluss
                     <span className="tooltip-container">
                       <HelpCircle size={14} />
-                      <span className="tooltip-text">Fester Text, der unverändert unter jeder Beschreibung steht (z.B. Versand- oder Haftungshinweise). Die KI weiß davon und vermeidet Dopplungen. Leer lassen = die KI schließt selbst passend ab.</span>
+                      <span className="tooltip-text">Steht unverändert unter jeder Beschreibung, z. B. Versandhinweise. Leer: Die KI schließt selbst.</span>
                     </span>
                   </label>
                   <textarea
@@ -504,133 +589,65 @@ export default function Settings({ user, drafts = [], onLogout, onUpdateUser, on
                 </div>
               </div>
 
+
             </div>
 
             {/* Right Column */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-              
-              {/* Section: Verkaufsvorgaben */}
+
+              <SalesOverview drafts={drafts} />
+
+
+              {/* Section: Profil & Sitzung */}
               <div className="detail-section-unboxed" style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
                 <h3 className="detail-section-title" style={{ margin: 0 }}>
-                  <Sliders size={18} style={{ color: 'var(--primary)' }} />
-                  <span>Verkaufsvorgaben</span>
+                  <User size={18} style={{ color: 'var(--primary)' }} />
+                  <span>Konto</span>
                 </h3>
                 
-                <div className="form-group" style={{ marginBottom: 0 }}>
-                  <label style={{ display: 'flex', alignItems: 'center' }}>
-                    Postleitzahl (PLZ)
-                    <span className="tooltip-container">
-                      <HelpCircle size={14} />
-                      <span className="tooltip-text">Wird beim Autofill auf Verkaufsplattformen automatisch eingetragen.</span>
-                    </span>
-                  </label>
-                  <input
-                    type="text"
-                    className="form-control"
-                    placeholder="z.B. 10115"
-                    maxLength={20}
-                    value={defaultZip}
-                    onChange={(e) => setDefaultZip(e.target.value)}
-                  />
-                </div>
-
-                <div className="form-group" style={{ marginBottom: 0 }}>
-                  <label style={{ display: 'flex', alignItems: 'center' }}>
-                    Standard-Versandart
-                    <span className="tooltip-container">
-                      <HelpCircle size={14} />
-                      <span className="tooltip-text">Deine bevorzugte Versandart zur Dokumentation im Angebot.</span>
-                    </span>
-                  </label>
-                  <input
-                    type="text"
-                    className="form-control"
-                    placeholder="z.B. DHL Paket versichert"
-                    maxLength={200}
-                    value={defaultShipping}
-                    onChange={(e) => setDefaultShipping(e.target.value)}
-                  />
-                </div>
-
-                <div className="form-group" style={{ marginBottom: 0 }}>
-                  <label style={{ display: 'flex', alignItems: 'center' }}>
-                    Preisart
-                    <span className="tooltip-container">
-                      <HelpCircle size={14} />
-                      <span className="tooltip-text">Vorgabe für neue Anzeigen auf Kleinanzeigen: Festpreis oder VB (Verhandlungsbasis). Im einzelnen Angebot kannst du davon abweichen. Vinted kennt keine Preisart – dort sind Preisvorschläge immer möglich.</span>
-                    </span>
-                  </label>
-                  <div className="segmented-control" role="radiogroup" aria-label="Preisart">
-                    {PRICE_TYPES.map(({ value, label }) => (
-                      <button
-                        key={value}
-                        type="button"
-                        role="radio"
-                        aria-checked={priceType === value}
-                        className={`segmented-control-btn ${priceType === value ? 'active' : ''}`}
-                        onClick={() => setPriceType(value)}
-                      >
-                        {label}
-                      </button>
-                    ))}
+                <div className="profile-header-info" style={{ marginBottom: '0.25rem' }}>
+                  <div className="profile-avatar-wrapper">
+                    <User size={26} />
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.2rem', minWidth: 0, flex: 1 }}>
+                    <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.08em', fontWeight: 'bold' }}>Eingeloggt als</span>
+                    <span style={{ fontSize: '1.15rem', fontWeight: '700', color: 'var(--text-primary)', wordBreak: 'break-all', fontFamily: 'var(--font-title)' }}>{user.email}</span>
                   </div>
                 </div>
 
-                <div className="form-group" style={{ marginBottom: 0 }}>
-                  <label style={{ display: 'flex', alignItems: 'center' }}>
-                    Preis-Offset (%)
-                    <span className="tooltip-container">
-                      <HelpCircle size={14} />
-                      <span className="tooltip-text">Passt den vorgeschlagenen Preis der KI prozentual an. Z. B. -10% für schnelleren Verkauf oder +5% für Verhandlungsbasis.</span>
-                    </span>
-                  </label>
-                  <input
-                    type="number"
-                    className="form-control"
-                    placeholder="z.B. -10"
-                    value={pricingOffset}
-                    onChange={(e) => setPricingOffset(e.target.value)}
-                  />
-                </div>
+                <PasswordSection />
 
-                <div className="form-group" style={{ marginBottom: 0 }}>
-                  <label style={{ display: 'flex', alignItems: 'center' }}>
-                    Automatisch veröffentlichen
-                    <span className="tooltip-container">
-                      <HelpCircle size={14} />
-                      <span className="tooltip-text">Wenn aktiv, klickt Velosia nach dem Ausfüllen selbst auf „Veröffentlichen". Standardmäßig prüfst du das Angebot zuerst und stellst es selbst online.</span>
-                    </span>
-                  </label>
-                  <button
-                    type="button"
-                    onClick={() => setAutoSubmit(!autoSubmit)}
-                    style={{
-                      display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                      gap: '0.75rem', width: '100%', padding: '0.75rem 0.9rem',
-                      background: autoSubmit ? 'var(--primary-glow)' : 'rgba(255,255,255,0.03)',
-                      border: `1px solid ${autoSubmit ? 'var(--primary)' : 'var(--glass-border)'}`,
-                      borderRadius: '10px', cursor: 'pointer', transition: 'all 0.2s ease'
-                    }}
-                  >
-                    <span style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.85rem', color: 'var(--text-secondary)', textAlign: 'left', lineHeight: 1.3 }}>
-                      <Zap size={16} style={{ color: autoSubmit ? 'var(--primary)' : 'var(--text-muted)', flexShrink: 0 }} />
-                      {autoSubmit ? 'Angebote werden sofort online gestellt' : 'Du prüfst & veröffentlichst selbst'}
-                    </span>
-                    <span style={{
-                      flexShrink: 0, width: '44px', height: '26px', borderRadius: '99px',
-                      background: autoSubmit ? 'var(--primary)' : 'rgba(255,255,255,0.15)',
-                      position: 'relative', transition: 'all 0.2s ease'
-                    }}>
-                      <span style={{
-                        position: 'absolute', top: '3px', left: autoSubmit ? '21px' : '3px',
-                        width: '20px', height: '20px', borderRadius: '50%', background: '#fff',
-                        transition: 'all 0.2s ease', boxShadow: '0 1px 3px rgba(0,0,0,0.3)'
-                      }} />
-                    </span>
-                  </button>
-                </div>
+                <button
+                  type="button"
+                  onClick={onLogout}
+                  className="btn btn-secondary"
+                  style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem', borderColor: 'var(--glass-border)', minHeight: '44px' }}
+                >
+                  <LogOut size={18} />
+                  Abmelden
+                </button>
               </div>
 
+              {/* Section: Hilfe & Daten */}
+              <div className="detail-section-unboxed" style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                <h3 className="detail-section-title" style={{ margin: 0 }}>
+                  <HelpCircle size={18} style={{ color: 'var(--primary)' }} />
+                  <span>Hilfe &amp; Daten</span>
+                </h3>
+                <button
+                  type="button"
+                  onClick={onShowBugReport}
+                  className="btn btn-secondary"
+                  style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem', borderColor: 'var(--glass-border)', minHeight: '44px', background: 'rgba(255, 255, 255, 0.03)' }}
+                >
+                  <HelpCircle size={18} style={{ color: 'var(--primary)' }} />
+                  Problem melden
+                </button>
+
+                <DataExportSection />
+              </div>
+
+              
               {/* Error display */}
               {error && (
                 <div style={{ marginTop: '0.5rem' }}>
@@ -672,8 +689,6 @@ export default function Settings({ user, drafts = [], onLogout, onUpdateUser, on
                 </div>
               )}
 
-              <DataExportSection />
-
               {/* Danger Zone */}
               <div className="detail-section-unboxed" style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem', marginTop: '0.5rem' }}>
                 <h3 className="detail-section-title" style={{ margin: 0 }}>
@@ -689,7 +704,7 @@ export default function Settings({ user, drafts = [], onLogout, onUpdateUser, on
                         <span>Account wirklich löschen?</span>
                       </div>
                       <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', margin: 0, lineHeight: '1.4' }}>
-                        Diese Aktion löscht unwiderruflich deinen Account, alle gespeicherten Angebote auf dem Server und deine Google-Verknüpfung.
+                        Löscht dein Konto und alle Angebote unwiderruflich.
                       </p>
                       <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.25rem' }}>
                         <button
