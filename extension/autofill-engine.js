@@ -43,7 +43,7 @@
   // and in the extension it is a persistent content script — never redefine.
   if (window.__velosia && window.__velosia.__loaded) return;
 
-  var VERSION = "2.7.73";
+  var VERSION = "2.7.74";
   var KA_TITLE_MAX = 65;
 
   // Cut at the last word boundary within `max`; hard cut if that loses too much.
@@ -2353,20 +2353,30 @@
                '<span style="color:#cbd5e1;">' + label + '</span></div>';
       }
 
+      // Name the publish button as the platform labels it ("Hochladen" on Vinted,
+      // "Anzeige aufgeben" on Kleinanzeigen); the live label wins when it is short.
+      var submitLabel = result.platform === "vinted" ? "Hochladen" : "Anzeige aufgeben";
+      try {
+        var sb = findSubmitButton(result.platform);
+        var live = sb && (sb.textContent || sb.value || "").replace(/\s+/g, " ").trim();
+        if (live && live.length <= 30) submitLabel = live;
+      } catch (e) {}
+      submitLabel = submitLabel.replace(/[<>&]/g, "");
+
       var title, bodyHtml;
       if (open.length === 0 && !photosMissing) {
         // Everything the engine handles is done — short confirmation only.
         title = "✅ Alles ausgefüllt";
         bodyHtml = '<div style="margin-top:6px;color:#94a3b8;font-size:12px;">' +
           (autoSubmit ? "Wird automatisch veröffentlicht …"
-                      : "Prüfe kurz und tippe unten auf <b>Hochladen</b>.") + "</div>";
+                      : "Prüfe kurz und tippe unten auf <b>" + submitLabel + "</b>.") + "</div>";
       } else {
         title = "Noch offen";
         var items = open.map(function (f) { return row(f); }).join("");
         if (photosMissing) items += row("Fotos — bitte selbst hinzufügen");
         bodyHtml = items +
           '<div style="margin-top:10px;color:#94a3b8;font-size:12px;">Bitte ergänze diese Punkte' +
-          (autoSubmit ? "." : ", dann tippe auf <b>Hochladen</b>.") + "</div>";
+          (autoSubmit ? "." : ", dann tippe auf <b>" + submitLabel + "</b>.") + "</div>";
       }
 
       box.innerHTML =
@@ -3132,28 +3142,36 @@
     return result;
   }
 
-  // ── Delete a live ad: point at the right row on "Meine Anzeigen" ───────────
-  // Kleinanzeigen's public ad page has no delete control; its own-ads list does —
-  // one <li data-adid="…"> per ad with a "Löschen" button (checked live 2026-11).
-  // The app opens that list and calls this: scroll to the ad, frame it and pulse
-  // its "Löschen" button. Deleting stays the user's tap — nothing is clicked here.
+  // ── Delete a live ad on Kleinanzeigen ("Meine Anzeigen") ───────────────────
+  // KA's public ad page has no delete control; its own-ads list does — one
+  // <li data-adid="…"> per ad with a "Löschen" button that opens a confirm
+  // <dialog aria-labelledby="delete-container-title"> ("Abbrechen" / "Ja, Anzeige
+  // löschen"), checked live 2026-11. That list is a desktop layout in the WebView
+  // (the button sits off to the right, the dialog half off-screen), so the app
+  // calls this: it opens KA's dialog itself (opening deletes nothing), hides it
+  // and shows the same question as a Velosia sheet in the visible viewport. The
+  // deletion itself is only ever the user's tap on "Ja, löschen".
   function focusOwnListing(adId) {
     adId = String(adId || "").replace(/\D/g, "");
     if (!adId) return false;
     if (!document.getElementById("velosia-focus-style")) {
       var st = document.createElement("style");
       st.id = "velosia-focus-style";
-      st.textContent = "@keyframes velosia-focus-pulse{0%,100%{box-shadow:0 0 0 3px rgba(239,68,68,.9)}50%{box-shadow:0 0 0 7px rgba(239,68,68,.35)}}";
+      st.textContent =
+        "@keyframes velosia-focus-pulse{0%,100%{box-shadow:0 0 0 3px rgba(239,68,68,.9)}50%{box-shadow:0 0 0 7px rgba(239,68,68,.35)}}" +
+        "@keyframes velosia-sheet-up{from{transform:translateY(24px);opacity:0}to{transform:none;opacity:1}}" +
+        "@keyframes velosia-spin{to{transform:rotate(360deg)}}" +
+        "dialog.velosia-hosted::backdrop{background:rgba(3,5,8,.62)}";
       (document.head || document.documentElement).appendChild(st);
     }
     function visible(el) {
       var r = el.getBoundingClientRect();
       return r.width > 0 && r.height > 0 && getComputedStyle(el).visibility !== "hidden";
     }
-    function buttonNamed(row, re) {
-      var els = row.querySelectorAll("button, a");
+    function buttonNamed(root, re, anyVisibility) {
+      var els = root.querySelectorAll("button, a");
       for (var i = 0; i < els.length; i++) {
-        if (re.test((els[i].textContent || "").trim()) && visible(els[i])) return els[i];
+        if (re.test((els[i].textContent || "").replace(/\s+/g, " ").trim()) && (anyVisibility || visible(els[i]))) return els[i];
       }
       return null;
     }
@@ -3163,11 +3181,126 @@
       var c = document.createElement("div");
       c.id = "velosia-focus-chip";
       c.textContent = text;
-      c.style.cssText = "position:fixed;left:50%;bottom:24px;transform:translateX(-50%);z-index:2147483646;max-width:86vw;padding:12px 18px;border-radius:14px;background:#10141c;color:#f8fafc;font:600 15px/1.35 -apple-system,BlinkMacSystemFont,sans-serif;box-shadow:0 10px 30px rgba(0,0,0,.45);border:1px solid rgba(9,176,183,.5);text-align:center";
+      c.style.cssText = "position:fixed;z-index:2147483646;max-width:86vw;padding:12px 18px;border-radius:14px;background:#10141c;color:#f8fafc;font:600 15px/1.35 -apple-system,BlinkMacSystemFont,sans-serif;box-shadow:0 10px 30px rgba(0,0,0,.45);border:1px solid rgba(9,176,183,.5);text-align:center";
       c.addEventListener("click", function () { c.remove(); });
       document.body.appendChild(c);
-      setTimeout(function () { if (c.parentNode) c.remove(); }, 7000);
+      var sync = bindViewport(function () {
+        var r = viewportRect();
+        c.style.left = (r.left + (r.width - c.offsetWidth) / 2) + "px";
+        c.style.top = (r.top + r.height - c.offsetHeight - 24) + "px";
+      });
+      setTimeout(function () { unbindViewport(sync); if (c.parentNode) c.remove(); }, 7000);
     }
+    function adTitle(row) {
+      // The title is the row's <h3>; its text starts with a screen-reader-only
+      // "Anzeige " (the first link is the photo, whose text is the photo count).
+      var t = row.querySelector("h3") || row.querySelector("h2");
+      return t ? (t.textContent || "").replace(/\s+/g, " ").trim().replace(/^Anzeige\s+/, "").slice(0, 90) : "";
+    }
+    function findDialog() {
+      var d = document.querySelector('dialog[aria-labelledby="delete-container-title"]');
+      if (d && (d.open || d.hasAttribute("open"))) return d;
+      var all = document.querySelectorAll("dialog[open], [role='dialog'][aria-modal='true']");
+      for (var i = 0; i < all.length; i++) {
+        if (buttonNamed(all[i], /ja.*löschen/i, true)) return all[i];
+      }
+      return null;
+    }
+    function goBack() {
+      try { if (window.VelosiaBridge && window.VelosiaBridge.reloadApp) { window.VelosiaBridge.reloadApp(); return; } } catch (e) {}
+      try { history.back(); } catch (e) {}
+    }
+    function btnCss(kind) {
+      var base = "flex:1;min-height:50px;border-radius:13px;font:700 16px/1 -apple-system,BlinkMacSystemFont,sans-serif;cursor:pointer;";
+      if (kind === "danger") return base + "border:none;background:#ef4444;color:#fff;";
+      if (kind === "primary") return base + "border:none;background:#09b0b7;color:#031314;";
+      return base + "border:1px solid rgba(255,255,255,.14);background:transparent;color:#e2e8f0;";
+    }
+
+    // Velosia's own confirm sheet, hosted INSIDE KA's (possibly modal) dialog so it
+    // stays tappable, anchored to the visible viewport.
+    function showSheet(dialog, row) {
+      var kids = dialog.children;
+      for (var i = 0; i < kids.length; i++) kids[i].style.visibility = "hidden";
+      dialog.classList.add("velosia-hosted");
+      dialog.style.background = "rgba(3,5,8,.62)";
+      dialog.style.border = "none";
+      dialog.style.boxShadow = "none";
+
+      var sheet = document.createElement("div");
+      sheet.id = "velosia-delete-sheet";
+      sheet.style.cssText = "position:fixed;z-index:2147483646;box-sizing:border-box;padding:20px 18px 18px;border-radius:22px;background:#10141c;border:1px solid rgba(255,255,255,.12);box-shadow:0 18px 50px rgba(0,0,0,.6);color:#f8fafc;font-family:-apple-system,BlinkMacSystemFont,sans-serif;animation:velosia-sheet-up .22s ease-out;visibility:visible";
+      dialog.appendChild(sheet);
+      var title = adTitle(row);
+      function render(state) {
+        if (state === "ask") {
+          sheet.innerHTML =
+            '<div style="font-size:19px;font-weight:700;margin-bottom:6px">Anzeige löschen?</div>' +
+            (title ? '<div style="font-size:14px;color:#94a3b8;line-height:1.4;margin-bottom:18px" id="velosia-del-title"></div>' : '<div style="height:12px"></div>') +
+            '<div style="display:flex;gap:10px"><button id="velosia-del-no" style="' + btnCss() + '">Abbrechen</button>' +
+            '<button id="velosia-del-yes" style="' + btnCss("danger") + '">Ja, löschen</button></div>';
+          if (title) sheet.querySelector("#velosia-del-title").textContent = title;
+          sheet.querySelector("#velosia-del-no").addEventListener("click", cancel);
+          sheet.querySelector("#velosia-del-yes").addEventListener("click", confirm);
+        } else if (state === "busy") {
+          sheet.innerHTML = '<div style="display:flex;align-items:center;gap:12px;font-size:16px;font-weight:600;padding:6px 0">' +
+            '<span style="width:20px;height:20px;border-radius:50%;border:3px solid rgba(9,176,183,.25);border-top-color:#09b0b7;animation:velosia-spin .8s linear infinite"></span>Wird gelöscht …</div>';
+        } else if (state === "done") {
+          sheet.innerHTML = '<div style="font-size:19px;font-weight:700;margin-bottom:16px;display:flex;align-items:center;gap:10px">' +
+            '<span style="width:28px;height:28px;border-radius:50%;background:#34d399;color:#04140d;display:inline-flex;align-items:center;justify-content:center;font-size:16px">✓</span>Gelöscht</div>' +
+            '<div style="display:flex"><button id="velosia-del-back" style="' + btnCss("primary") + '">Zurück zu Velosia</button></div>';
+          sheet.querySelector("#velosia-del-back").addEventListener("click", goBack);
+        }
+      }
+      var sync = bindViewport(function () {
+        if (!sheet.isConnected) return;
+        var r = viewportRect();
+        var w = Math.min(r.width - 24, 460);
+        sheet.style.width = w + "px";
+        sheet.style.left = (r.left + (r.width - w) / 2) + "px";
+        sheet.style.top = (r.top + r.height - sheet.offsetHeight - 16) + "px";
+      });
+      function teardown() {
+        unbindViewport(sync);
+        if (sheet.parentNode) sheet.remove();
+        for (var i = 0; i < kids.length; i++) kids[i].style.visibility = "";
+        dialog.classList.remove("velosia-hosted");
+        dialog.style.background = dialog.style.border = dialog.style.boxShadow = "";
+      }
+      function cancel() {
+        var no = buttonNamed(dialog, /^abbrechen$/i, true) || buttonNamed(dialog, /^schließen$/i, true);
+        teardown();
+        if (no) no.click();
+      }
+      function confirm() {
+        var yes = buttonNamed(dialog, /ja.*löschen/i, true);
+        if (!yes) { teardown(); chip("Tippe auf „Ja, Anzeige löschen“."); return; }
+        render("busy");
+        sync();
+        yes.click();
+        // Done once the ad has left the list. If it is still there after 12 s,
+        // step aside and let KA's own page show what happened.
+        var n = 0;
+        (function wait() {
+          var gone = !document.querySelector('li[data-adid="' + adId + '"]');
+          if (gone) {
+            var open = dialog.isConnected && (dialog.open || dialog.hasAttribute("open"));
+            // A closed dialog is hidden: move the sheet out (the page is no longer inert).
+            (open ? dialog : document.body).appendChild(sheet);
+            render("done");
+            sync();
+            return;
+          }
+          if (++n < 48) return setTimeout(wait, 250);
+          teardown();
+          chip("Bitte prüfe, ob die Anzeige gelöscht ist.");
+        })();
+      }
+      render("ask");
+      sync();
+      requestAnimationFrame(sync);
+    }
+
     var tries = 0;
     (function look() {
       var row = document.querySelector('li[data-adid="' + adId + '"]');
@@ -3176,13 +3309,28 @@
         chip("Anzeige nicht gefunden – vielleicht ist sie schon gelöscht.");
         return;
       }
-      row.style.outline = "3px solid #09b0b7";
-      row.style.outlineOffset = "4px";
-      row.style.borderRadius = "12px";
-      var del = buttonNamed(row, /^löschen$/i) || buttonNamed(row, /^mehr$/i);
-      if (del) del.style.animation = "velosia-focus-pulse 1.3s ease-in-out infinite";
-      row.scrollIntoView({ block: "center", behavior: "smooth" });
-      chip(del && /mehr/i.test(del.textContent) ? "Tippe auf „Mehr“ und dann auf „Löschen“." : "Tippe auf „Löschen“.");
+      var del = buttonNamed(row, /^löschen$/i, true);
+      if (!del) {
+        // Layout changed: fall back to pointing at the row.
+        row.style.outline = "3px solid #09b0b7";
+        row.style.outlineOffset = "4px";
+        var more = buttonNamed(row, /^mehr$/i);
+        if (more) more.style.animation = "velosia-focus-pulse 1.3s ease-in-out infinite";
+        row.scrollIntoView({ block: "center", inline: "center" });
+        chip(more ? "Tippe auf „Mehr“ und dann auf „Löschen“." : "Lösch die markierte Anzeige.");
+        return;
+      }
+      del.click(); // opens KA's confirm dialog — nothing is deleted yet
+      var waits = 0;
+      (function awaitDialog() {
+        var dialog = findDialog();
+        if (dialog) return showSheet(dialog, row);
+        if (++waits < 16) return setTimeout(awaitDialog, 200);
+        // No dialog: point at the button instead.
+        del.style.animation = "velosia-focus-pulse 1.3s ease-in-out infinite";
+        del.scrollIntoView({ block: "center", inline: "center" });
+        chip("Tippe auf „Löschen“.");
+      })();
     })();
     return true;
   }

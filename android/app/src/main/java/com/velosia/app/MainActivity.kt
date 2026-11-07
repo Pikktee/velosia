@@ -631,7 +631,7 @@ class MainActivity : AppCompatActivity() {
                 pendingFocusAdId = target?.second
                 Toast.makeText(
                     this@MainActivity,
-                    if (target != null) "Tippe bei der markierten Anzeige auf „Löschen“." else "Anzeige öffnen – du bestätigst das Löschen selbst.",
+                    if (target != null) "Kleinanzeigen wird geöffnet …" else "Anzeige öffnen – du bestätigst das Löschen selbst.",
                     Toast.LENGTH_LONG
                 ).show()
                 webView.loadUrl(target?.first ?: listingUrl)

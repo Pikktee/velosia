@@ -1,5 +1,12 @@
 [
   {
+    "version": "2.7.74",
+    "items": [
+      { "text": "Anzeige auf Kleinanzeigen löschen geht jetzt mit einem Tipp: Velosia fragt direkt „Anzeige löschen?“.", "app": true }
+    ],
+    "fixes": true
+  },
+  {
     "version": "2.7.73",
     "items": [
       { "text": "Anzeige auf Kleinanzeigen löschen: Velosia springt in „Meine Anzeigen“ direkt zu deiner Anzeige und markiert „Löschen“.", "app": true }
