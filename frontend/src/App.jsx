@@ -816,7 +816,9 @@ export default function App() {
                 transition: 'transform 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275), box-shadow 0.2s ease',
                 transform: view === 'capture' || view === 'analyzing' ? 'scale(1.15)' : 'scale(1)'
               }}
-              title="Tippen für neue Aufnahme · Gedrückt halten für Turbo-Modus"
+              title="Neues Angebot: tippen für Foto · gedrückt halten für Turbo-Modus"
+              aria-label="Neues Angebot – Foto aufnehmen"
+              className="camera-fab"
               onMouseEnter={(e) => {
                 e.currentTarget.style.transform = 'scale(1.2)';
                 e.currentTarget.style.boxShadow = '0 10px 25px rgba(9, 176, 183, 0.6)';
@@ -828,6 +830,16 @@ export default function App() {
               }}
             >
               <Camera size={24} />
+              {/* "New listing" cue: a small plus pinned to the button's edge,
+                  hidden while the camera is already open. */}
+              <span
+                className={`camera-fab-plus${view === 'capture' || view === 'analyzing' ? ' is-hidden' : ''}`}
+                aria-hidden="true"
+              >
+                <svg viewBox="0 0 12 12" width="10" height="10">
+                  <path d="M6 1.5v9M1.5 6h9" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" />
+                </svg>
+              </span>
             </button>
           </div>
 

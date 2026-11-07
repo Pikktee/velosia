@@ -4930,3 +4930,32 @@ textarea:focus {
   font-size: 0.85rem;
   color: var(--danger);
 }
+
+/* Plus badge on the centre camera button: says "new listing" while the camera
+   says how. The dark ring matches the button's own border, so the badge looks
+   cut into the edge rather than stuck on top. */
+.camera-fab { position: relative; }
+
+.camera-fab-plus {
+  position: absolute;
+  right: -5px;
+  bottom: -5px;
+  width: 22px;
+  height: 22px;
+  box-sizing: border-box;
+  border-radius: 50%;
+  border: 3px solid #0e121a;
+  background: #f8fafc;
+  color: #077d82;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.35);
+  pointer-events: none;
+  transition: opacity 0.18s ease, transform 0.22s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+.camera-fab-plus.is-hidden {
+  opacity: 0;
+  transform: scale(0.4);
+}
