@@ -43,7 +43,7 @@
   // and in the extension it is a persistent content script — never redefine.
   if (window.__velosia && window.__velosia.__loaded) return;
 
-  var VERSION = "2.7.56";
+  var VERSION = "2.7.63";
   var KA_TITLE_MAX = 65;
 
   // Cut at the last word boundary within `max`; hard cut if that loses too much.
@@ -725,18 +725,66 @@
       return { found: true, ok: sel.value === want.value };
     }
 
-    // 4) New-form picker (button/combobox + listbox), found by its label.
-    var labels = ["Preisart", "Preistyp", "Art des Preises"];
+    // 4) New-form picker: button#ad-price-type[role=combobox] named "Preistyp" via
+    //    aria-labelledby, listbox Festpreis / VB / Zu verschenken, the choice
+    //    mirrored into a hidden input[name=priceType] (FIXED / NEGOTIABLE). Live
+    //    calibrated 2026-11; a plain click on the option commits it.
+    var labels = ["Preistyp", "Preisart", "Art des Preises"];
     var candidates = type === "NEGOTIABLE" ? ["VB", "Verhandlungsbasis"] : ["Festpreis"];
-    for (var m = 0; m < labels.length; m++) {
-      if (!kaFieldControl(labels[m])) continue;
+    var control = document.getElementById("ad-price-type");
+    var label = null;
+    if (!control || !kaVisible(control)) {
+      control = null;
+      for (var m = 0; m < labels.length && !control; m++) {
+        control = kaFieldControl(labels[m]);
+        if (control) label = labels[m];
+      }
+    }
+    if (control) {
       found = true;
-      var picked = false;
-      try { picked = await selectKleinanzeigenAttribute(labels[m], candidates, false); } catch (e) { picked = false; }
-      return { found: true, ok: picked };
+      if (kaPriceTypeSelected(control) === type) return { found: true, ok: true };
+      var opt = await kaOpenAndFind(control, candidates);
+      if (opt) {
+        try { opt.click(); } catch (e) {}
+        await sleep(200);
+        if (kaPriceTypeSelected(control) !== type) {
+          // Mobile React listboxes may commit on pointerdown only.
+          if (control.getAttribute("aria-expanded") !== "true") { try { control.click(); } catch (e) {} await sleep(250); }
+          var again = kaSelectFromPool(candidates, false);
+          if (again) { kaCommitClick(again); await sleep(250); }
+        }
+      }
+      if (control.getAttribute("aria-expanded") === "true") kaCloseOverlay(control);
+      var ok = kaPriceTypeSelected(control) === type;
+      try { console.log("Velosia KA: Preistyp " + type + " -> " + (ok ? "gesetzt" : "nicht gesetzt") + (label ? " (" + label + ")" : "")); } catch (e) {}
+      return { found: true, ok: ok };
     }
 
     return { found: found, ok: false };
+  }
+
+  // Which price type the new-form picker currently holds: the hidden priceType
+  // input first, else the combobox's visible text.
+  function kaPriceTypeSelected(control) {
+    var hidden = document.querySelector("input[name='priceType']");
+    if (hidden && hidden.value) {
+      var v = String(hidden.value).toUpperCase();
+      if (v === "FIXED" || v === "NEGOTIABLE") return v;
+    }
+    var shown = document.getElementById("ad-price-type-selected-option");
+    return kaPriceTypeOf((shown || control || {}).textContent, null);
+  }
+
+  // Open a listbox combobox and wait for an option matching `candidates`.
+  async function kaOpenAndFind(control, candidates) {
+    try { control.scrollIntoView({ block: "center" }); } catch (e) {}
+    if (control.getAttribute("aria-expanded") !== "true") { try { control.click(); } catch (e) {} }
+    for (var i = 0; i < 12; i++) {
+      await sleep(200);
+      var opt = kaSelectFromPool(candidates, false);
+      if (opt) return opt;
+    }
+    return null;
   }
 
   // Kleinanzeigen "Zustand" — Velosia captures the condition, so set it directly
@@ -862,6 +910,17 @@
         row = row.parentElement;
         var ctrl = row.querySelector("button[aria-haspopup='dialog'], [role='combobox'], input[role='combobox']");
         if (ctrl && ctrl !== labels[i] && kaVisible(ctrl)) return ctrl;
+      }
+    }
+    // Some fields have no <label> at all: the field name is a floating <div> the
+    // combobox names via aria-labelledby (e.g. "Preistyp": button#ad-price-type,
+    // aria-labelledby="ad-price-type-selected-option ad-price-type-label").
+    var combos = document.querySelectorAll("[role='combobox'][aria-labelledby]");
+    for (var c = 0; c < combos.length; c++) {
+      var ids = combos[c].getAttribute("aria-labelledby").split(/\s+/);
+      for (var d = 0; d < ids.length; d++) {
+        var named = ids[d] && document.getElementById(ids[d]);
+        if (named && kaLabelKey(named.textContent) === want && kaVisible(combos[c])) return combos[c];
       }
     }
     return null;

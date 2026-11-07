@@ -39,6 +39,40 @@ export default function DraftDetail({ draft, onBack, onUpdateSuccess }) {
   });
   // Edits made on the platform pop up once when the draft is opened.
   const [onlineChange, setOnlineChange] = useState(() => (relist ? null : onlineChanges(draft)[0] || null));
+  // The stored online values are only as fresh as the last status poll (every
+  // 6 h or on "Status aktualisieren"), so an edit made on the platform a moment
+  // ago would stay unnoticed. Re-read the live ads quietly when the draft is
+  // opened and offer what changed — once per opening.
+  const onlineOffered = useRef(!!onlineChange);
+  const formRef = useRef({ title, description, price });
+  formRef.current = { title, description, price };
+  useEffect(() => {
+    if (relist) return undefined;
+    const live = [['ka', draft.ka_listing_url], ['vinted', draft.vinted_listing_url]]
+      .filter(([p, url]) => url && !TERMINAL.has(draft[`${p}_status`]));
+    if (!live.length) return undefined;
+    const ageMs = Math.min(...live.map(([p]) => {
+      const at = draft[`${p}_status_at`];
+      if (!at) return Infinity;
+      const t = Date.parse(/[zZ]|[+-]\d\d:?\d\d$/.test(at) ? at : `${at}Z`);
+      return Number.isNaN(t) ? Infinity : Date.now() - t;
+    }));
+    if (ageMs < 2 * 60 * 1000) return undefined;
+    let cancelled = false;
+    refreshListingStatus(draft.id).then((updated) => {
+      if (cancelled || !updated) return;
+      onUpdateSuccess(updated);
+      if (onlineOffered.current) return;
+      const change = onlineChanges(updated, formRef.current)[0];
+      if (change) {
+        onlineOffered.current = true;
+        setOnlineChange(change);
+      }
+    }).catch((err) => console.warn('Status-Abruf beim Öffnen fehlgeschlagen:', err));
+    return () => { cancelled = true; };
+    // Once per opened draft.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [draft.id]);
   const [showTooltip, setShowTooltip] = useState(false);
   const [startY, setStartY] = useState(0);
   const [currentY, setCurrentY] = useState(0);
