@@ -108,6 +108,28 @@ def check_changelog(version, path=CHANGELOG):
     return f"Kein Eintrag für {version} in {path}."
 
 
+def stamp_changelog_date(version, path=CHANGELOG, today=None):
+    """Give the entry for `version` its release date ("date": "YYYY-MM-DD") unless it
+    has one. The Neuigkeiten page shows and groups releases by it. Text edit, so the
+    hand-kept layout of the file stays as it is. Returns True when it wrote."""
+    import datetime as _dt
+    import re as _re
+    today = today or _dt.date.today().isoformat()
+    try:
+        with open(path, encoding="utf-8") as f:
+            text = f.read()
+    except FileNotFoundError:
+        return False
+    pattern = r'"version":\s*"' + _re.escape(version) + r'"(?!\s*,\s*"date")'
+    new_text, n = _re.subn(pattern, f'"version": "{version}", "date": "{today}"', text, count=1)
+    if not n:
+        return False
+    json.loads(new_text)  # never write a broken file
+    with open(path, "w", encoding="utf-8") as f:
+        f.write(new_text)
+    return True
+
+
 def build_commit_cmd(message):
     """git commit as an argument list — the message is passed verbatim."""
     return ["git", "commit", "-m", message]
@@ -459,6 +481,8 @@ def main():
         sys.exit(1)
     if changelog_error:
         print(f"---> --no-changelog: {changelog_error}\n")
+    elif stamp_changelog_date(new_version):
+        print(f"✔ Release-Datum für {new_version} in {CHANGELOG} eingetragen.")
 
     # Determine commit message
     default_msg = f"Release {new_version}"

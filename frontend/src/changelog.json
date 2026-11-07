@@ -1,49 +1,44 @@
 [
   {
-    "version": "2.7.78",
+    "version": "2.7.79", "date": "2026-11-07",
+    "items": ["Neuigkeiten zeigen jetzt das Datum, alles von einem Tag steht zusammen."]
+  },
+  {
+    "version": "2.7.78", "date": "2026-11-07",
     "items": ["In der Liste siehst du, wie lange ein Angebot online ist. Ab 21 Tagen wird die Zahl gelb."]
   },
   {
-    "version": "2.7.77",
+    "version": "2.7.77", "date": "2026-11-07",
     "items": ["Online geänderte Anzeigen erkennst du schon in der Liste: ein gelber Punkt am Preis."]
   },
-  { "version": "2.7.76", "fixes": true },
+  { "version": "2.7.76", "date": "2026-11-07", "fixes": true },
   {
-    "version": "2.7.75",
+    "version": "2.7.75", "date": "2026-11-07",
     "items": [
       "„Status aktualisieren“ ist deutlich schneller.",
       "Mehrere Angebote löschen geht jetzt sofort, ohne Warten."
     ]
   },
   {
-    "version": "2.7.74",
+    "version": "2.7.74", "date": "2026-11-07",
     "items": [
       { "text": "Anzeige auf Kleinanzeigen löschen geht jetzt mit einem Tipp: Velosia fragt direkt „Anzeige löschen?“.", "app": true }
     ],
     "fixes": true
   },
+  { "version": "2.7.73", "date": "2026-11-07", "fixes": true },
+  { "version": "2.7.72", "date": "2026-11-07", "fixes": true },
   {
-    "version": "2.7.73",
+    "version": "2.7.71", "date": "2026-11-07",
     "items": [
-      { "text": "Anzeige auf Kleinanzeigen löschen: Velosia springt in „Meine Anzeigen“ direkt zu deiner Anzeige und markiert „Löschen“.", "app": true }
-    ],
-    "fixes": true
-  },
-  {
-    "version": "2.7.72",
-    "items": ["„Angebot löschen“ findest du jetzt im Menü ⋮ oben rechts."]
-  },
-  {
-    "version": "2.7.71",
-    "items": [
-      "Angebot löschen direkt in der Angebotsansicht.",
+      "„Angebot löschen“ findest du im Menü ⋮ oben rechts.",
       "Anzeigen auf Kleinanzeigen und Vinted löschst du über „Deine Anzeigen“."
     ]
   },
-  { "version": "2.7.70", "fixes": true },
-  { "version": "2.7.69", "fixes": true },
+  { "version": "2.7.70", "date": "2026-11-07", "fixes": true },
+  { "version": "2.7.69", "date": "2026-11-07", "fixes": true },
   {
-    "version": "2.7.68",
+    "version": "2.7.68", "date": "2026-11-07",
     "items": [
       "Ob dein Angebot online ist, siehst du jetzt oben im Angebot. Ein Tipp auf K oder V öffnet die Anzeige.",
       "Neu einstellen mit Preiswahl: aktuell, −5 % oder −10 %, danach führt Velosia dich in zwei Schritten durch.",
@@ -51,60 +46,60 @@
     ],
     "fixes": true
   },
-  { "version": "2.7.67", "fixes": true },
+  { "version": "2.7.67", "date": "2026-11-07", "fixes": true },
   {
-    "version": "2.7.66",
+    "version": "2.7.66", "date": "2026-11-07",
     "items": [
       "Sachlichere Beschreibungen: Velosia schreibt nur, was auf deinen Fotos zu sehen ist – mit Zustand, sichtbaren Mängeln und Lieferumfang, ohne Werbefloskeln."
     ],
     "fixes": true
   },
-  { "version": "2.7.65", "fixes": true },
+  { "version": "2.7.65", "date": "2026-11-07", "fixes": true },
   {
-    "version": "2.7.64",
+    "version": "2.7.64", "date": "2026-11-07",
     "items": [
       "Mehrere Angebote auf einmal löschen: Halte ein Angebot in der Liste gedrückt, tippe weitere an und lösche sie zusammen.",
       "Deine Angebotsliste ist beim Öffnen sofort da und lädt deutlich schneller."
     ]
   },
-  { "version": "2.7.63", "fixes": true },
+  { "version": "2.7.63", "date": "2026-11-07", "fixes": true },
   {
-    "version": "2.7.62",
+    "version": "2.7.62", "date": "2026-10-27",
     "items": [
       "Auch Titel und Beschreibung: Hast du die Anzeige auf Vinted oder Kleinanzeigen bearbeitet, übernimmst du alle Änderungen mit einem Tipp."
     ]
   },
   {
-    "version": "2.7.61",
+    "version": "2.7.61", "date": "2026-10-27",
     "items": [
       "Hast du den Preis auf Vinted oder Kleinanzeigen geändert, fragt Velosia beim Öffnen des Angebots, ob es den neuen Preis übernehmen soll."
     ],
     "fixes": true
   },
   {
-    "version": "2.7.60",
+    "version": "2.7.60", "date": "2026-10-27",
     "items": [
       "„Neu einstellen“ nimmt die alte Anzeige vorher runter: Velosia öffnet sie zum Löschen und stellt danach neu ein – kein Artikel steht mehr doppelt drin.",
       "Preis auf Vinted oder Kleinanzeigen geändert? Velosia bemerkt es und übernimmt ihn auf Wunsch mit einem Tipp ins Angebot."
     ]
   },
-  { "version": "2.7.59", "fixes": true },
+  { "version": "2.7.59", "date": "2026-10-25", "fixes": true },
   {
-    "version": "2.7.58",
+    "version": "2.7.58", "date": "2026-10-25",
     "items": [
       "Nach jedem Update siehst du hier einmal, was sich geändert hat.",
       { "text": "Beim App-Update siehst du, wie weit der Download ist. Danach reicht ein Tipp auf „Neu starten“.", "app": true }
     ]
   },
   {
-    "version": "2.7.57",
+    "version": "2.7.57", "date": "2026-10-25",
     "items": [
       "Festpreis oder VB: Wähle die Preisart als Vorgabe in den Einstellungen oder für jedes Angebot einzeln. Kleinanzeigen wird passend ausgefüllt."
     ],
     "fixes": true
   },
   {
-    "version": "2.7.56",
+    "version": "2.7.56", "date": "2026-10-21",
     "items": [
       "Lade alle deine Daten als ZIP herunter (Einstellungen → Datenexport).",
       "Datenschutzerklärung, Impressum und Nutzungsbedingungen sind neu und jederzeit in den Einstellungen zu finden."
@@ -112,24 +107,24 @@
     "fixes": true
   },
   {
-    "version": "2.7.55",
+    "version": "2.7.55", "date": "2026-10-21",
     "items": [
       "Fehlerberichte enthalten einen Screenshot nur noch, wenn du ihn ankreuzt."
     ],
     "fixes": true
   },
   {
-    "version": "2.7.54",
+    "version": "2.7.54", "date": "2026-10-20",
     "items": [
       "Titel haben höchstens 65 Zeichen und passen damit immer zu Kleinanzeigen. Der Editor zählt mit."
     ]
   },
-  { "version": "2.7.53", "fixes": true },
-  { "version": "2.7.52", "fixes": true },
-  { "version": "2.7.51", "fixes": true },
-  { "version": "2.7.50", "fixes": true },
+  { "version": "2.7.53", "date": "2026-10-14", "fixes": true },
+  { "version": "2.7.52", "date": "2026-10-09", "fixes": true },
+  { "version": "2.7.51", "date": "2026-10-09", "fixes": true },
+  { "version": "2.7.50", "date": "2026-10-05", "fixes": true },
   {
-    "version": "2.7.49",
+    "version": "2.7.49", "date": "2026-10-04",
     "items": [
       "Fotos lassen sich umsortieren und ein Titelbild festlegen. Die Reihenfolge gilt auch auf Vinted und Kleinanzeigen."
     ],
