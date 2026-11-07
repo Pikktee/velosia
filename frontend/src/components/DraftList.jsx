@@ -2,7 +2,7 @@ import React, { useRef, useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Sparkles, Trash2, ChevronRight, RefreshCw, AlertTriangle, Clock, Coins, X, Check } from 'lucide-react';
 import { getThumbUrl } from '../utils/api';
-import { statusMeta, hasListing, listingPlatforms, draftSection, crossPostConflict, listingAgeDays, STALE_DAYS, platformDeleteUrl, onlineChanges } from '../utils/listingStatus';
+import { statusMeta, hasListing, listingPlatforms, draftSection, crossPostConflict, STALE_DAYS, platformDeleteUrl, onlineChanges, publishedDays, isActive } from '../utils/listingStatus';
 
 // dd.mm for compact list signals.
 const fmtShort = (iso) => {
@@ -767,12 +767,18 @@ function ListingStatusMeta({ draft }) {
       );
     }
   } else if (section === 'active' && !conflict) {
-    const age = listingAgeDays(draft);
-    if (age > STALE_DAYS) {
+    // How long it has been live (the longest-running live platform): quiet grey,
+    // amber once it is old enough that re-listing pays off (STALE_DAYS).
+    const age = Math.max(...platforms.filter((p) => isActive(p.status)).map((p) => publishedDays(draft, p.key)));
+    if (Number.isFinite(age)) {
+      const label = age === 0 ? 'heute' : age === 1 ? '1 Tag' : `${age} Tage`;
       signal = (
-        <span className="listing-meta-signal stale">
+        <span
+          className={`listing-meta-signal age${age >= STALE_DAYS ? ' stale' : ''}`}
+          title={age === 0 ? 'Seit heute online' : `Seit ${label} online`}
+        >
           <Clock size={11} />
-          <span>seit {age} Tagen</span>
+          <span>{label}</span>
         </span>
       );
     }

@@ -4002,7 +4002,10 @@ select.form-control {
   font-size: 0.68rem;
   font-weight: 600;
 }
-.listing-meta-signal.stale { color: var(--warning); }
+.listing-meta-signal.age { color: var(--text-secondary); font-weight: 500; font-variant-numeric: tabular-nums; }
+.listing-meta-signal.age svg { opacity: 0.7; }
+.listing-meta-signal.stale { color: var(--warning); font-weight: 600; }
+.listing-meta-signal.stale svg { opacity: 1; }
 .listing-meta-signal.sold { color: var(--text-muted); }
 
 /* Detail: manual "Als verkauft markieren" (KA has no public sold state) */

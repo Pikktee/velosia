@@ -1,5 +1,9 @@
 [
   {
+    "version": "2.7.78",
+    "items": ["In der Liste siehst du, wie lange ein Angebot online ist. Ab 21 Tagen wird die Zahl gelb."]
+  },
+  {
     "version": "2.7.77",
     "items": ["Online geänderte Anzeigen erkennst du schon in der Liste: ein gelber Punkt am Preis."]
   },
