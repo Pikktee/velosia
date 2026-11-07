@@ -10,6 +10,22 @@ import RelistSheet from './RelistSheet';
 import OnlineChangesSheet from './OnlineChangesSheet';
 import { takePendingRelist, takeRecheck, rememberRecheck } from '../utils/relist';
 
+const SOURCES_SHOWN = 5;
+const RETURN_SPOT_KEY = 'velosia_return_spot';
+
+// Where the user was in this draft before leaving for a platform page (read once).
+function takeReturnSpot(draftId) {
+  try {
+    const raw = localStorage.getItem(RETURN_SPOT_KEY);
+    if (!raw) return null;
+    localStorage.removeItem(RETURN_SPOT_KEY);
+    const m = JSON.parse(raw);
+    return m && m.draftId === draftId && Date.now() - (m.at || 0) < 2 * 60 * 60 * 1000 ? m : null;
+  } catch {
+    return null;
+  }
+}
+
 const ONLINE_FIELD_LABELS = [['price', 'Preis'], ['title', 'Titel'], ['description', 'Beschreibung']];
 
 export default function DraftDetail({ draft, onBack, onUpdateSuccess, onDelete }) {
@@ -39,6 +55,19 @@ export default function DraftDetail({ draft, onBack, onUpdateSuccess, onDelete }
   // Platform whose live ad is being opened — shows a loading ring on its icon
   // until the WebView leaves the page.
   const [opening, setOpening] = useState(null);
+  // Market-comparison list: the first SOURCES_SHOWN, the rest behind „Alle … anzeigen“.
+  // Leaving to a platform page and coming back restores both this and the scroll
+  // position (marker written by rememberReturn).
+  const contentRef = useRef(null);
+  const [returnSpot] = useState(() => takeReturnSpot(draft.id));
+  const [showAllSources, setShowAllSources] = useState(!!returnSpot?.allSources);
+  useEffect(() => {
+    if (!returnSpot?.y) return undefined;
+    const go = () => { if (contentRef.current) contentRef.current.scrollTop = returnSpot.y; };
+    const raf = requestAnimationFrame(go);
+    const t = setTimeout(go, 350); // once the photos have their height
+    return () => { cancelAnimationFrame(raf); clearTimeout(t); };
+  }, [returnSpot]);
   const openingTimer = useRef(null);
   useEffect(() => () => clearTimeout(openingTimer.current), []);
   // Re-listing (RelistSheet). Resumed when we come back from deleting the old ad
@@ -344,11 +373,21 @@ export default function DraftDetail({ draft, onBack, onUpdateSuccess, onDelete }
   // draft — Close (X) and the back gesture then return to its detail view instead of
   // the list (App.jsx reads the marker on remount). Feedback: a short vibration and
   // a loading ring, since the platform page takes a moment to start.
+  // Leaving for a platform page in the app's own WebView: come back to this draft,
+  // at this scroll position (App.jsx and takeReturnSpot read the markers).
+  const rememberReturn = () => {
+    if (!isAndroidApp) return;
+    try {
+      localStorage.setItem('velosia_return_draft', String(draft.id));
+      localStorage.setItem(RETURN_SPOT_KEY, JSON.stringify({
+        draftId: draft.id, y: contentRef.current?.scrollTop || 0, allSources: showAllSources, at: Date.now(),
+      }));
+    } catch { /* ignore */ }
+    try { navigator.vibrate?.(12); } catch { /* ignore */ }
+  };
+
   const openListing = (p) => {
-    if (isAndroidApp) {
-      try { localStorage.setItem('velosia_return_draft', String(draft.id)); } catch { /* ignore */ }
-      try { navigator.vibrate?.(12); } catch { /* ignore */ }
-    }
+    rememberReturn();
     setOpening(p.key);
     clearTimeout(openingTimer.current);
     openingTimer.current = setTimeout(() => setOpening(null), isAndroidApp ? 10000 : 1200);
@@ -803,12 +842,13 @@ export default function DraftDetail({ draft, onBack, onUpdateSuccess, onDelete }
         )}
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
-          {parsedSources.map((src, idx) => (
+          {(showAllSources ? parsedSources : parsedSources.slice(0, SOURCES_SHOWN)).map((src, idx) => (
             <a 
               key={idx}
               href={src.url}
               target="_blank"
               rel="noopener noreferrer"
+              onClick={rememberReturn}
               className="price-comparison-link"
               style={{
                 display: 'flex',
@@ -838,6 +878,12 @@ export default function DraftDetail({ draft, onBack, onUpdateSuccess, onDelete }
               </span>
             </a>
           ))}
+          {parsedSources.length > SOURCES_SHOWN && (
+            <button type="button" className="sources-toggle" onClick={() => setShowAllSources((v) => !v)}>
+              {showAllSources ? 'Weniger anzeigen' : `Alle ${parsedSources.length} anzeigen`}
+              <ChevronDown size={16} style={{ transform: showAllSources ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s ease' }} />
+            </button>
+          )}
         </div>
       </div>
     );
@@ -1160,7 +1206,7 @@ export default function DraftDetail({ draft, onBack, onUpdateSuccess, onDelete }
       {/* Content Container — single scroll surface, no tabs. The status section
           renders only once the item is published; the desktop publishing assist
           (copy panel + extension tip) replaces the in-app sticky bar below. */}
-      <div className="detail-content-container">
+      <div className="detail-content-container" ref={contentRef}>
         <div className="draft-detail-grid fade-in">
           {renderFormFields()}
           {renderImageBox()}
