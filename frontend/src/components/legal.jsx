@@ -84,14 +84,15 @@ export function KontoLoeschenContent() {
       <h3 style={h3}>Variante 1: Direkt in der App (sofort)</h3>
       <ol style={ol}>
         <li>In der Velosia-App anmelden.</li>
-        <li>In der Navigationsleiste unten auf <strong>„Profil“</strong> tippen.</li>
-        <li>Ganz unten im <strong>Gefahrenbereich</strong> auf <strong>„Account löschen“</strong> tippen.</li>
+        <li>In der Navigationsleiste unten auf <strong>„Einstellungen“</strong> tippen.</li>
+        <li>Oben auf deine E-Mail-Adresse tippen (Konto).</li>
+        <li>Ganz unten auf <strong>„Account löschen“</strong> tippen.</li>
         <li>Mit <strong>„Ja, löschen“</strong> bestätigen.</li>
       </ol>
       <p style={{ marginBottom: '1.5rem' }}>
         Dein Konto und alle Daten werden dabei <strong>sofort und unwiderruflich</strong> gelöscht.
-        Möchtest du vorher eine Kopie, lade sie unter Profil → <strong>„Deine Daten“</strong> →{' '}
-        <strong>„Meine Daten exportieren“</strong> herunter.
+        Möchtest du vorher eine Kopie, lade sie unter Einstellungen → Konto →{' '}
+        <strong>„Daten exportieren (ZIP)“</strong> herunter.
       </p>
 
       <h3 style={h3}>Variante 2: Per E-Mail</h3>
@@ -258,7 +259,7 @@ export function DatenschutzContent() {
         <Steckbrief
           zweck="Konto anlegen, Anmeldung, deine Angebote und Einstellungen deinem Konto zuordnen, Tageskontingent."
           grundlage="Art. 6 Abs. 1 lit. b DSGVO (Nutzungsvertrag). Kostenübersicht und Sperrvermerk: Art. 6 Abs. 1 lit. f DSGVO (Kostenkontrolle, Schutz vor Missbrauch)."
-          dauer="Bis du dein Konto löschst. Das geht jederzeit selbst unter Profil → Gefahrenbereich → „Account löschen“ und wirkt sofort."
+          dauer="Bis du dein Konto löschst. Das geht jederzeit selbst unter Einstellungen → Konto → „Account löschen“ und wirkt sofort."
           empfaenger="Railway (Hosting). Bei der Anmeldung über Google: Google."
         />
         <p style={p}>
@@ -674,8 +675,8 @@ export function DatenschutzContent() {
           <li>Widerspruch gegen die Verarbeitung (Art. 21 DSGVO, siehe unten).</li>
         </ul>
         <p style={p}>
-          <strong>Kopie deiner Daten:</strong> Unter Profil → „Deine Daten“ → „Meine Daten
-          exportieren“ → „Herunterladen“ erhältst du eine ZIP-Datei mit allem, was Velosia zu deinem
+          <strong>Kopie deiner Daten:</strong> Unter Einstellungen → Konto → „Daten
+          exportieren (ZIP)“ → „Herunterladen“ erhältst du eine ZIP-Datei mit allem, was Velosia zu deinem
           Konto speichert (Art. 15 Abs. 3 und Art. 20 DSGVO): deine Daten in maschinenlesbarer Form
           (JSON – Konto und Einstellungen ohne Passwort, Angebote, Fehlerberichte, Eintrag in der
           Warteliste, Funktions-Telemetrie), die Fotos deiner Angebote, die Bildschirmfotos deiner
@@ -683,7 +684,7 @@ export function DatenschutzContent() {
           10 Minuten; in der Android-App öffnet er sich in deinem Browser.
         </p>
         <p style={p}>
-          Dein Konto mit allen Daten kannst du jederzeit selbst löschen (Profil → Gefahrenbereich →
+          Dein Konto mit allen Daten kannst du jederzeit selbst löschen (Einstellungen → Konto →
           „Account löschen“); Einstellungen und Angebote kannst du in der App selbst ändern. Für
           alles andere genügt eine E-Mail an mail@henrikheil.net.
         </p>
@@ -821,7 +822,7 @@ export function NutzungsbedingungenContent() {
         <h3 style={h3}>8. Konto beenden und Sperrung</h3>
         <p style={p}>
           Du kannst dein Konto jederzeit in der App löschen; damit endet die Nutzung. Vorher kannst
-          du unter Profil → „Deine Daten“ eine Kopie deiner Daten herunterladen. Verstößt du
+          du unter Einstellungen → Konto eine Kopie deiner Daten herunterladen. Verstößt du
           gegen diese Bedingungen, können wir dein Konto sperren oder löschen. Wir können Velosia
           einstellen; wir kündigen das vorher in der App an.
         </p>

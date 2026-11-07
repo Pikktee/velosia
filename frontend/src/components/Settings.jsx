@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { User, LogOut, Trash2, AlertTriangle, Save, HelpCircle, Check, Shield, Sparkles, Euro, MapPin, Sliders, Zap, Users, ClipboardList, Bug, ChevronRight, RefreshCw, AlertCircle, KeyRound } from 'lucide-react';
+import { User, LogOut, ArrowLeft, Newspaper, Trash2, AlertTriangle, Save, HelpCircle, Check, Shield, Sparkles, Euro, MapPin, Sliders, Zap, Users, ClipboardList, Bug, ChevronRight, RefreshCw, AlertCircle, KeyRound } from 'lucide-react';
 import { deleteUserAccount, updateMe, setPassword as setAccountPassword } from '../utils/api';
 import DataExportSection from './DataExport';
 import SalesOverview from './SalesOverview';
@@ -139,6 +139,13 @@ function PasswordSection() {
 }
 
 export default function Settings({ user, drafts = [], onLogout, onUpdateUser, onShowBugReport }) {
+  // 'main' = the settings; 'account' = Konto (reached via the account row on top).
+  const [page, setPage] = useState('main');
+  useEffect(() => {
+    if (page !== 'account') return undefined;
+    window.__velosiaSettingsBack = () => { setPage('main'); return true; };
+    return () => { delete window.__velosiaSettingsBack; };
+  }, [page]);
   const [showConfirm, setShowConfirm] = useState(false);
   // Legal text shown in the overlay (datenschutz | nutzungsbedingungen | impressum), or null.
   const [legalDoc, setLegalDoc] = useState(null);
@@ -353,7 +360,16 @@ export default function Settings({ user, drafts = [], onLogout, onUpdateUser, on
       <div className="app-sticky-header">
         <div className="app-header-inner">
           <div className="app-header-bar" style={{ justifyContent: 'space-between' }}>
-            <h2 className="app-header-title">Profil &amp; Einstellungen</h2>
+            {page === 'account' ? (
+              <h2 className="app-header-title" style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                <button type="button" className="select-bar-icon" style={{ marginLeft: '-0.6rem' }} onClick={() => setPage('main')} aria-label="Zurück zu den Einstellungen">
+                  <ArrowLeft size={22} />
+                </button>
+                Konto
+              </h2>
+            ) : (
+              <h2 className="app-header-title">Einstellungen</h2>
+            )}
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.85rem', color: 'var(--text-muted)', fontWeight: '500' }}>
               {saving && (
                 <>
@@ -380,6 +396,86 @@ export default function Settings({ user, drafts = [], onLogout, onUpdateUser, on
 
       <div className="app-content-container" style={{ paddingBottom: 'calc(85px + env(safe-area-inset-bottom, 0px))' }}>
         <div className="profile-container" style={{ padding: 0 }}>
+          {page === 'account' ? (
+            <div className="settings-account-page">
+              <div className="profile-header-info">
+                <div className="profile-avatar-wrapper">
+                  <User size={26} />
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.2rem', minWidth: 0, flex: 1 }}>
+                  <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.08em', fontWeight: 'bold' }}>Eingeloggt als</span>
+                  <span style={{ fontSize: '1.15rem', fontWeight: '700', color: 'var(--text-primary)', wordBreak: 'break-all', fontFamily: 'var(--font-title)' }}>{user.email}</span>
+                </div>
+              </div>
+              <PasswordSection />
+              <DataExportSection />
+              <button type="button" onClick={onLogout} className="settings-row">
+                <LogOut size={18} style={{ color: 'var(--primary)' }} />
+                <span>Abmelden</span>
+              </button>
+              {/* Danger Zone */}
+              <div className="detail-section-unboxed" style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem', marginTop: '1rem' }}>
+                <h3 className="detail-section-title" style={{ margin: 0 }}>
+                  <AlertTriangle size={18} style={{ color: 'var(--primary)' }} />
+                  <span>Gefahrenbereich</span>
+                </h3>
+                
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                  {showConfirm ? (
+                    <div className="danger-alert-box fade-in" style={{ padding: '1rem', display: 'flex', flexDirection: 'column', gap: '0.75rem', margin: 0 }}>
+                      <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', color: '#fca5a5', fontSize: '0.9rem', fontWeight: '600' }}>
+                        <AlertTriangle size={18} />
+                        <span>Account wirklich löschen?</span>
+                      </div>
+                      <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', margin: 0, lineHeight: '1.4' }}>
+                        Löscht dein Konto und alle Angebote unwiderruflich.
+                      </p>
+                      <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.25rem' }}>
+                        <button
+                          type="button"
+                          onClick={handleDeleteAccount}
+                          disabled={deleting}
+                          className="btn btn-danger"
+                          style={{ flex: 1, padding: '0.4rem 0.8rem', minHeight: '38px', fontSize: '0.85rem' }}
+                        >
+                          {deleting ? 'Löscht...' : 'Ja, löschen'}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setShowConfirm(false)}
+                          disabled={deleting}
+                          className="btn btn-secondary"
+                          style={{ flex: 1, padding: '0.4rem 0.8rem', minHeight: '38px', fontSize: '0.85rem' }}
+                        >
+                          Abbrechen
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => setShowConfirm(true)}
+                      className="btn btn-danger"
+                      style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem', minHeight: '44px' }}
+                    >
+                      <Trash2 size={18} />
+                      Account löschen
+                    </button>
+                  )}
+                </div>
+              </div>
+
+            </div>
+          ) : (
+          <>
+          <button type="button" className="settings-account-row" onClick={() => setPage('account')}>
+            <span className="profile-avatar-wrapper" aria-hidden="true"><User size={22} /></span>
+            <span className="settings-account-text">
+              <strong>{user.email}</strong>
+              <span>Konto, Passwort, Daten</span>
+            </span>
+            <ChevronRight size={18} style={{ opacity: 0.5 }} />
+          </button>
           {/* Settings Form wrapped around a 2-column grid */}
           <form onSubmit={handleSave}>
           <div className="draft-detail-grid">
@@ -597,57 +693,26 @@ export default function Settings({ user, drafts = [], onLogout, onUpdateUser, on
 
               <SalesOverview drafts={drafts} />
 
-
-              {/* Section: Profil & Sitzung */}
-              <div className="detail-section-unboxed" style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
-                <h3 className="detail-section-title" style={{ margin: 0 }}>
-                  <User size={18} style={{ color: 'var(--primary)' }} />
-                  <span>Konto</span>
-                </h3>
-                
-                <div className="profile-header-info" style={{ marginBottom: '0.25rem' }}>
-                  <div className="profile-avatar-wrapper">
-                    <User size={26} />
-                  </div>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.2rem', minWidth: 0, flex: 1 }}>
-                    <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.08em', fontWeight: 'bold' }}>Eingeloggt als</span>
-                    <span style={{ fontSize: '1.15rem', fontWeight: '700', color: 'var(--text-primary)', wordBreak: 'break-all', fontFamily: 'var(--font-title)' }}>{user.email}</span>
-                  </div>
-                </div>
-
-                <PasswordSection />
-
-                <button
-                  type="button"
-                  onClick={onLogout}
-                  className="btn btn-secondary"
-                  style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem', borderColor: 'var(--glass-border)', minHeight: '44px' }}
-                >
-                  <LogOut size={18} />
-                  Abmelden
-                </button>
-              </div>
-
-              {/* Section: Hilfe & Daten */}
-              <div className="detail-section-unboxed" style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+              {/* Section: Hilfe */}
+              <div className="detail-section-unboxed" style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
                 <h3 className="detail-section-title" style={{ margin: 0 }}>
                   <HelpCircle size={18} style={{ color: 'var(--primary)' }} />
-                  <span>Hilfe &amp; Daten</span>
+                  <span>Hilfe</span>
                 </h3>
-                <button
-                  type="button"
-                  onClick={onShowBugReport}
-                  className="btn btn-secondary"
-                  style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem', borderColor: 'var(--glass-border)', minHeight: '44px', background: 'rgba(255, 255, 255, 0.03)' }}
-                >
-                  <HelpCircle size={18} style={{ color: 'var(--primary)' }} />
-                  Problem melden
+                <button type="button" className="settings-row" onClick={onShowBugReport}>
+                  <Bug size={18} style={{ color: 'var(--primary)' }} />
+                  <span>Problem melden</span>
+                  <ChevronRight size={16} style={{ opacity: 0.4, marginLeft: 'auto' }} />
                 </button>
-
-                <DataExportSection />
+                <a className="settings-row" href="#/neuigkeiten">
+                  <Newspaper size={18} style={{ color: 'var(--primary)' }} />
+                  <span>Neuigkeiten</span>
+                  <ChevronRight size={16} style={{ opacity: 0.4, marginLeft: 'auto' }} />
+                </a>
               </div>
 
-              
+
+
               {/* Error display */}
               {error && (
                 <div style={{ marginTop: '0.5rem' }}>
@@ -689,68 +754,17 @@ export default function Settings({ user, drafts = [], onLogout, onUpdateUser, on
                 </div>
               )}
 
-              {/* Danger Zone */}
-              <div className="detail-section-unboxed" style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem', marginTop: '0.5rem' }}>
-                <h3 className="detail-section-title" style={{ margin: 0 }}>
-                  <AlertTriangle size={18} style={{ color: 'var(--primary)' }} />
-                  <span>Gefahrenbereich</span>
-                </h3>
-                
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                  {showConfirm ? (
-                    <div className="danger-alert-box fade-in" style={{ padding: '1rem', display: 'flex', flexDirection: 'column', gap: '0.75rem', margin: 0 }}>
-                      <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', color: '#fca5a5', fontSize: '0.9rem', fontWeight: '600' }}>
-                        <AlertTriangle size={18} />
-                        <span>Account wirklich löschen?</span>
-                      </div>
-                      <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', margin: 0, lineHeight: '1.4' }}>
-                        Löscht dein Konto und alle Angebote unwiderruflich.
-                      </p>
-                      <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.25rem' }}>
-                        <button
-                          type="button"
-                          onClick={handleDeleteAccount}
-                          disabled={deleting}
-                          className="btn btn-danger"
-                          style={{ flex: 1, padding: '0.4rem 0.8rem', minHeight: '38px', fontSize: '0.85rem' }}
-                        >
-                          {deleting ? 'Löscht...' : 'Ja, löschen'}
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setShowConfirm(false)}
-                          disabled={deleting}
-                          className="btn btn-secondary"
-                          style={{ flex: 1, padding: '0.4rem 0.8rem', minHeight: '38px', fontSize: '0.85rem' }}
-                        >
-                          Abbrechen
-                        </button>
-                      </div>
-                    </div>
-                  ) : (
-                    <button
-                      type="button"
-                      onClick={() => setShowConfirm(true)}
-                      className="btn btn-danger"
-                      style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem', minHeight: '44px' }}
-                    >
-                      <Trash2 size={18} />
-                      Account löschen
-                    </button>
-                  )}
-                </div>
-              </div>
-
             </div>
 
           </div>
         </form>
+          </>
+          )}
 
 
 
         <div style={{ marginTop: '2.5rem', textAlign: 'center', color: 'var(--text-muted)', fontSize: '0.75rem', letterSpacing: '0.05em', fontFamily: 'var(--font-body)' }}>
-          Velosia App v{version} ·{' '}
-          <a href="#/neuigkeiten" style={{ color: 'var(--text-secondary)', letterSpacing: 'normal' }}>Neuigkeiten</a>
+          Velosia App v{version}
           <LegalLinks onOpen={setLegalDoc} style={{ marginTop: '0.5rem', letterSpacing: 'normal' }} />
         </div>
         {legalDoc && <LegalModal doc={legalDoc} onClose={() => setLegalDoc(null)} />}

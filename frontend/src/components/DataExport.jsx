@@ -64,15 +64,9 @@ export default function DataExportSection() {
           </p>
         </>
       ) : (
-        <button
-          type="button"
-          onClick={prepare}
-          disabled={busy}
-          className="btn btn-secondary"
-          style={{ ...buttonStyle, borderColor: 'var(--glass-border)' }}
-        >
-          <Download size={18} />
-          {busy ? 'Wird vorbereitet …' : 'Daten exportieren (ZIP)'}
+        <button type="button" onClick={prepare} disabled={busy} className="settings-row">
+          <Download size={18} style={{ color: 'var(--primary)' }} />
+          <span>{busy ? 'Wird vorbereitet …' : 'Daten exportieren (ZIP)'}</span>
         </button>
       )}
       {error && (

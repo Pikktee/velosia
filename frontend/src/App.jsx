@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { readDraftCache, writeDraftCache, clearDraftCache } from './utils/draftCache';
-import { Camera, FolderHeart, Sparkles, User, Cloud, HelpCircle, Rocket } from 'lucide-react';
+import { Camera, FolderHeart, Sparkles, Settings as SettingsIcon, Cloud, HelpCircle, Rocket } from 'lucide-react';
 import CameraCapture from './components/CameraCapture';
 import DraftList from './components/DraftList';
 import DraftDetail from './components/DraftDetail';
@@ -150,6 +150,8 @@ export default function App() {
         fetchDrafts();
         return true;
       } else if (view === 'settings') {
+        // The Konto page goes back to the settings first.
+        if (window.__velosiaSettingsBack && window.__velosiaSettingsBack()) return true;
         setView('list');
         return true;
       }
@@ -891,13 +893,13 @@ export default function App() {
             </button>
           </div>
 
-          {/* Right: Profil */}
+          {/* Right: Einstellungen */}
           <button
             onClick={() => setView('settings')}
             className={`nav-tab-btn ${view === 'settings' ? 'active' : ''}`}
           >
-            <User size={20} />
-            <span>Profil</span>
+            <SettingsIcon size={20} />
+            <span>Einstellungen</span>
           </button>
         </nav>
       )}

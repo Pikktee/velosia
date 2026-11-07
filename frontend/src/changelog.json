@@ -1,4 +1,8 @@
 [
+  {
+    "version": "2.7.85", "date": "2026-11-08",
+    "items": ["„Profil“ heißt jetzt „Einstellungen“. Passwort, Datenexport und Abmelden findest du oben über deine E-Mail."]
+  },
   { "version": "2.7.84", "date": "2026-11-07", "fixes": true },
   { "version": "2.7.83", "date": "2026-11-07", "fixes": true },
   {

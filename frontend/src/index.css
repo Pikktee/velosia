@@ -5548,3 +5548,33 @@ button.detail-header-titles:active { background: rgba(255, 255, 255, 0.05); }
   cursor: pointer;
 }
 .settings-row:active { background: rgba(255, 255, 255, 0.06); }
+
+/* Einstellungen: Kontozeile oben + Kontoseite (V2.7.85) */
+.settings-account-row {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+  padding: 0.85rem 1rem;
+  margin-bottom: 1.5rem;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--glass-border);
+  background: rgba(25, 30, 42, 0.5);
+  color: var(--text-primary);
+  text-align: left;
+  cursor: pointer;
+}
+.settings-account-row:active { background: rgba(255, 255, 255, 0.06); }
+.settings-account-row .profile-avatar-wrapper { width: 44px; height: 44px; flex-shrink: 0; }
+.settings-account-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 0.15rem; }
+.settings-account-text strong {
+  font-family: var(--font-title);
+  font-size: 1.02rem;
+  font-weight: 700;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.settings-account-text span { font-size: 0.8rem; color: var(--text-secondary); }
+a.settings-row { text-decoration: none; }
+.settings-account-page { display: flex; flex-direction: column; gap: 0.85rem; max-width: 560px; margin: 0 auto; }
