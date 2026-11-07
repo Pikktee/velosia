@@ -44,8 +44,8 @@ android {
         applicationId "com.velosia.app"
         minSdk 26
         targetSdk 36
-        versionCode 234
-        versionName "2.7.64"
+        versionCode 235
+        versionName "2.7.65"
 
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
     }

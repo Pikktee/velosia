@@ -44,8 +44,6 @@ export default function DraftList({ drafts, isLoading, loadError = false, onRetr
     });
   };
   const clearSelection = () => setSelected(new Set());
-  const allSelected = selecting && drafts.every((d) => selected.has(d.id));
-  const selectAll = () => setSelected(allSelected ? new Set() : new Set(drafts.map((d) => d.id)));
 
   // Android back leaves selection mode first (App's onAndroidBack asks here).
   useEffect(() => {
@@ -282,23 +280,23 @@ export default function DraftList({ drafts, isLoading, loadError = false, onRetr
         <RefreshCw size={16} />
       </div>
 
-      <div className="app-sticky-header">
+      <div className={`app-sticky-header${selecting ? ' is-selecting' : ''}`}>
         <div className="app-header-inner">
           {selecting ? (
           <div className="app-header-bar select-bar" role="toolbar" aria-label="Auswahl">
-            <button className="select-bar-btn icon" onClick={clearSelection} aria-label="Auswahl beenden" title="Auswahl beenden">
-              <X size={18} />
+            <button className="select-bar-icon" onClick={clearSelection} aria-label="Auswahl beenden" title="Auswahl beenden">
+              <X size={22} strokeWidth={2} />
             </button>
-            <span className="select-bar-count" aria-live="polite">{selected.size} ausgewählt</span>
-            <button className="select-bar-btn" onClick={selectAll}>
-              {allSelected ? 'Keine' : 'Alle'}
-            </button>
+            <span className="select-bar-count" aria-live="polite">
+              <span key={selected.size} className="select-bar-num">{selected.size}</span> ausgewählt
+            </span>
             <button
-              className="select-bar-btn danger"
+              className="select-bar-icon danger"
               onClick={() => { setBulkError(null); setConfirmBulk(true); }}
-              aria-label={`${selected.size} löschen`}
+              aria-label={`${selected.size} ${selected.size === 1 ? 'Angebot' : 'Angebote'} löschen`}
+              title="Löschen"
             >
-              <Trash2 size={16} /> Löschen
+              <Trash2 size={21} strokeWidth={2} />
             </button>
           </div>
           ) : (
