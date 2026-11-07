@@ -64,10 +64,16 @@ def parse_listing_url(platform: str, url) -> Optional[Tuple[str, str]]:
 
 def canonical_url_for_id(platform: str, listing_id: Optional[str]) -> Optional[str]:
     """Listing URL built from the id alone. Vinted resolves /items/<id> (the
-    engine builds the same form itself). Kleinanzeigen needs the slug, so no URL
-    is invented there."""
-    if platform == VINTED and listing_id:
+    engine builds the same form itself); Kleinanzeigen serves the ad page under
+    the short form /s-anzeige/<id> as well (checked live 2026-11: HTTP 200, the
+    same page incl. its status veils), so id-only captures stay openable and
+    pollable."""
+    if not listing_id:
+        return None
+    if platform == VINTED:
         return f"https://www.vinted.de/items/{listing_id}"
+    if platform == KLEINANZEIGEN:
+        return f"https://www.kleinanzeigen.de/s-anzeige/{listing_id}"
     return None
 
 

@@ -1,4 +1,13 @@
 [
+  {
+    "version": "2.7.68",
+    "items": [
+      "Ob dein Angebot online ist, siehst du jetzt oben im Angebot. Ein Tipp auf K oder V öffnet die Anzeige.",
+      "Neu einstellen mit Preiswahl: aktuell, −5 % oder −10 %, danach führt Velosia dich in zwei Schritten durch.",
+      "Alle Neuigkeiten auf einer Seite, zu finden in den Einstellungen."
+    ],
+    "fixes": true
+  },
   { "version": "2.7.67", "fixes": true },
   {
     "version": "2.7.66",

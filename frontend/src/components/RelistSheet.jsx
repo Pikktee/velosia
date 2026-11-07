@@ -1,27 +1,37 @@
 import { useState, useEffect } from 'react';
-import { createPortal } from 'react-dom';
-import { X, Trash2, RefreshCw, Upload, AlertTriangle, CheckCircle2 } from 'lucide-react';
+import { RefreshCw, Check } from 'lucide-react';
 import { refreshListingStatus } from '../utils/api';
-import { listingPlatforms } from '../utils/listingStatus';
-import { RELIST_KEY, PLATFORM_NAMES } from '../utils/relist';
+import { listingPlatforms, isActive, relistPriceOptions } from '../utils/listingStatus';
+import { PLATFORM_NAMES, rememberRelist } from '../utils/relist';
+import Sheet from './Sheet';
 
-// "Neu einstellen" for an ad that is still live: first take the old ad down,
-// then publish again, so the item is never listed twice. The take-down is
-// semi-manual like the cross-post sync — we open the old ad in the WebView and
-// the user confirms the deletion himself. Back here we check the public page
-// before offering the new listing.
-export default function RelistSheet({ draft, platform, resumed, onPublish, onUpdate, onClose }) {
+// "Neu einstellen": optionally lower the price, take a still-live ad down first
+// (so the item is never listed twice), then publish again. The take-down is
+// semi-manual like the cross-post sync — the old ad opens in the WebView and the
+// user confirms the deletion himself. Back here we check the public page before
+// offering the new listing. A sold/deleted ad skips straight to publishing.
+export default function RelistSheet({ draft, platform, resumed, initialPrice, onPublish, onUpdate, onClose }) {
   const name = PLATFORM_NAMES[platform];
-  // 'delete' → ask to remove the old ad; 'checking' / 'deleted' / 'live' / 'error'
-  // → back from the platform, verifying the old ad is gone.
-  const [phase, setPhase] = useState(resumed ? 'checking' : 'delete');
+  const listing = listingPlatforms(draft).find((x) => x.key === platform);
+  const needsDelete = !!listing && isActive(listing.status);
+  const options = relistPriceOptions(draft.price);
+  const [price, setPrice] = useState(() => {
+    if (initialPrice != null) return initialPrice;
+    return options[0]?.value ?? null;
+  });
+  // 'delete' → old ad still to remove; 'checking' / 'live' / 'error' → back from
+  // the platform, verifying; 'ready' → publish.
+  const [phase, setPhase] = useState(() => {
+    if (!needsDelete) return 'ready';
+    return resumed ? 'checking' : 'delete';
+  });
 
   const verify = async () => {
     try {
       const updated = await refreshListingStatus(draft.id);
       onUpdate(updated);
       const p = listingPlatforms(updated).find((x) => x.key === platform);
-      if (!p || p.status === 'geloescht') setPhase('deleted');
+      if (!p || p.status === 'geloescht') setPhase('ready');
       else if (p.status === 'unbekannt') setPhase('error'); // page couldn't be read
       else setPhase('live');
     } catch (err) {
@@ -30,25 +40,17 @@ export default function RelistSheet({ draft, platform, resumed, onPublish, onUpd
     }
   };
 
-  const check = () => {
-    setPhase('checking');
-    verify();
-  };
-
   useEffect(() => {
-    if (resumed) verify();
+    if (resumed && needsDelete) verify();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const handleDelete = () => {
-    const live = listingPlatforms(draft).find((x) => x.key === platform);
-    const url = live?.url || '';
+    const url = listing?.url || '';
     const bridge = typeof window !== 'undefined' ? window.VelosiaBridge : null;
     if (bridge && typeof bridge.deleteOnPlatform === 'function') {
-      try {
-        localStorage.setItem(RELIST_KEY, JSON.stringify({ draftId: draft.id, platform, at: Date.now() }));
-        localStorage.setItem('velosia_return_draft', String(draft.id));
-      } catch (e) { /* ignore */ }
+      rememberRelist(draft.id, platform, price);
+      try { localStorage.setItem('velosia_return_draft', String(draft.id)); } catch { /* ignore */ }
       bridge.deleteOnPlatform(draft.id, platform, url, '');
     } else if (url) {
       // No navigation away from here, so the sheet simply waits for the user.
@@ -59,87 +61,71 @@ export default function RelistSheet({ draft, platform, resumed, onPublish, onUpd
 
   const publish = () => {
     onClose();
-    onPublish();
+    onPublish(price);
   };
 
-  let body;
-  if (phase === 'delete') {
-    body = (
-      <>
-        <div className="sync-sheet-warn">
-          <AlertTriangle size={17} />
-          <p>Die alte Anzeige ist auf <strong>{name} noch online</strong>. Lösch sie zuerst, sonst steht der Artikel doppelt drin.</p>
-        </div>
-        <button className="btn btn-primary sync-sheet-btn" onClick={handleDelete}>
-          <Trash2 size={16} /> Alte Anzeige öffnen &amp; löschen
-        </button>
-        <button className="btn sync-sheet-keep" onClick={publish}>
-          Ohne Löschen neu einstellen
-        </button>
-        <p className="sync-sheet-note">
-          Du bestätigst das Löschen selbst auf {name}. Danach geht es hier weiter.
-        </p>
-      </>
-    );
-  } else if (phase === 'checking') {
-    body = (
-      <p className="relist-checking">
-        <RefreshCw size={15} className="spin" /> Prüfe, ob die alte Anzeige weg ist …
-      </p>
-    );
-  } else if (phase === 'deleted') {
-    body = (
-      <>
-        <p className="relist-ok"><CheckCircle2 size={17} /> Die alte Anzeige ist gelöscht.</p>
-        <button className="btn btn-primary sync-sheet-btn" onClick={publish}>
-          <Upload size={16} /> Jetzt neu einstellen
-        </button>
-      </>
-    );
-  } else if (phase === 'live') {
-    body = (
-      <>
-        <div className="sync-sheet-warn">
-          <AlertTriangle size={17} />
-          <p>Die alte Anzeige ist auf <strong>{name} noch online</strong>.</p>
-        </div>
-        <button className="btn btn-primary sync-sheet-btn" onClick={handleDelete}>
-          <Trash2 size={16} /> Nochmal öffnen &amp; löschen
-        </button>
-        <button className="btn sync-sheet-keep" onClick={publish}>
-          Trotzdem neu einstellen
-        </button>
-      </>
-    );
-  } else {
-    body = (
-      <>
-        <p className="relist-checking">Hast du die alte Anzeige gelöscht?</p>
-        <button className="btn btn-primary sync-sheet-btn" onClick={check}>
-          <RefreshCw size={16} /> Prüfen
-        </button>
-        <button className="btn sync-sheet-keep" onClick={publish}>
-          Neu einstellen
-        </button>
-      </>
-    );
-  }
+  const check = () => {
+    setPhase('checking');
+    verify();
+  };
 
-  return createPortal(
-    <div className="sync-sheet-overlay" onClick={onClose}>
-      <div className="sync-sheet" onClick={(e) => e.stopPropagation()}>
-        <button className="sync-sheet-x" onClick={onClose} aria-label="Schließen"><X size={18} /></button>
-        <div className="sync-sheet-handle" />
-        <div className="sync-sheet-head">
-          <div className="sync-sheet-icon"><RefreshCw size={22} /></div>
-          <div>
-            <h3>Auf {name} neu einstellen</h3>
-            <p>{draft.title || 'Angebot'}{draft.price != null ? ` · ${Math.round(draft.price)} €` : ''}</p>
+  const deleted = phase === 'ready';
+  let stepSub = `auf ${name}`;
+  if (phase === 'checking') stepSub = 'wird geprüft …';
+  else if (phase === 'live') stepSub = `noch online auf ${name}`;
+  else if (phase === 'error') stepSub = 'Gelöscht? Dann prüfen.';
+
+  let cta;
+  if (phase === 'delete') cta = <button className="btn btn-primary sheet-cta" onClick={handleDelete}>Alte Anzeige löschen</button>;
+  else if (phase === 'checking') cta = <button className="btn btn-primary sheet-cta" disabled><RefreshCw size={16} className="spin" /> Wird geprüft</button>;
+  else if (phase === 'live') cta = <button className="btn btn-primary sheet-cta" onClick={handleDelete}>Nochmal löschen</button>;
+  else if (phase === 'error') cta = <button className="btn btn-primary sheet-cta" onClick={check}><RefreshCw size={16} /> Prüfen</button>;
+  else cta = <button className="btn btn-primary sheet-cta" onClick={publish}>{needsDelete ? 'Jetzt neu einstellen' : 'Jetzt einstellen'}</button>;
+
+  return (
+    <Sheet title={`${needsDelete ? 'Neu einstellen' : 'Nochmal einstellen'} auf ${name}`} onClose={onClose}>
+      {options.length > 1 && (
+        <div className="relist-price">
+          <span className="sheet-label">Preis</span>
+          <div className="relist-price-opts" role="radiogroup" aria-label="Preis">
+            {options.map((o) => (
+              <button
+                key={o.value}
+                type="button"
+                role="radio"
+                aria-checked={price === o.value}
+                className={`relist-price-opt${price === o.value ? ' active' : ''}`}
+                onClick={() => setPrice(o.value)}
+              >
+                <strong>{o.value} €</strong>
+                <span>{o.hint}</span>
+              </button>
+            ))}
           </div>
         </div>
-        {body}
-      </div>
-    </div>,
-    document.body
+      )}
+
+      {needsDelete && (
+        <ol className="relist-steps">
+          <li className={deleted ? 'done' : `current${phase === 'live' ? ' warn' : ''}`}>
+            <span className="relist-step-dot">{deleted ? <Check size={14} strokeWidth={3} /> : '1'}</span>
+            <span className="relist-step-text">
+              <strong>Alte Anzeige löschen</strong>
+              {!deleted && <small>{stepSub}</small>}
+            </span>
+          </li>
+          <li className={deleted ? 'current' : 'todo'}>
+            <span className="relist-step-dot">2</span>
+            <span className="relist-step-text"><strong>Neu hochladen</strong></span>
+          </li>
+        </ol>
+      )}
+
+      {cta}
+      {(phase === 'live' || phase === 'error') && (
+        <button className="sheet-text-btn" onClick={publish}>Trotzdem neu einstellen</button>
+      )}
+      <button className="sheet-text-btn" onClick={onClose}>Abbrechen</button>
+    </Sheet>
   );
 }

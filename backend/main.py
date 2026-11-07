@@ -128,6 +128,10 @@ def run_migrations():
         ("vinted_online_description", "VARCHAR"),
         ("vinted_listed_title", "VARCHAR"),
         ("vinted_listed_description", "VARCHAR"),
+        # When the current listing went live (added V2.7.67) — "seit X Tagen"
+        # in the detail view; NULL for older rows (frontend falls back to created_at).
+        ("ka_published_at", "DATETIME"),
+        ("vinted_published_at", "DATETIME"),
     ]:
         try:
             db.execute(text(f"ALTER TABLE drafts ADD COLUMN {col_name} {col_type}"))
@@ -225,7 +229,7 @@ run_migrations()
 _API_DOCS = os.getenv("ENABLE_API_DOCS", "").lower() in ("1", "true", "yes")
 app = FastAPI(
     title="Velosia API",
-    version="2.7.67",
+    version="2.7.68",
     docs_url="/docs" if _API_DOCS else None,
     redoc_url="/redoc" if _API_DOCS else None,
     openapi_url="/openapi.json" if _API_DOCS else None,
@@ -2239,6 +2243,7 @@ def _apply_listing_capture(draft, platform, listing_id, listing_url):
         if listing_id != draft.ka_listing_id:
             draft.ka_listing_url = None  # belonged to the previous listing
             _reset_online_values(draft, "ka", platform)
+            draft.ka_published_at = now
         draft.ka_listing_id = listing_id or draft.ka_listing_id
         draft.ka_listing_url = listing_url or draft.ka_listing_url
         draft.ka_status = listing_status.ONLINE
@@ -2247,6 +2252,7 @@ def _apply_listing_capture(draft, platform, listing_id, listing_url):
         if listing_id != draft.vinted_listing_id:
             draft.vinted_listing_url = None
             _reset_online_values(draft, "vinted", platform)
+            draft.vinted_published_at = now
         draft.vinted_listing_id = listing_id or draft.vinted_listing_id
         draft.vinted_listing_url = listing_url or draft.vinted_listing_url
         draft.vinted_status = listing_status.ONLINE
@@ -2396,7 +2402,8 @@ def refresh_all_listings(
     ).order_by(models.Draft.created_at.desc()).all()
 
     for draft in drafts:
-        has_listing = draft.ka_listing_url or draft.vinted_listing_url
+        has_listing = (draft.ka_listing_url or draft.ka_listing_id
+                       or draft.vinted_listing_url or draft.vinted_listing_id)
         if not has_listing:
             continue
         updates = listing_status.refresh_draft_status(draft, datetime.utcnow())
@@ -2414,6 +2421,7 @@ def poll_all_active_listings():
     try:
         drafts = db.query(models.Draft).filter(
             (models.Draft.ka_listing_url.isnot(None)) | (models.Draft.vinted_listing_url.isnot(None))
+            | (models.Draft.ka_listing_id.isnot(None)) | (models.Draft.vinted_listing_id.isnot(None))
         ).all()
         checked = 0
         for draft in drafts:

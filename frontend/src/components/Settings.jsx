@@ -731,7 +731,8 @@ export default function Settings({ user, onLogout, onUpdateUser, onShowBugReport
 
 
         <div style={{ marginTop: '2.5rem', textAlign: 'center', color: 'var(--text-muted)', fontSize: '0.75rem', letterSpacing: '0.05em', fontFamily: 'var(--font-body)' }}>
-          Velosia App v{version}
+          Velosia App v{version} ·{' '}
+          <a href="#/neuigkeiten" style={{ color: 'var(--text-secondary)', letterSpacing: 'normal' }}>Neuigkeiten</a>
           <LegalLinks onOpen={setLegalDoc} style={{ marginTop: '0.5rem', letterSpacing: 'normal' }} />
         </div>
         {legalDoc && <LegalModal doc={legalDoc} onClose={() => setLegalDoc(null)} />}

@@ -132,3 +132,63 @@ export const onlineChanges = (draft, current = draft) => {
 };
 
 export const formatEuro = (v) => `${Number.isInteger(v) ? v : v.toFixed(2).replace('.', ',')} €`;
+
+// ── Detail view (V2.7.67) ────────────────────────────────────────────────────
+// The detail header carries the status as a subtitle and one icon per platform
+// that opens the live ad; everything else sits one tap deeper in sheets.
+
+export const PLATFORM_KEYS = ['kleinanzeigen', 'vinted'];
+export const PLATFORM_LETTER = { kleinanzeigen: 'K', vinted: 'V' };
+export const PLATFORM_LABEL = { kleinanzeigen: 'Kleinanzeigen', vinted: 'Vinted' };
+const PREFIX = { kleinanzeigen: 'ka', vinted: 'vinted' };
+
+const parseUtc = (v) => {
+  if (!v) return NaN;
+  return Date.parse(/[zZ]|[+-]\d\d:?\d\d$/.test(v) ? v : `${v}Z`);
+};
+
+// Days the current listing on `key` has been live. Rows from before 2.7.67 have
+// no published_at, so the draft's creation stands in.
+export const publishedDays = (draft, key) => {
+  const t = parseUtc(draft?.[`${PREFIX[key]}_published_at`]) || parseUtc(draft?.created_at);
+  if (Number.isNaN(t)) return 0;
+  return Math.max(0, Math.floor((Date.now() - t) / 86400000));
+};
+
+export const isActive = (status) => status === 'online' || status === 'reserviert';
+
+// Subtitle under the detail title. `tone` 'warn' = something to do; `action`
+// says where a tap leads (the 'status' sheet; null = nothing to open).
+export const detailSummary = (draft) => {
+  const platforms = listingPlatforms(draft);
+  if (!platforms.length) return { text: 'Entwurf', tone: 'muted', action: null };
+  const conflict = crossPostConflict(draft);
+  if (conflict) {
+    return { text: `Auf ${conflict.sold.name} verkauft`, tone: 'warn', action: 'status' };
+  }
+  const stale = platforms.find((p) => isActive(p.status) && publishedDays(draft, p.key) >= STALE_DAYS);
+  if (stale) {
+    return { text: `${publishedDays(draft, stale.key)} Tage online`, tone: 'warn', action: 'status' };
+  }
+  const statuses = [...new Set(platforms.map((p) => p.status))];
+  if (statuses.length === 1) {
+    const label = statusMeta(statuses[0]).label;
+    const text = platforms.length > 1 ? `Überall ${label.toLowerCase()}` : `${label} auf ${platforms[0].name}`;
+    return { text, tone: statuses[0], action: 'status' };
+  }
+  // Mixed: name the one that matters most (reserved > online > sold > deleted);
+  // the platform icons beside it show the rest.
+  const RANK = ['reserviert', 'online', 'verkauft', 'geloescht', 'unbekannt'];
+  const lead = [...platforms].sort((a, b) => RANK.indexOf(a.status) - RANK.indexOf(b.status))[0];
+  return { text: `${statusMeta(lead.status).label} auf ${lead.name}`, tone: lead.status, action: 'status' };
+};
+
+// Price suggestions when re-listing: as is, −5 %, −10 %; rounded to 5 € from
+// 50 € up, to whole euros below. Duplicates (tiny prices) collapse.
+export const relistPriceOptions = (price) => {
+  const p = parseFloat(price) || 0;
+  if (p <= 0) return [];
+  const round = (v) => (v >= 50 ? Math.round(v / 5) * 5 : Math.max(1, Math.round(v)));
+  const opts = [{ value: p, hint: 'aktuell' }, { value: round(p * 0.95), hint: '−5 %' }, { value: round(p * 0.9), hint: '−10 %' }];
+  return opts.filter((o, i) => opts.findIndex((x) => x.value === o.value) === i);
+};

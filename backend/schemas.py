@@ -147,6 +147,8 @@ class DraftResponse(DraftBase):
     vinted_listing_url: Optional[str] = None
     vinted_status: Optional[str] = None
     vinted_status_at: Optional[datetime] = None
+    ka_published_at: Optional[datetime] = None
+    vinted_published_at: Optional[datetime] = None
     ka_online_price: Optional[float] = None
     ka_online_price_type: Optional[str] = None
     ka_listed_price: Optional[float] = None

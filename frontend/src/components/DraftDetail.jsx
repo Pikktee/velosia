@@ -1,13 +1,14 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
-import { ArrowLeft, Copy, Check, ExternalLink, Monitor, RefreshCw, AlertCircle, Trash2, Plus, Sparkles, Upload, Share2, Camera, TrendingUp, ChevronDown, ChevronLeft, ChevronRight, Star, Tag, Coins } from 'lucide-react';
+import { ArrowLeft, Copy, Check, ExternalLink, Monitor, RefreshCw, AlertCircle, Trash2, Plus, Sparkles, Share2, Camera, TrendingUp, ChevronDown, ChevronLeft, ChevronRight, Star, Tag, Coins, ArrowUp, ArrowUpRight } from 'lucide-react';
 import { updateDraft, getImageUrl, getPlatformToken, uploadDraftImages, deleteDraftImage, regenerateDraftField, refreshListingStatus, setListingStatus } from '../utils/api';
-import { statusMeta, listingPlatforms, TERMINAL, onlineChanges } from '../utils/listingStatus';
+import { statusMeta, listingPlatforms, TERMINAL, onlineChanges, detailSummary } from '../utils/listingStatus';
+import { StatusSheet, PublishSheet, PlatformMark } from './ListingSheets';
 import { showError } from '../utils/toast';
 import { PRICE_TYPES } from '../utils/priceType';
 import RelistSheet from './RelistSheet';
 import OnlineChangesSheet from './OnlineChangesSheet';
-import { takePendingRelist } from '../utils/relist';
+import { takePendingRelist, takeRecheck, rememberRecheck } from '../utils/relist';
 
 const ONLINE_FIELD_LABELS = [['price', 'Preis'], ['title', 'Titel'], ['description', 'Beschreibung']];
 
@@ -30,12 +31,13 @@ export default function DraftDetail({ draft, onBack, onUpdateSuccess }) {
   const [refreshingStatus, setRefreshingStatus] = useState(false);
   const [settingStatus, setSettingStatus] = useState(false);
   const [showDetected, setShowDetected] = useState(false); // collapsible "Automatisch erkannt"
-  const [showPublishSheet, setShowPublishSheet] = useState(false);
-  // Re-listing a still-live ad (RelistSheet). Resumed when we come back from
-  // deleting the old ad in the platform WebView.
+  // 'status' (Deine Anzeigen) | 'publish' (Einstellen auf) | null
+  const [sheet, setSheet] = useState(null);
+  // Re-listing (RelistSheet). Resumed when we come back from deleting the old ad
+  // in the platform WebView, with the price picked before leaving.
   const [relist, setRelist] = useState(() => {
-    const platform = takePendingRelist(draft.id);
-    return platform ? { platform, resumed: true } : null;
+    const pending = takePendingRelist(draft.id);
+    return pending ? { platform: pending.platform, price: pending.price, resumed: true } : null;
   });
   // Edits made on the platform pop up once when the draft is opened.
   const [onlineChange, setOnlineChange] = useState(() => (relist ? null : onlineChanges(draft)[0] || null));
@@ -51,13 +53,14 @@ export default function DraftDetail({ draft, onBack, onUpdateSuccess }) {
     const live = [['ka', draft.ka_listing_url], ['vinted', draft.vinted_listing_url]]
       .filter(([p, url]) => url && !TERMINAL.has(draft[`${p}_status`]));
     if (!live.length) return undefined;
+    const forced = takeRecheck(draft.id); // back from deleting an ad on the platform
     const ageMs = Math.min(...live.map(([p]) => {
       const at = draft[`${p}_status_at`];
       if (!at) return Infinity;
       const t = Date.parse(/[zZ]|[+-]\d\d:?\d\d$/.test(at) ? at : `${at}Z`);
       return Number.isNaN(t) ? Infinity : Date.now() - t;
     }));
-    if (ageMs < 2 * 60 * 1000) return undefined;
+    if (!forced && ageMs < 2 * 60 * 1000) return undefined;
     let cancelled = false;
     refreshListingStatus(draft.id).then((updated) => {
       if (cancelled || !updated) return;
@@ -73,10 +76,6 @@ export default function DraftDetail({ draft, onBack, onUpdateSuccess }) {
     // Once per opened draft.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [draft.id]);
-  const [showTooltip, setShowTooltip] = useState(false);
-  const [startY, setStartY] = useState(0);
-  const [currentY, setCurrentY] = useState(0);
-  const [isDragging, setIsDragging] = useState(false);
   const fileInputRef = useRef(null);
 
   // Attributes (Größe, Marke, Material, Farbe, …) the AI extracted into a JSON
@@ -250,23 +249,6 @@ export default function DraftDetail({ draft, onBack, onUpdateSuccess }) {
     };
   }, []);
 
-  // Tooltip onboarding for first-time Android app users
-  useEffect(() => {
-    if (!isAndroidApp) return;
-    const isShown = localStorage.getItem('velosia_detail_onboarding_shown');
-    if (!isShown) {
-      const timer = setTimeout(() => {
-        setShowTooltip(true);
-      }, 800);
-      return () => clearTimeout(timer);
-    }
-  }, [isAndroidApp]);
-
-  const dismissTooltip = () => {
-    setShowTooltip(false);
-    localStorage.setItem('velosia_detail_onboarding_shown', 'true');
-  };
-
   const copyToClipboard = (text, fieldName) => {
     navigator.clipboard.writeText(text);
     setCopiedField(fieldName);
@@ -302,6 +284,46 @@ export default function DraftDetail({ draft, onBack, onUpdateSuccess }) {
       kleinanzeigen: 'https://www.kleinanzeigen.de/p-anzeige-aufgeben.html'
     };
     window.open(urls[platform], '_blank');
+  };
+
+  // In the app the engine fills the platform form; on desktop the platform page
+  // opens and the extension takes over.
+  const publishTo = (platform) => {
+    setSheet(null);
+    if (isAndroidApp) handlePostInApp(platform);
+    else openPlatformPage(platform);
+  };
+
+  // Re-list with the price picked in the RelistSheet (saved first, so the engine
+  // fills the new ad with it).
+  const publishRelist = async (platform, newPrice) => {
+    if (newPrice != null && Math.abs(newPrice - (parseFloat(price) || 0)) >= 0.01) {
+      try {
+        const updated = await updateDraft(draft.id, { price: newPrice });
+        setPrice(newPrice);
+        onUpdateSuccess(updated);
+      } catch (err) {
+        console.error(err);
+        showError('Der Preis konnte nicht gespeichert werden.', () => publishRelist(platform, newPrice));
+        return;
+      }
+    }
+    publishTo(platform);
+  };
+
+  // Cross-post conflict: take the still-live ad down on its platform. Semi-manual
+  // like everywhere else — the user confirms the deletion there; back here the
+  // status is re-read at once.
+  const deleteOnPlatform = (p) => {
+    setSheet(null);
+    const bridge = window.VelosiaBridge;
+    if (bridge && typeof bridge.deleteOnPlatform === 'function') {
+      rememberRecheck(draft.id);
+      try { localStorage.setItem('velosia_return_draft', String(draft.id)); } catch (e) { /* ignore */ }
+      bridge.deleteOnPlatform(draft.id, p.key, p.url || '', '');
+    } else if (p.url) {
+      window.open(p.url, '_blank', 'noopener');
+    }
   };
 
   const handleRefreshStatus = async () => {
@@ -582,15 +604,7 @@ export default function DraftDetail({ draft, onBack, onUpdateSuccess }) {
           )}
           <button
             className="btn-text-link"
-            onClick={() => {
-              // A live ad is taken down first, so the item isn't listed twice.
-              if (p.url && !TERMINAL.has(p.status)) {
-                setShowPublishSheet(false);
-                setRelist({ platform: key, resumed: false });
-              } else {
-                onPublish();
-              }
-            }}
+            onClick={() => setRelist({ platform: key, resumed: false })}
           >
             Neu einstellen
           </button>
@@ -997,13 +1011,19 @@ export default function DraftDetail({ draft, onBack, onUpdateSuccess }) {
     );
   };
 
+  const listed = listingPlatforms(draft);
+  const summary = detailSummary(draft);
+  const openSummary = () => setSheet('status');
+
   return (
     <div className="fade-in">
-      {/* Material-style top app bar: Up arrow (always returns to the list) +
-          screen title + state-dependent save status (silent when saved). */}
+      {/* Material-style top app bar: Up arrow (always returns to the list),
+          title with the listing status as subtitle (tap → "Deine Anzeigen" or the
+          suggested action), one icon per platform that opens the live ad, and
+          "Einstellen" for drafts in the app. Save status stays silent when saved. */}
       <div className="detail-sticky-header">
         <div className="detail-header-inner">
-          <div className="detail-header-bar">
+          <div className="detail-header-bar has-sub">
             <button
               className="detail-up-btn"
               onClick={onBack}
@@ -1011,58 +1031,72 @@ export default function DraftDetail({ draft, onBack, onUpdateSuccess }) {
             >
               <ArrowLeft size={22} />
             </button>
-            <h2 className="detail-header-title">Angebot bearbeiten</h2>
+            {summary.action ? (
+              <button
+                type="button"
+                className="detail-header-titles"
+                onClick={openSummary}
+                aria-label={`${summary.text}. Deine Anzeigen öffnen`}
+              >
+                <span className="detail-header-title">Angebot bearbeiten</span>
+                <span className={`detail-header-sub tone-${summary.tone}`}>
+                  <i />
+                  <span>{summary.text}</span>
+                  <ChevronDown size={14} />
+                </span>
+              </button>
+            ) : (
+              <div className="detail-header-titles">
+                <h2 className="detail-header-title">Angebot bearbeiten</h2>
+                <span className={`detail-header-sub tone-${summary.tone}`}><i /><span>{summary.text}</span></span>
+              </div>
+            )}
             <div className="detail-header-status">
               {saveStatus === 'saving' && (
-                <RefreshCw size={16} className="spin" aria-label="Speichern" style={{ marginRight: isAndroidApp ? '12px' : '0' }} />
+                <RefreshCw size={16} className="spin" aria-label="Speichern" />
               )}
               {saveStatus === 'error' && (
                 <button
                   className="detail-save-error"
                   onClick={saveDraft}
                   title="Erneut versuchen"
-                  style={{ marginRight: isAndroidApp ? '12px' : '0' }}
                 >
                   <AlertCircle size={13} />
                   <span>Fehler</span>
                 </button>
               )}
-              {isAndroidApp && (
-                <div style={{ position: 'relative' }}>
-                  <button
-                    onClick={() => {
-                      setShowPublishSheet(true);
-                      dismissTooltip();
-                    }}
-                    className="detail-header-action-btn"
-                    title="Veröffentlichen / Status"
-                    aria-label="Veröffentlichen / Status"
-                    style={{
-                      background: 'transparent',
-                      border: 'none',
-                      color: 'var(--primary)',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      padding: '8px',
-                      marginRight: '-8px',
-                      cursor: 'pointer'
-                    }}
-                  >
-                    <Share2 size={20} />
-                  </button>
-                  {showTooltip && (
-                    <div className="publish-onboarding-tooltip" onClick={dismissTooltip}>
-                      <div className="tooltip-arrow" />
-                      <div className="tooltip-inner">
-                        <p>Tippe hier, um dein Angebot auf Vinted oder Kleinanzeigen einzustellen!</p>
-                        <button onClick={(e) => { e.stopPropagation(); dismissTooltip(); }}>Verstanden</button>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              )}
             </div>
+            {listed.map((p) => (p.url ? (
+              <a
+                key={p.key}
+                className="detail-platform-link"
+                href={p.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                aria-label={`Anzeige auf ${p.name} öffnen (${statusMeta(p.status).label})`}
+                title={`Anzeige auf ${p.name} öffnen`}
+              >
+                <PlatformMark platform={p.key} status={p.status} />
+                <span className="detail-platform-link-arrow" style={{ color: statusMeta(p.status).color, borderColor: statusMeta(p.status).color }}>
+                  <ArrowUpRight size={10} strokeWidth={3} />
+                </span>
+              </a>
+            ) : (
+              <button
+                key={p.key}
+                className="detail-platform-link"
+                onClick={() => setSheet('status')}
+                aria-label={`${p.name}: ${statusMeta(p.status).label}`}
+              >
+                <PlatformMark platform={p.key} status={p.status} />
+              </button>
+            )))}
+            {isAndroidApp && listed.length === 0 && (
+              <button className="detail-publish-btn" onClick={() => setSheet('publish')}>
+                <ArrowUp size={16} strokeWidth={2.5} />
+                Einstellen
+              </button>
+            )}
           </div>
         </div>
       </div>
@@ -1192,67 +1226,30 @@ export default function DraftDetail({ draft, onBack, onUpdateSuccess }) {
           draft={draft}
           platform={relist.platform}
           resumed={relist.resumed}
-          onPublish={() => handlePostInApp(relist.platform)}
+          initialPrice={relist.price}
+          onPublish={(newPrice) => publishRelist(relist.platform, newPrice)}
           onUpdate={onUpdateSuccess}
           onClose={() => setRelist(null)}
         />
       )}
 
-      {/* Publish Bottom Sheet Drawer */}
-      {isAndroidApp && (
-        <div className={`bottom-sheet-overlay${showPublishSheet ? ' active' : ''}`} onClick={() => setShowPublishSheet(false)}>
-          <div 
-            className="bottom-sheet-container"
-            onClick={(e) => e.stopPropagation()}
-            style={
-              currentY > 0 
-                ? { transform: `translateY(${currentY}px)`, transition: 'none' } 
-                : {}
-            }
-          >
-            <div 
-              className="bottom-sheet-drag-handle-zone"
-              onTouchStart={(e) => {
-                setStartY(e.touches[0].clientY);
-                setIsDragging(true);
-              }}
-              onTouchMove={(e) => {
-                if (!isDragging) return;
-                const diff = e.touches[0].clientY - startY;
-                if (diff > 0) setCurrentY(diff);
-              }}
-              onTouchEnd={() => {
-                setIsDragging(false);
-                if (currentY > 100) setShowPublishSheet(false);
-                setCurrentY(0);
-              }}
-            >
-              <div className="bottom-sheet-drag-handle" />
-            </div>
+      {sheet === 'status' && (
+        <StatusSheet
+          draft={draft}
+          priceType={priceType}
+          refreshing={refreshingStatus}
+          settingStatus={settingStatus}
+          onRefresh={handleRefreshStatus}
+          onRelist={(key) => { setSheet(null); setRelist({ platform: key, resumed: false }); }}
+          onPublish={publishTo}
+          onMarkSold={async (key) => { await handleSetStatus(key, 'verkauft'); setSheet(null); }}
+          onDelete={deleteOnPlatform}
+          onClose={() => setSheet(null)}
+        />
+      )}
 
-            <div className="bottom-sheet-header">
-              <h3 className="bottom-sheet-title">Veröffentlichen</h3>
-            </div>
-
-            <div className="bottom-sheet-content">
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem', paddingBottom: 'calc(1.5rem + env(safe-area-inset-bottom, 0px))' }}>
-                {renderPublishControl('vinted', () => { setShowPublishSheet(false); handlePostInApp('vinted'); }, {
-                  btnLabel: 'Auf Vinted veröffentlichen',
-                  btnIcon: <Upload size={16} />,
-                  btnExtraCls: 'btn-block'
-                })}
-                
-                <div style={{ height: '1px', background: 'var(--glass-border)', margin: '0.25rem 0' }} />
-
-                {renderPublishControl('kleinanzeigen', () => { setShowPublishSheet(false); handlePostInApp('kleinanzeigen'); }, {
-                  btnLabel: 'Auf Kleinanzeigen veröffentlichen',
-                  btnIcon: <Upload size={16} />,
-                  btnExtraCls: 'btn-block'
-                })}
-              </div>
-            </div>
-          </div>
-        </div>
+      {sheet === 'publish' && (
+        <PublishSheet draft={draft} onPublish={publishTo} onClose={() => setSheet(null)} />
       )}
     </div>
   );

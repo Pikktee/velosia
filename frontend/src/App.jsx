@@ -11,6 +11,7 @@ import Settings from './components/Settings';
 import LandingPage from './components/LandingPage';
 import TesterPage from './components/TesterPage';
 import LegalPage from './components/LegalPage';
+import NewsPage, { leaveNewsPage } from './components/NewsPage';
 import BugReportModal from './components/BugReportModal';
 import IssueManagement from './components/IssueManagement';
 import Toaster from './components/Toaster';
@@ -114,6 +115,10 @@ export default function App() {
   // Handle Android physical back gesture
   useEffect(() => {
     window.onAndroidBack = () => {
+      if (window.location.hash === '#/neuigkeiten') {
+        leaveNewsPage();
+        return true;
+      }
       if (view === 'specs') {
         setView('capture');
         return true;
@@ -230,7 +235,7 @@ export default function App() {
           window.location.hash = '#/login';
         }
       } else {
-        const guestRoutes = ['#/', '#/login', '#/testen', ...Object.keys(LEGAL_ROUTES)];
+        const guestRoutes = ['#/', '#/login', '#/testen', '#/neuigkeiten', ...Object.keys(LEGAL_ROUTES)];
         if (!guestRoutes.includes(route)) {
           window.location.hash = '#/';
         }
@@ -608,11 +613,24 @@ export default function App() {
             <Login onLoginSuccess={handleLoginSuccess} />
           ) : route === '#/testen' ? (
             <TesterPage />
+          ) : route === '#/neuigkeiten' ? (
+            <NewsPage />
           ) : LEGAL_ROUTES[route] ? (
             <LegalPage doc={LEGAL_ROUTES[route]} />
           ) : (
             isAndroid ? <Login onLoginSuccess={handleLoginSuccess} /> : <LandingPage />
           )}
+        </div>
+      </div>
+    );
+  }
+
+  // Logged in: the release history (from the "Neu in Velosia" sheet or settings).
+  if (route === '#/neuigkeiten') {
+    return (
+      <div style={{ minHeight: '100dvh', background: 'var(--bg-gradient)' }}>
+        <div className="container" style={{ padding: '1.25rem 1.25rem 2rem' }}>
+          <NewsPage />
         </div>
       </div>
     );

@@ -30,6 +30,12 @@ export default function WhatsNewSheet({ news, onClose }) {
           )}
         </ul>
         <button className="btn btn-primary sync-sheet-btn" onClick={onClose}>Weiter</button>
+        <button
+          className="sheet-text-btn"
+          onClick={() => { onClose(); window.location.hash = '#/neuigkeiten'; }}
+        >
+          Alle Neuigkeiten
+        </button>
       </div>
     </div>,
     document.body
