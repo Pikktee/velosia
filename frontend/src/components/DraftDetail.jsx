@@ -33,6 +33,11 @@ export default function DraftDetail({ draft, onBack, onUpdateSuccess }) {
   const [showDetected, setShowDetected] = useState(false); // collapsible "Automatisch erkannt"
   // 'status' (Deine Anzeigen) | 'publish' (Einstellen auf) | null
   const [sheet, setSheet] = useState(null);
+  // Platform whose live ad is being opened — shows a loading ring on its icon
+  // until the WebView leaves the page.
+  const [opening, setOpening] = useState(null);
+  const openingTimer = useRef(null);
+  useEffect(() => () => clearTimeout(openingTimer.current), []);
   // Re-listing (RelistSheet). Resumed when we come back from deleting the old ad
   // in the platform WebView, with the price picked before leaving.
   const [relist, setRelist] = useState(() => {
@@ -324,6 +329,20 @@ export default function DraftDetail({ draft, onBack, onUpdateSuccess }) {
     } else if (p.url) {
       window.open(p.url, '_blank', 'noopener');
     }
+  };
+
+  // Opening the live ad: in the app it loads in the same WebView, so remember this
+  // draft — Close (X) and the back gesture then return to its detail view instead of
+  // the list (App.jsx reads the marker on remount). Feedback: a short vibration and
+  // a loading ring, since the platform page takes a moment to start.
+  const openListing = (p) => {
+    if (isAndroidApp) {
+      try { localStorage.setItem('velosia_return_draft', String(draft.id)); } catch { /* ignore */ }
+      try { navigator.vibrate?.(12); } catch { /* ignore */ }
+    }
+    setOpening(p.key);
+    clearTimeout(openingTimer.current);
+    openingTimer.current = setTimeout(() => setOpening(null), isAndroidApp ? 10000 : 1200);
   };
 
   const handleRefreshStatus = async () => {
@@ -1069,10 +1088,11 @@ export default function DraftDetail({ draft, onBack, onUpdateSuccess }) {
             {listed.map((p) => (p.url ? (
               <a
                 key={p.key}
-                className="detail-platform-link"
+                className={`detail-platform-link${opening === p.key ? ' opening' : ''}`}
                 href={p.url}
                 target="_blank"
                 rel="noopener noreferrer"
+                onClick={() => openListing(p)}
                 aria-label={`Anzeige auf ${p.name} öffnen (${statusMeta(p.status).label})`}
                 title={`Anzeige auf ${p.name} öffnen`}
               >
@@ -1244,6 +1264,8 @@ export default function DraftDetail({ draft, onBack, onUpdateSuccess }) {
           onPublish={publishTo}
           onMarkSold={async (key) => { await handleSetStatus(key, 'verkauft'); setSheet(null); }}
           onDelete={deleteOnPlatform}
+          onOpen={openListing}
+          opening={opening}
           onClose={() => setSheet(null)}
         />
       )}

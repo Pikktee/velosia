@@ -39,7 +39,7 @@ const PREFIX = { kleinanzeigen: 'ka', vinted: 'vinted' };
 
 // "Deine Anzeigen": one card per platform the draft is listed on, plus a quiet
 // card for a platform it isn't on yet.
-export function StatusSheet({ draft, priceType, refreshing, settingStatus, onRefresh, onRelist, onPublish, onMarkSold, onDelete, onClose }) {
+export function StatusSheet({ draft, priceType, refreshing, settingStatus, opening, onRefresh, onRelist, onPublish, onMarkSold, onDelete, onOpen, onClose }) {
   const platforms = listingPlatforms(draft);
   const conflict = crossPostConflict(draft);
   const missing = PLATFORM_KEYS.filter((k) => !platforms.some((p) => p.key === k));
@@ -85,7 +85,9 @@ export function StatusSheet({ draft, priceType, refreshing, settingStatus, onRef
                 {isConflict ? (
                   <button className="listing-card-main danger" onClick={() => onDelete(p)}>Löschen <ArrowUpRight size={15} /></button>
                 ) : p.url ? (
-                  <a className="listing-card-main" href={p.url} target="_blank" rel="noopener noreferrer">Öffnen <ArrowUpRight size={15} /></a>
+                  <a className="listing-card-main" href={p.url} target="_blank" rel="noopener noreferrer" onClick={() => onOpen(p)}>
+                    {opening === p.key ? <><RefreshCw size={15} className="spin" /> Öffnet</> : <>Öffnen <ArrowUpRight size={15} /></>}
+                  </a>
                 ) : null}
                 <button className={`listing-card-second${isStale ? ' emph' : ''}`} onClick={() => onRelist(p.key)}>
                   <Repeat size={15} /> {active ? 'Neu einstellen' : 'Nochmal einstellen'}
