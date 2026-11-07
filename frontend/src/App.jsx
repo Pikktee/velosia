@@ -791,6 +791,7 @@ export default function App() {
           {view === 'settings' && (
             <Settings
               user={user}
+              drafts={drafts}
               onLogout={handleLogout}
               onUpdateUser={(updatedUser) => setUser(updatedUser)}
               onShowBugReport={() => setShowBugReportModal(true)}

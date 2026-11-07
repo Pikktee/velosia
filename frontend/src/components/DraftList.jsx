@@ -1,6 +1,6 @@
 import React, { useRef, useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { Sparkles, Trash2, ChevronRight, RefreshCw, AlertTriangle, Clock, Coins, X, Check } from 'lucide-react';
+import { Sparkles, Trash2, ChevronRight, RefreshCw, AlertTriangle, Clock, Coins, X, Check, Search, ArrowLeft } from 'lucide-react';
 import { getThumbUrl } from '../utils/api';
 import { statusMeta, hasListing, listingPlatforms, draftSection, crossPostConflict, STALE_DAYS, platformDeleteUrl, onlineChanges, publishedDays, isActive } from '../utils/listingStatus';
 
@@ -21,6 +21,15 @@ const SKELETON_ROWS = [
   { title: '72%', second: '52%', meta: false },
   { title: '66%', second: null, meta: true },
 ];
+
+// Lower-case, without accents and punctuation, single spaces — so „Jäcke“ finds
+// „Jacke“ and „iphone-13“ finds „iPhone 13“.
+const normalizeSearch = (v) => String(v || '')
+  .toLowerCase()
+  .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+  .replace(/ß/g, 'ss')
+  .replace(/[^a-z0-9]+/g, ' ')
+  .trim();
 
 export default function DraftList({ drafts, isLoading, loadError = false, onRetry, onSelectDraft, onDeleteDraft, onBulkDelete, onRefreshStatuses, flashIds = [] }) {
   const [refreshing, setRefreshing] = useState(false);
@@ -45,12 +54,31 @@ export default function DraftList({ drafts, isLoading, loadError = false, onRetr
   };
   const clearSelection = () => setSelected(new Set());
 
-  // Android back leaves selection mode first (App's onAndroidBack asks here).
+  // Search in the header: filters the list by title as you type.
+  const [searching, setSearching] = useState(false);
+  const [query, setQuery] = useState('');
+  const searchRef = useRef(null);
+  const closeSearch = () => { setSearching(false); setQuery(''); };
+  useEffect(() => { if (searching) searchRef.current?.focus(); }, [searching]);
+  const shown = React.useMemo(() => {
+    const q = normalizeSearch(query);
+    if (!q) return drafts;
+    const words = q.split(' ');
+    return drafts.filter((d) => {
+      const hay = normalizeSearch(d.title || '');
+      return words.every((w) => hay.includes(w));
+    });
+  }, [drafts, query]);
+
+  // Android back leaves selection mode first, then the search (App's onAndroidBack asks here).
   useEffect(() => {
-    if (!selecting) return undefined;
-    window.__velosiaListBack = () => { clearSelection(); return true; };
+    if (!selecting && !searching) return undefined;
+    window.__velosiaListBack = () => {
+      if (selecting) clearSelection(); else closeSearch();
+      return true;
+    };
     return () => { delete window.__velosiaListBack; };
-  }, [selecting]);
+  }, [selecting, searching]);
 
   const selectedLive = drafts.filter((d) => selected.has(d.id) && draftSection(d) === 'active').length;
 
@@ -296,6 +324,29 @@ export default function DraftList({ drafts, isLoading, loadError = false, onRetr
               <Trash2 size={21} strokeWidth={2} />
             </button>
           </div>
+          ) : searching ? (
+          <div className="app-header-bar search-bar" role="search">
+            <button className="select-bar-icon" onClick={closeSearch} aria-label="Suche schließen" title="Suche schließen">
+              <ArrowLeft size={22} strokeWidth={2} />
+            </button>
+            <input
+              ref={searchRef}
+              className="search-bar-input"
+              type="search"
+              inputMode="search"
+              enterKeyHint="search"
+              placeholder="Angebote durchsuchen"
+              aria-label="Angebote durchsuchen"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Escape') closeSearch(); if (e.key === 'Enter') e.currentTarget.blur(); }}
+            />
+            {query && (
+              <button className="select-bar-icon" onClick={() => { setQuery(''); searchRef.current?.focus(); }} aria-label="Suchbegriff löschen" title="Löschen">
+                <X size={20} strokeWidth={2} />
+              </button>
+            )}
+          </div>
           ) : (
           <div className="app-header-bar" style={{ justifyContent: 'space-between' }}>
             <h2 className="app-header-title" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
@@ -305,6 +356,14 @@ export default function DraftList({ drafts, isLoading, loadError = false, onRetr
               </span>
             </h2>
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+              <button
+                className="status-refresh-btn icon-only"
+                onClick={() => setSearching(true)}
+                title="Angebote durchsuchen"
+                aria-label="Angebote durchsuchen"
+              >
+                <Search size={16} />
+              </button>
               {anyListing && onRefreshStatuses && (
                 <button
                   className="status-refresh-btn icon-only"
@@ -323,8 +382,11 @@ export default function DraftList({ drafts, isLoading, loadError = false, onRetr
       </div>
 
       <div className="app-content-container" style={{ paddingBottom: 'calc(85px + env(safe-area-inset-bottom, 0px))' }}>
+        {searching && query && shown.length === 0 && (
+          <p className="search-empty">Keine Treffer für „{query.trim()}“</p>
+        )}
         <ul className="SwipeableList">
-          {drafts.map((draft) => (
+          {shown.map((draft) => (
             <DraftListItem
               key={draft.id}
               draft={draft}

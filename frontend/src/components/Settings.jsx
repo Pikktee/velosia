@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { User, LogOut, Trash2, AlertTriangle, Save, HelpCircle, Check, Shield, Sparkles, Euro, MapPin, Sliders, Zap, Users, ClipboardList, Bug, ChevronRight, RefreshCw, AlertCircle, KeyRound } from 'lucide-react';
 import { deleteUserAccount, updateMe, setPassword as setAccountPassword } from '../utils/api';
 import DataExportSection from './DataExport';
+import SalesOverview from './SalesOverview';
 import { PRICE_TYPES } from '../utils/priceType';
 import { version } from '../../package.json';
 import LegalModal, { LegalLinks } from './LegalModal';
@@ -132,7 +133,7 @@ function PasswordSection() {
   );
 }
 
-export default function Settings({ user, onLogout, onUpdateUser, onShowBugReport }) {
+export default function Settings({ user, drafts = [], onLogout, onUpdateUser, onShowBugReport }) {
   const [showConfirm, setShowConfirm] = useState(false);
   // Legal text shown in the overlay (datenschutz | nutzungsbedingungen | impressum), or null.
   const [legalDoc, setLegalDoc] = useState(null);
@@ -380,7 +381,9 @@ export default function Settings({ user, onLogout, onUpdateUser, onShowBugReport
             
             {/* Left Column */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-              
+
+              <SalesOverview drafts={drafts} />
+
               {/* Section: Profil & Sitzung */}
               <div className="detail-section-unboxed" style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
                 <h3 className="detail-section-title" style={{ margin: 0 }}>
