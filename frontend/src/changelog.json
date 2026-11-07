@@ -1,4 +1,11 @@
 [
+  {
+    "version": "2.7.66",
+    "items": [
+      "Sachlichere Beschreibungen: Velosia schreibt nur, was auf deinen Fotos zu sehen ist – mit Zustand, sichtbaren Mängeln und Lieferumfang, ohne Werbefloskeln."
+    ],
+    "fixes": true
+  },
   { "version": "2.7.65", "fixes": true },
   {
     "version": "2.7.64",

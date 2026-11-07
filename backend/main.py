@@ -225,7 +225,7 @@ run_migrations()
 _API_DOCS = os.getenv("ENABLE_API_DOCS", "").lower() in ("1", "true", "yes")
 app = FastAPI(
     title="Velosia API",
-    version="2.7.65",
+    version="2.7.66",
     docs_url="/docs" if _API_DOCS else None,
     redoc_url="/redoc" if _API_DOCS else None,
     openapi_url="/openapi.json" if _API_DOCS else None,
@@ -1971,7 +1971,10 @@ def regenerate_draft_field_endpoint(
     from services.gemini_service import regenerate_draft_field
     try:
         with track_ai_usage(db, current_user):
-            new_val = regenerate_draft_field(image_paths, req.field, user=current_user)
+            new_val = regenerate_draft_field(
+                image_paths, req.field, user=current_user,
+                context={"title": db_draft.title, "condition": db_draft.condition},
+            )
     except Exception as e:
         raise ai_failure(db, e, "KI-Regeneration")
 
