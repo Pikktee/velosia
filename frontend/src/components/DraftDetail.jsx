@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
-import { ArrowLeft, Copy, Check, ExternalLink, Monitor, RefreshCw, AlertCircle, Trash2, Plus, Sparkles, Share2, Camera, TrendingUp, ChevronDown, ChevronLeft, ChevronRight, Star, Tag, Coins, ArrowUp, ArrowUpRight } from 'lucide-react';
+import { ArrowLeft, Copy, Check, ExternalLink, Monitor, RefreshCw, AlertCircle, Trash2, Plus, Sparkles, Share2, Camera, TrendingUp, ChevronDown, ChevronLeft, ChevronRight, Star, Tag, Coins, ArrowUp, ArrowUpRight, MoreVertical } from 'lucide-react';
 import { updateDraft, getImageUrl, getPlatformToken, uploadDraftImages, deleteDraftImage, regenerateDraftField, refreshListingStatus, setListingStatus } from '../utils/api';
 import { statusMeta, listingPlatforms, TERMINAL, onlineChanges, detailSummary } from '../utils/listingStatus';
 import { StatusSheet, PublishSheet, PlatformMark } from './ListingSheets';
@@ -34,6 +34,8 @@ export default function DraftDetail({ draft, onBack, onUpdateSuccess, onDelete }
   // 'status' (Deine Anzeigen) | 'publish' (Einstellen auf) | null
   const [sheet, setSheet] = useState(null);
   const [confirmDeleteDraft, setConfirmDeleteDraft] = useState(false);
+  // ⋮ overflow menu in the top bar: rare and destructive actions (Material).
+  const [menuOpen, setMenuOpen] = useState(false);
   // Platform whose live ad is being opened — shows a loading ring on its icon
   // until the WebView leaves the page.
   const [opening, setOpening] = useState(null);
@@ -1058,7 +1060,7 @@ export default function DraftDetail({ draft, onBack, onUpdateSuccess, onDelete }
                 onClick={openSummary}
                 aria-label={`${summary.text}. Deine Anzeigen öffnen`}
               >
-                <span className="detail-header-title">Angebot bearbeiten</span>
+                <span className="detail-header-title">Angebot</span>
                 <span className={`detail-header-sub tone-${summary.tone}`}>
                   <i />
                   <span>{summary.text}</span>
@@ -1067,7 +1069,7 @@ export default function DraftDetail({ draft, onBack, onUpdateSuccess, onDelete }
               </button>
             ) : (
               <div className="detail-header-titles">
-                <h2 className="detail-header-title">Angebot bearbeiten</h2>
+                <h2 className="detail-header-title">Angebot</h2>
                 <span className={`detail-header-sub tone-${summary.tone}`}><i /><span>{summary.text}</span></span>
               </div>
             )}
@@ -1118,6 +1120,33 @@ export default function DraftDetail({ draft, onBack, onUpdateSuccess, onDelete }
                 Einstellen
               </button>
             )}
+            {onDelete && (
+              <div className="detail-menu-wrap">
+                <button
+                  className="detail-menu-btn"
+                  onClick={() => setMenuOpen((o) => !o)}
+                  aria-label="Weitere Aktionen"
+                  aria-haspopup="menu"
+                  aria-expanded={menuOpen}
+                >
+                  <MoreVertical size={20} />
+                </button>
+                {menuOpen && (
+                  <>
+                    <div className="detail-menu-backdrop" onClick={() => setMenuOpen(false)} />
+                    <div className="detail-menu" role="menu">
+                      <button
+                        role="menuitem"
+                        className="detail-menu-item danger"
+                        onClick={() => { setMenuOpen(false); setConfirmDeleteDraft(true); }}
+                      >
+                        <Trash2 size={17} /> Angebot löschen
+                      </button>
+                    </div>
+                  </>
+                )}
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -1132,11 +1161,6 @@ export default function DraftDetail({ draft, onBack, onUpdateSuccess, onDelete }
           {renderPriceComparison()}
           {renderDetectedInfo()}
           {!isAndroidApp && renderPublishingAssist()}
-          {onDelete && (
-            <button type="button" className="detail-delete-btn" onClick={() => setConfirmDeleteDraft(true)}>
-              <Trash2 size={16} /> Angebot löschen
-            </button>
-          )}
         </div>
       </div>
 
