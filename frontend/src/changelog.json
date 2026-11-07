@@ -1,4 +1,8 @@
 [
+  {
+    "version": "2.7.77",
+    "items": ["Online geänderte Anzeigen erkennst du schon in der Liste: ein gelber Punkt am Preis."]
+  },
   { "version": "2.7.76", "fixes": true },
   {
     "version": "2.7.75",

@@ -112,7 +112,8 @@ export const onlineChanges = (draft, current = draft) => {
     { key: 'kleinanzeigen', name: 'Kleinanzeigen', prefix: 'ka', status: draft.ka_status, type: draft.ka_online_price_type },
     { key: 'vinted', name: 'Vinted', prefix: 'vinted', status: draft.vinted_status, type: null },
   ];
-  return platforms.filter((p) => !TERMINAL.has(p.status)).map((p) => {
+  const listed = (prefix) => !!(draft[`${prefix}_listing_id`] || draft[`${prefix}_listing_url`]);
+  return platforms.filter((p) => listed(p.prefix) && !TERMINAL.has(p.status)).map((p) => {
     const changes = {};
     const online = (f) => draft[`${p.prefix}_online_${f}`];
     const listed = (f) => draft[`${p.prefix}_listed_${f}`];

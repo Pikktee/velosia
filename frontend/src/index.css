@@ -5421,3 +5421,17 @@ button.detail-header-titles:active { background: rgba(255, 255, 255, 0.05); }
   overflow: hidden;
   pointer-events: none;
 }
+
+/* Online geändert: dezenter Punkt am Preis-Chip in der Liste (V2.7.77) */
+.draft-list-item-price-container { position: relative; }
+.draft-list-item-price-container.changed-online { border-color: rgba(251, 191, 36, 0.45); }
+.price-changed-dot {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #fbbf24;
+  box-shadow: 0 0 0 2px #0e121a;
+}

@@ -2,7 +2,7 @@ import React, { useRef, useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Sparkles, Trash2, ChevronRight, RefreshCw, AlertTriangle, Clock, Coins, X, Check } from 'lucide-react';
 import { getThumbUrl } from '../utils/api';
-import { statusMeta, hasListing, listingPlatforms, draftSection, crossPostConflict, listingAgeDays, STALE_DAYS, platformDeleteUrl } from '../utils/listingStatus';
+import { statusMeta, hasListing, listingPlatforms, draftSection, crossPostConflict, listingAgeDays, STALE_DAYS, platformDeleteUrl, onlineChanges } from '../utils/listingStatus';
 
 // dd.mm for compact list signals.
 const fmtShort = (iso) => {
@@ -375,6 +375,9 @@ const LONG_PRESS_MS = 450;
 const LONG_PRESS_SLOP = 10; // px of finger movement that still counts as holding still
 
 function DraftListItem({ draft, onSelect, onDelete, flash = false, selecting = false, selected = false, onToggleSelect = null, leaving = false }) {
+  // Edited on a platform (price/title/description) since it was published — known
+  // from the last status read; the detail view offers to take it over.
+  const changedOnline = onlineChanges(draft)[0] || null;
   const [swipeOffset, setSwipeOffset] = useState(0);
   const [thumbLoaded, setThumbLoaded] = useState(false);
   const longPressTimer = useRef(null);
@@ -686,7 +689,11 @@ function DraftListItem({ draft, onSelect, onDelete, flash = false, selecting = f
 
           {/* Right Section: Price & Actions */}
           <div className="draft-list-item-right">
-            <div className="draft-list-item-price-container">
+            <div
+              className={`draft-list-item-price-container${changedOnline ? ' changed-online' : ''}`}
+              title={changedOnline ? `Online geändert auf ${changedOnline.name}` : undefined}
+            >
+              {changedOnline && <span className="price-changed-dot" aria-label={`Online geändert auf ${changedOnline.name}`} />}
               <span className="draft-list-item-price">
                 {draft.price !== null && draft.price !== undefined ? `${Math.round(draft.price)} €` : '-- €'}
               </span>
