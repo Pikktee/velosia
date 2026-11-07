@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import AutoTextarea from './AutoTextarea';
 import { createPortal } from 'react-dom';
 import { ArrowLeft, Copy, Check, ExternalLink, Monitor, RefreshCw, AlertCircle, Trash2, Plus, Sparkles, Share2, Camera, TrendingUp, ChevronDown, ChevronLeft, ChevronRight, Star, Tag, Coins, ArrowUp, ArrowUpRight, MoreVertical } from 'lucide-react';
 import { updateDraft, getImageUrl, getPlatformToken, uploadDraftImages, deleteDraftImage, regenerateDraftField, refreshListingStatus, setListingStatus } from '../utils/api';
@@ -917,11 +918,11 @@ export default function DraftDetail({ draft, onBack, onUpdateSuccess, onDelete }
               )}
             </button>
           </div>
-          <input 
-            type="text" 
-            id="edit-title" 
-            className="form-control" 
-            value={title} 
+          <AutoTextarea
+            singleLine
+            id="edit-title"
+            className="form-control"
+            value={title}
             onChange={(e) => setTitle(e.target.value.substring(0, 65))}
             placeholder={regeneratingField === 'title' ? "Generiere..." : "Titel für die Anzeige..."}
             disabled={regeneratingField === 'title'}
@@ -951,7 +952,7 @@ export default function DraftDetail({ draft, onBack, onUpdateSuccess, onDelete }
               )}
             </button>
           </div>
-          <textarea
+          <AutoTextarea
             id="edit-desc"
             className="form-control"
             maxLength={5000}

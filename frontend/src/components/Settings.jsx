@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import AutoTextarea from './AutoTextarea';
 import { User, LogOut, ArrowLeft, Newspaper, Trash2, AlertTriangle, Save, HelpCircle, Check, Shield, Sparkles, Euro, MapPin, Sliders, Zap, Users, ClipboardList, Bug, ChevronRight, RefreshCw, AlertCircle, KeyRound } from 'lucide-react';
 import { deleteUserAccount, updateMe, setPassword as setAccountPassword } from '../utils/api';
 import DataExportSection from './DataExport';
@@ -623,7 +624,7 @@ export default function Settings({ user, drafts = [], onLogout, onUpdateUser, on
                       <span className="tooltip-text">Steht unverändert über jeder Beschreibung. Leer: Die KI beginnt selbst.</span>
                     </span>
                   </label>
-                  <textarea
+                  <AutoTextarea
                     className="form-control"
                     style={{ minHeight: '64px' }}
                     placeholder="z.B. Hallo und willkommen bei meinen Anzeigen! 👋"
@@ -655,7 +656,7 @@ export default function Settings({ user, drafts = [], onLogout, onUpdateUser, on
                       ))}
                     </select>
                   </div>
-                  <textarea
+                  <AutoTextarea
                     className="form-control"
                     style={{ minHeight: '110px' }}
                     placeholder="Stil-/Tonfall-Anweisung an die KI..."
@@ -674,7 +675,7 @@ export default function Settings({ user, drafts = [], onLogout, onUpdateUser, on
                       <span className="tooltip-text">Steht unverändert unter jeder Beschreibung, z. B. Versandhinweise. Leer: Die KI schließt selbst.</span>
                     </span>
                   </label>
-                  <textarea
+                  <AutoTextarea
                     className="form-control"
                     style={{ minHeight: '64px' }}
                     placeholder="z.B. Privatverkauf, keine Garantie."

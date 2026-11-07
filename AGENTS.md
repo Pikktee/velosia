@@ -103,6 +103,10 @@ Velosias Oberfläche folgt bewusst **Progressive Disclosure**: Übersichts-/List
 
 ---
 
+**Textfelder wachsen mit (V2.7.87):** `components/AutoTextarea.jsx` statt `<input>`/`<textarea>` für Titel und Beschreibung (DraftDetail) und die drei Anzeigentext-Felder (Einstellungen): Höhe = Inhalt, kein Scrollen im Feld, die Seite scrollt. `singleLine` (Titel): bricht um, keine Zeilenumbrüche, Enter schließt die Tastatur.
+
+---
+
 ## Angebots-Lebenszyklus & Cross-Posting-Sync (V2.7)
 
 Aufbauend auf dem Status-Tracking (V2.5) gliedert `DraftList` die Angebote jetzt in **drei Abschnitte** und macht den Nach-dem-Einstellen-Zustand handlungsleitend. Logik liegt in `frontend/src/utils/listingStatus.js`:

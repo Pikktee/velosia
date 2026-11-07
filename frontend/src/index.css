@@ -5597,3 +5597,7 @@ a.settings-row { text-decoration: none; }
   cursor: pointer;
 }
 .sources-toggle:active { background: rgba(9, 176, 183, 0.08); }
+
+/* Mitwachsende Textfelder (V2.7.87): kein Scrollen im Feld, die Seite scrollt */
+textarea.form-control.autogrow { resize: none; overflow: hidden; }
+textarea.form-control.autogrow.single { min-height: 48px; line-height: 1.4; }
