@@ -82,6 +82,11 @@ After a listing goes live we capture its **public listing id/URL** and track its
 
 Velosias Oberfläche folgt bewusst **Progressive Disclosure**: Übersichts-/Listenansichten (v. a. `DraftList`) bleiben **minimal** — Thumbnail, Titel, Datum, Preis und höchstens ein **kompakter, farbcodierter** Veröffentlichungs-Status. **Keine** abgeleiteten Zustands-Labels wie „Bereit" oder „Kategorie prüfen" in der Liste — solche Hinweise gehören eine Ebene tiefer in `DraftDetail`. Im Zweifel: Info **nicht** in die Liste, sondern ins Detail. Listen-Status-Indikatoren sollen kompakt und idealerweise wortlos sein (Plattform-Kürzel in der Status-Farbe), die volle Pro-Plattform-Aufschlüsselung lebt in der Status-Sektion von `DraftDetail`.
 
+**Liste: Ladezeit & Mehrfachauswahl (V2.7.64).**
+*   **Vorschaubilder:** Fotos liegen mit bis zu 2560 px / ~1 MB vor; die Liste lud früher die Originale (bei 54 Angeboten zig MB). Jetzt `getThumbUrl()` → `/uploads/<datei>?e=…&s=…&w=240`: der Server rendert einmal ein 240-px-JPEG nach `uploads/.thumbs/` (`image_store.ensure_thumbnail`, nur Breiten aus `THUMB_WIDTHS`), die Signatur gilt für die Datei, also auch für ihre Vorschau. Thumbs werden mit dem Original gelöscht (`_remove_upload_files`). Bilder in der Liste laden `lazy` und blenden ein.
+*   **Liste sofort da:** `utils/draftCache.js` hält die zuletzt geladene Liste in `localStorage` (`velosia_drafts_cache_v1`, ohne die großen `*_online/listed_description`-Felder); `App.jsx` startet damit und ersetzt sie nach dem Abruf. Das Skeleton (`.sk-*` in `index.css`) erscheint nur noch ohne Cache (erster Start/Login). Logout und Login leeren den Cache. Signierte Bild-URLs im Cache bleiben dank Tagesrundung ~14 Tage gültig.
+*   **Mehrfachauswahl:** Long Press (450 ms, < 10 px Bewegung) auf eine Zeile startet die Auswahl, danach schaltet Antippen um; Desktop: Rechtsklick. Header wird zur Auswahlleiste (X / „Alle" / „Löschen"), Android-Zurück verlässt die Auswahl (`window.__velosiaListBack`, abgefragt in `onAndroidBack`). Gelöscht wird in einem Request `POST /api/drafts/bulk-delete` (`{ids}`, max. 500, fremde/unbekannte IDs werden still übersprungen). Der Bestätigungsdialog warnt, wenn ausgewählte Angebote noch online sind (die Plattform-Anzeigen bleiben bestehen).
+
 ---
 
 ## Angebots-Lebenszyklus & Cross-Posting-Sync (V2.7)

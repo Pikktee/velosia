@@ -225,7 +225,7 @@ run_migrations()
 _API_DOCS = os.getenv("ENABLE_API_DOCS", "").lower() in ("1", "true", "yes")
 app = FastAPI(
     title="Velosia API",
-    version="2.7.63",
+    version="2.7.64",
     docs_url="/docs" if _API_DOCS else None,
     redoc_url="/redoc" if _API_DOCS else None,
     openapi_url="/openapi.json" if _API_DOCS else None,
@@ -240,7 +240,9 @@ def _remove_upload_files(paths) -> None:
     for path in paths:
         if not path or not isinstance(path, str):
             continue
-        local = os.path.join(UPLOAD_DIR, os.path.basename(path.split("?", 1)[0]))
+        name = os.path.basename(path.split("?", 1)[0])
+        image_store.remove_thumbnails(UPLOAD_DIR, name)
+        local = os.path.join(UPLOAD_DIR, name)
         if os.path.isfile(local):
             try:
                 os.remove(local)
@@ -453,6 +455,7 @@ def serve_upload(
     filename: str,
     e: Optional[str] = None,
     s: Optional[str] = None,
+    w: Optional[int] = None,
 ):
     # Never let a crafted name escape the upload directory.
     safe_name = os.path.basename(filename)
@@ -468,6 +471,17 @@ def serve_upload(
     file_path = os.path.join(UPLOAD_DIR, safe_name)
     if not os.path.isfile(file_path):
         raise HTTPException(status_code=404, detail="Datei nicht gefunden.")
+
+    # ?w=240: a small cached JPEG for the list instead of the full photo. The
+    # signature covers the file, so any allowed size of it may be served.
+    if w is not None:
+        thumb = image_store.ensure_thumbnail(UPLOAD_DIR, safe_name, w)
+        if thumb:
+            return FileResponse(thumb, media_type="image/jpeg", headers={
+                "Cache-Control": "private, max-age=86400",
+                "X-Content-Type-Options": "nosniff",
+                "Content-Security-Policy": "default-src 'none'; sandbox",
+            })
 
     # Filenames are UUIDs and their content never changes, so let clients cache
     # aggressively; the day-rounded expiry keeps the URL stable enough to hit.
@@ -1780,6 +1794,17 @@ def update_draft(
     db.refresh(db_draft)
     return db_draft
 
+def _draft_image_paths(draft) -> List[str]:
+    if draft.image_paths:
+        try:
+            paths = json.loads(draft.image_paths)
+            if isinstance(paths, list):
+                return [p for p in paths if isinstance(p, str)]
+        except Exception:
+            pass
+    return [draft.image_path] if draft.image_path else []
+
+
 @app.delete("/api/drafts/{draft_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_draft(
     draft_id: int, 
@@ -1792,28 +1817,34 @@ def delete_draft(
     ).first()
     if not db_draft:
         raise HTTPException(status_code=404, detail="Angebot wurde nicht gefunden.")
-    
-    # Delete all associated images
-    if db_draft.image_paths:
-        try:
-            paths = json.loads(db_draft.image_paths)
-            for path in paths:
-                relative_path = os.path.join(UPLOAD_DIR, os.path.basename(path))
-                if os.path.exists(relative_path):
-                    os.remove(relative_path)
-        except Exception as e:
-            print(f"Error removing image files: {e}")
-    elif db_draft.image_path:
-        relative_path = os.path.join(UPLOAD_DIR, os.path.basename(db_draft.image_path))
-        if os.path.exists(relative_path):
-            try:
-                os.remove(relative_path)
-            except Exception as e:
-                print(f"Error removing image file {relative_path}: {e}")
 
+    paths = _draft_image_paths(db_draft)
     db.delete(db_draft)
     db.commit()
+    _remove_upload_files(paths)
     return {"detail": "Angebot gelöscht"}
+
+
+@app.post("/api/drafts/bulk-delete", response_model=schemas.BulkDeleteResponse)
+def bulk_delete_drafts(
+    payload: schemas.BulkDeleteRequest,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user)
+):
+    """Delete several of the user's drafts at once (list multi-select). Ids that
+    don't exist or belong to someone else are skipped silently."""
+    ids = list(dict.fromkeys(payload.ids))
+    drafts = db.query(models.Draft).filter(
+        models.Draft.id.in_(ids),
+        models.Draft.user_id == current_user.id,
+    ).all()
+    paths = []
+    for draft in drafts:
+        paths.extend(_draft_image_paths(draft))
+        db.delete(draft)
+    db.commit()
+    _remove_upload_files(paths)
+    return {"deleted": [d.id for d in drafts]}
 
 @app.post("/api/drafts/{draft_id}/images", response_model=schemas.DraftResponse)
 def add_draft_images(

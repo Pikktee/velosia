@@ -55,6 +55,14 @@ export const getImageUrl = (path) => {
   return `${API_BASE_URL}${path}`;
 };
 
+// Small (240 px) version of an uploaded photo for list rows. Stored photos are
+// up to 2560 px / ~1 MB; the server renders and caches the thumbnail once.
+export const getThumbUrl = (path) => {
+  const url = getImageUrl(path);
+  if (!url || !/\/uploads\//.test(url)) return url;
+  return `${url}${url.includes('?') ? '&' : '?'}w=240`;
+};
+
 // --- AUTH API ---
 
 // Error text for the login/register form. FastAPI answers validation errors
@@ -363,6 +371,21 @@ export const deleteDraft = async (id) => {
   }
   
   return true;
+};
+
+// Delete several drafts in one request (list multi-select). Returns the ids the
+// server actually deleted.
+export const bulkDeleteDrafts = async (ids) => {
+  const response = await fetch(`${API_BASE_URL}/api/drafts/bulk-delete`, {
+    method: 'POST',
+    headers: getHeaders(),
+    body: JSON.stringify({ ids }),
+  });
+  if (!response.ok) {
+    throw new Error('Fehler beim Löschen der Angebote.');
+  }
+  const data = await response.json();
+  return data.deleted || [];
 };
 
 export const deleteUserAccount = async () => {

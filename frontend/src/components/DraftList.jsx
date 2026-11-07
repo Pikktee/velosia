@@ -1,7 +1,7 @@
 import React, { useRef, useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { Tag, Sparkles, Trash2, Calendar, ShoppingBag, Camera, FolderHeart, ChevronRight, RefreshCw, AlertTriangle, Clock, Coins, ExternalLink, X } from 'lucide-react';
-import { getImageUrl, setListingStatus } from '../utils/api';
+import { Sparkles, Trash2, ChevronRight, RefreshCw, AlertTriangle, Clock, Coins, X, Check } from 'lucide-react';
+import { getThumbUrl } from '../utils/api';
 import { statusMeta, hasListing, listingPlatforms, draftSection, crossPostConflict, listingAgeDays, STALE_DAYS } from '../utils/listingStatus';
 
 // dd.mm for compact list signals.
@@ -11,14 +11,73 @@ const fmtShort = (iso) => {
   return d.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit' });
 };
 
-export default function DraftList({ drafts, isLoading, loadError = false, onRetry, onSelectDraft, onDeleteDraft, onRefreshStatuses, flashIds = [] }) {
+// Skeleton rows: title widths vary so the placeholder doesn't read as a grid of
+// identical bars; later rows fade (--sk-fade) so the list trails off.
+const SKELETON_ROWS = [
+  { title: '78%', second: '46%', meta: true },
+  { title: '64%', second: null, meta: false },
+  { title: '85%', second: '38%', meta: true },
+  { title: '58%', second: null, meta: false },
+  { title: '72%', second: '52%', meta: false },
+  { title: '66%', second: null, meta: true },
+];
+
+export default function DraftList({ drafts, isLoading, loadError = false, onRetry, onSelectDraft, onDeleteDraft, onBulkDelete, onRefreshStatuses, flashIds = [] }) {
   const [refreshing, setRefreshing] = useState(false);
+  // Multi-select: a long press on a row starts it, taps then toggle rows.
+  const [picked, setSelected] = useState(() => new Set());
+  // Rows that vanished (deleted elsewhere, list reloaded) drop out of the selection.
+  const selected = React.useMemo(() => {
+    const ids = new Set(drafts.map((d) => d.id));
+    return new Set([...picked].filter((id) => ids.has(id)));
+  }, [picked, drafts]);
+  const [confirmBulk, setConfirmBulk] = useState(false);
+  const [bulkDeleting, setBulkDeleting] = useState(false);
+  const [bulkError, setBulkError] = useState(null);
+  const selecting = selected.size > 0;
+
+  const toggleSelected = (id) => {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
+  const clearSelection = () => setSelected(new Set());
+  const allSelected = selecting && drafts.every((d) => selected.has(d.id));
+  const selectAll = () => setSelected(allSelected ? new Set() : new Set(drafts.map((d) => d.id)));
+
+  // Android back leaves selection mode first (App's onAndroidBack asks here).
+  useEffect(() => {
+    if (!selecting) return undefined;
+    window.__velosiaListBack = () => { clearSelection(); return true; };
+    return () => { delete window.__velosiaListBack; };
+  }, [selecting]);
+
+  const selectedLive = drafts.filter((d) => selected.has(d.id) && draftSection(d) === 'active').length;
+
+  const handleBulkDelete = async () => {
+    if (bulkDeleting || !onBulkDelete) return;
+    setBulkDeleting(true);
+    setBulkError(null);
+    try {
+      await onBulkDelete([...selected]);
+      setConfirmBulk(false);
+      clearSelection();
+    } catch (err) {
+      console.error(err);
+      setBulkError('Löschen fehlgeschlagen. Bitte prüfe deine Verbindung und versuch es nochmal.');
+    } finally {
+      setBulkDeleting(false);
+    }
+  };
   const [conflict, setConflict] = useState(null);
   const [pullY, setPullY] = useState(0);
   const [isPulling, setIsPulling] = useState(false);
   const pullStartY = useRef(0);
 
   const handlePtrStart = (e) => {
+    if (selecting) return;
     if (window.scrollY === 0) {
       pullStartY.current = e.touches[0].clientY;
       setIsPulling(true);
@@ -64,16 +123,6 @@ export default function DraftList({ drafts, isLoading, loadError = false, onRetr
     }
   };
 
-  const formatDate = (dateString) => {
-    const d = new Date(dateString);
-    return d.toLocaleDateString('de-DE', { 
-      day: '2-digit', 
-      month: '2-digit', 
-      year: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit'
-    });
-  };
 
   if (isLoading && drafts.length === 0) {
     return (
@@ -82,28 +131,26 @@ export default function DraftList({ drafts, isLoading, loadError = false, onRetr
           <div className="app-header-inner">
             <div className="app-header-bar">
               <h2 className="app-header-title" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                Deine Angebote <span className="drafts-count-badge" style={{ fontSize: '0.85rem', padding: '0.15rem 0.5rem', borderRadius: '99px', background: 'rgba(255,255,255,0.08)' }}>...</span>
+                Deine Angebote <span className="sk-block" style={{ width: '30px', height: '1.3rem', borderRadius: '99px' }} aria-hidden="true" />
               </h2>
             </div>
           </div>
         </div>
-        <div className="app-content-container" style={{ paddingBottom: 'calc(85px + env(safe-area-inset-bottom, 0px))' }}>
-          <ul className="SwipeableList">
-            {[1, 2, 3].map((key) => (
-              <li key={key} className="draft-list-item-container-wrap">
-                <div className="draft-list-item-card" style={{ cursor: 'default', pointerEvents: 'none' }}>
-                  <div className="draft-list-item-main">
-                    <div className="draft-list-item-thumb-container skeleton-pulse" />
-                    <div className="draft-list-item-details" style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                      <div className="skeleton-pulse" style={{ height: '1.2rem', width: '70%', borderRadius: '4px' }} />
-                      <div className="skeleton-pulse" style={{ height: '0.8rem', width: '35%', borderRadius: '4px' }} />
-                    </div>
-                    <div className="draft-list-item-right">
-                      <div className="skeleton-pulse" style={{ height: '1.8rem', width: '50px', borderRadius: 'var(--radius-sm)' }} />
-                      <ChevronRight size={18} className="draft-list-item-arrow" style={{ opacity: 0.15 }} />
-                    </div>
-                  </div>
+        <div className="app-content-container" style={{ paddingBottom: 'calc(85px + env(safe-area-inset-bottom, 0px))' }} aria-busy="true" aria-label="Angebote werden geladen">
+          <ul className="sk-list">
+            {SKELETON_ROWS.map((row, i) => (
+              <li
+                key={i}
+                className="sk-row"
+                style={{ animationDelay: `${i * 70}ms`, '--sk-fade': Math.max(0.35, 1 - i * 0.13) }}
+              >
+                <div className="sk-block sk-thumb" />
+                <div className="sk-lines">
+                  <div className="sk-block sk-line title" style={{ width: row.title }} />
+                  {row.second && <div className="sk-block sk-line" style={{ width: row.second }} />}
+                  {row.meta && <div className="sk-block sk-line meta" />}
                 </div>
+                <div className="sk-block sk-price" />
               </li>
             ))}
           </ul>
@@ -237,6 +284,24 @@ export default function DraftList({ drafts, isLoading, loadError = false, onRetr
 
       <div className="app-sticky-header">
         <div className="app-header-inner">
+          {selecting ? (
+          <div className="app-header-bar select-bar" role="toolbar" aria-label="Auswahl">
+            <button className="select-bar-btn icon" onClick={clearSelection} aria-label="Auswahl beenden" title="Auswahl beenden">
+              <X size={18} />
+            </button>
+            <span className="select-bar-count" aria-live="polite">{selected.size} ausgewählt</span>
+            <button className="select-bar-btn" onClick={selectAll}>
+              {allSelected ? 'Keine' : 'Alle'}
+            </button>
+            <button
+              className="select-bar-btn danger"
+              onClick={() => { setBulkError(null); setConfirmBulk(true); }}
+              aria-label={`${selected.size} löschen`}
+            >
+              <Trash2 size={16} /> Löschen
+            </button>
+          </div>
+          ) : (
           <div className="app-header-bar" style={{ justifyContent: 'space-between' }}>
             <h2 className="app-header-title" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
               Deine Angebote 
@@ -258,6 +323,7 @@ export default function DraftList({ drafts, isLoading, loadError = false, onRetr
               )}
             </div>
           </div>
+          )}
         </div>
       </div>
 
@@ -270,6 +336,9 @@ export default function DraftList({ drafts, isLoading, loadError = false, onRetr
               onSelect={onSelectDraft}
               onDelete={onDeleteDraft}
               flash={flashIds.includes(draft.id)}
+              selecting={selecting}
+              selected={selected.has(draft.id)}
+              onToggleSelect={onBulkDelete ? toggleSelected : null}
             />
           ))}
         </ul>
@@ -278,12 +347,59 @@ export default function DraftList({ drafts, isLoading, loadError = false, onRetr
       {conflict && (
         <CrossPostSheet conflict={conflict} onClose={() => setConflict(null)} />
       )}
+
+      {confirmBulk && createPortal(
+        <div className="confirm-modal-overlay" onClick={() => !bulkDeleting && setConfirmBulk(false)}>
+          <div className="confirm-modal-card" onClick={(e) => e.stopPropagation()}>
+            <h3>{selected.size === 1 ? 'Angebot löschen?' : `${selected.size} Angebote löschen?`}</h3>
+            <p>
+              {selected.size === 1 ? 'Das Angebot wird' : 'Die Angebote werden'} mit allen Fotos dauerhaft aus Velosia gelöscht.
+            </p>
+            {selectedLive > 0 && (
+              <p className="confirm-modal-note">
+                {selectedLive === 1 ? '1 davon ist' : `${selectedLive} davon sind`} noch online – die Anzeigen auf Vinted bzw. Kleinanzeigen bleiben bestehen.
+              </p>
+            )}
+            {bulkError && <p className="confirm-modal-error">{bulkError}</p>}
+            <div className="confirm-modal-buttons">
+              <button className="confirm-btn-cancel" onClick={() => setConfirmBulk(false)} disabled={bulkDeleting}>Abbrechen</button>
+              <button className="confirm-btn-delete" onClick={handleBulkDelete} disabled={bulkDeleting}>
+                {bulkDeleting ? 'Wird gelöscht …' : 'Löschen'}
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
     </div>
   );
 }
 
-function DraftListItem({ draft, onSelect, onDelete, flash = false }) {
+const LONG_PRESS_MS = 450;
+const LONG_PRESS_SLOP = 10; // px of finger movement that still counts as holding still
+
+function DraftListItem({ draft, onSelect, onDelete, flash = false, selecting = false, selected = false, onToggleSelect = null }) {
   const [swipeOffset, setSwipeOffset] = useState(0);
+  const [thumbLoaded, setThumbLoaded] = useState(false);
+  const longPressTimer = useRef(null);
+  const longPressFired = useRef(false);
+
+  const cancelLongPress = () => {
+    if (longPressTimer.current) {
+      clearTimeout(longPressTimer.current);
+      longPressTimer.current = null;
+    }
+  };
+  useEffect(() => cancelLongPress, []);
+
+  const fireLongPress = () => {
+    longPressTimer.current = null;
+    if (!onToggleSelect || isDeleting) return;
+    longPressFired.current = true;
+    try { if (navigator.vibrate) navigator.vibrate(12); } catch { /* ignore */ }
+    // Long press on an already selected row in selection mode keeps it selected.
+    if (!(selecting && selected)) onToggleSelect(draft.id);
+  };
   const [isSwiping, setIsSwiping] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
@@ -297,25 +413,40 @@ function DraftListItem({ draft, onSelect, onDelete, flash = false }) {
   const hasSwiped = useRef(false);
   const isVerticalScroll = useRef(false);
 
-  const formatDate = (dateString) => {
-    const d = new Date(dateString);
-    return d.toLocaleDateString('de-DE', { 
-      day: '2-digit', 
-      month: '2-digit', 
-      year: 'numeric'
-    });
-  };
+  // Entering selection mode closes an open swipe action.
+  useEffect(() => {
+    if (selecting && currentRestOffset.current !== 0) {
+      setSwipeOffset(0);
+      currentRestOffset.current = 0;
+    }
+  }, [selecting]);
+
 
   const handleTouchStart = (e) => {
     if (isDeleting) return;
     startX.current = e.touches[0].clientX;
     startY.current = e.touches[0].clientY;
+    longPressFired.current = false;
+    cancelLongPress();
+    if (onToggleSelect && currentRestOffset.current === 0) {
+      longPressTimer.current = setTimeout(fireLongPress, LONG_PRESS_MS);
+    }
+    if (selecting) return; // no swipe-to-delete while selecting
     setIsSwiping(true);
     hasSwiped.current = false;
     isVerticalScroll.current = false;
   };
 
   const handleTouchMove = (e) => {
+    if (longPressTimer.current) {
+      const mx = e.touches[0].clientX - startX.current;
+      const my = e.touches[0].clientY - startY.current;
+      if (Math.abs(mx) > LONG_PRESS_SLOP || Math.abs(my) > LONG_PRESS_SLOP) cancelLongPress();
+    }
+    if (longPressFired.current) {
+      if (e.cancelable) e.preventDefault();
+      return;
+    }
     if (!isSwiping || isDeleting) return;
     const currentTouchX = e.touches[0].clientX;
     const currentTouchY = e.touches[0].clientY;
@@ -360,6 +491,7 @@ function DraftListItem({ draft, onSelect, onDelete, flash = false }) {
   };
 
   const handleTouchEnd = () => {
+    cancelLongPress();
     if (!isSwiping || isDeleting) return;
     setIsSwiping(false);
     
@@ -394,6 +526,7 @@ function DraftListItem({ draft, onSelect, onDelete, flash = false }) {
   };
 
   const handleTouchCancel = () => {
+    cancelLongPress();
     if (isDeleting) return;
     setIsSwiping(false);
     setSwipeOffset(currentRestOffset.current);
@@ -449,6 +582,16 @@ function DraftListItem({ draft, onSelect, onDelete, flash = false }) {
 
   const handleClick = (e) => {
     if (isDeleting) return;
+    // The click that ends a long press only finishes the gesture.
+    if (longPressFired.current) {
+      longPressFired.current = false;
+      e.preventDefault();
+      return;
+    }
+    if (selecting) {
+      if (onToggleSelect) onToggleSelect(draft.id);
+      return;
+    }
     if (currentRestOffset.current !== 0) {
       // Card is swiped open: tap to close it
       setSwipeOffset(0);
@@ -488,8 +631,18 @@ function DraftListItem({ draft, onSelect, onDelete, flash = false }) {
       {/* Foreground card */}
       <div
         ref={cardRef}
-        className={`draft-list-item-card${flash ? ' turbo-flash' : ''}`}
+        className={`draft-list-item-card${flash ? ' turbo-flash' : ''}${selecting ? ' selecting' : ''}${selected ? ' selected' : ''}`}
         onClick={handleClick}
+        onContextMenu={(e) => {
+          // Desktop: right click starts/extends the selection. On touch the
+          // long-press timer already handled it (the WebView also sends this).
+          if (!onToggleSelect) return;
+          e.preventDefault();
+          if (longPressFired.current || ('ontouchstart' in window && navigator.maxTouchPoints > 0)) return;
+          if (!(selecting && selected)) onToggleSelect(draft.id);
+        }}
+        role={selecting ? 'checkbox' : undefined}
+        aria-checked={selecting ? selected : undefined}
         onTouchStart={handleTouchStart}
         onTouchMove={handleTouchMove}
         onTouchEnd={handleTouchEnd}
@@ -502,11 +655,21 @@ function DraftListItem({ draft, onSelect, onDelete, flash = false }) {
         <div className="draft-list-item-main">
           {/* Small Thumbnail */}
           <div className="draft-list-item-thumb-container">
-            <img 
-              src={getImageUrl(draft.image_path)} 
+            <img
+              src={getThumbUrl(draft.image_path)}
               alt={draft.title}
-              className="draft-list-item-thumb"
+              className={`draft-list-item-thumb ${thumbLoaded ? 'is-loaded' : 'is-loading'}`}
+              loading="lazy"
+              decoding="async"
+              width="58"
+              height="58"
+              onLoad={() => setThumbLoaded(true)}
+              onError={() => setThumbLoaded(true)}
+              draggable={false}
             />
+            <span className="select-check" aria-hidden="true">
+              <span className="select-check-dot">{selected && <Check size={14} strokeWidth={3} />}</span>
+            </span>
           </div>
 
           {/* Middle Section: Text details */}

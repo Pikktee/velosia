@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { readDraftCache, writeDraftCache, clearDraftCache } from './utils/draftCache';
 import { Camera, FolderHeart, Sparkles, User, Cloud, HelpCircle, Rocket } from 'lucide-react';
 import CameraCapture from './components/CameraCapture';
 import DraftList from './components/DraftList';
@@ -16,7 +17,7 @@ import Toaster from './components/Toaster';
 import WhatsNewSheet from './components/WhatsNewSheet';
 import { seedWhatsNewIfFresh, takeWhatsNew } from './utils/whatsNew';
 import { showError } from './utils/toast';
-import { getDrafts, deleteDraft, isAuthenticated, setAuthToken, getMe, refreshSessionIfDue, uploadAndAnalyze, uploadTurbo, refreshAllListings } from './utils/api';
+import { getDrafts, deleteDraft, bulkDeleteDrafts, isAuthenticated, setAuthToken, getMe, refreshSessionIfDue, uploadAndAnalyze, uploadTurbo, refreshAllListings } from './utils/api';
 import { version } from '../package.json';
 
 
@@ -46,7 +47,9 @@ export default function App() {
   const [user, setUser] = useState(null);
   const [view, setView] = useState('list'); // 'capture', 'list', 'detail', 'analyzing'
   const [adminTab, setAdminTab] = useState('users');
-  const [drafts, setDrafts] = useState([]);
+  // The last known list from the device shows at once; the fetch on start then
+  // replaces it (see utils/draftCache.js).
+  const [drafts, setDrafts] = useState(() => (isAuthenticated() ? readDraftCache() : []));
   const [selectedDraft, setSelectedDraft] = useState(null);
   // Start in loading state so the very first paint shows the skeleton list,
   // not a flash of the empty-state onboarding screen before drafts arrive.
@@ -125,6 +128,9 @@ export default function App() {
         }
         setAnalysisError(null);
         setView(prevView || 'list');
+        return true;
+      } else if (view === 'list' && window.__velosiaListBack && window.__velosiaListBack()) {
+        // The list was in multi-select mode: back leaves it.
         return true;
       } else if (view === 'detail') {
         setView('list');
@@ -315,7 +321,14 @@ export default function App() {
     return data;
   };
 
+  // Keep the device copy of the list current (see utils/draftCache.js).
+  useEffect(() => {
+    if (token && !loading) writeDraftCache(drafts);
+  }, [drafts, token, loading]);
+
   const handleLoginSuccess = (newToken) => {
+    clearDraftCache();
+    setDrafts([]);
     setAuthToken(newToken);
     setToken(newToken);
     fetchCurrentUser();
@@ -329,6 +342,7 @@ export default function App() {
     setToken(null);
     setUser(null);
     setDrafts([]);
+    clearDraftCache();
     setSelectedDraft(null);
     localStorage.removeItem('velosia_user_email');
     setView('list');
@@ -347,6 +361,15 @@ export default function App() {
       console.error(err);
       showError('Das Angebot konnte nicht gelöscht werden.', () => handleDeleteDraft(id));
     }
+  };
+
+  // Multi-select delete from the list: one request, then drop the rows. Throws
+  // so the list can keep its selection when it failed.
+  const handleBulkDelete = async (ids) => {
+    const deleted = await bulkDeleteDrafts(ids);
+    const gone = new Set(deleted);
+    setDrafts((prev) => prev.filter((d) => !gone.has(d.id)));
+    return deleted;
   };
 
   // --- Camera button: short tap = normal capture, long press = Turbo mode ---
@@ -700,6 +723,7 @@ export default function App() {
                 setView('detail');
               }}
               onDeleteDraft={handleDeleteDraft}
+              onBulkDelete={handleBulkDelete}
               onRefreshStatuses={handleRefreshStatuses}
               flashIds={flashDraftIds}
             />

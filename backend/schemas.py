@@ -223,6 +223,14 @@ class AnalysisResponse(BaseModel):
     condition: str
     price: float
 
+class BulkDeleteRequest(BaseModel):
+    ids: List[int] = Field(..., min_length=1, max_length=500)
+
+
+class BulkDeleteResponse(BaseModel):
+    deleted: List[int]
+
+
 class DraftRegenerateRequest(BaseModel):
     field: str = Field(max_length=20)
 

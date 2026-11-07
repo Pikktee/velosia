@@ -1,4 +1,11 @@
 [
+  {
+    "version": "2.7.64",
+    "items": [
+      "Mehrere Angebote auf einmal löschen: Halte ein Angebot in der Liste gedrückt, tippe weitere an und lösche sie zusammen.",
+      "Deine Angebotsliste ist beim Öffnen sofort da und lädt deutlich schneller."
+    ]
+  },
   { "version": "2.7.63", "fixes": true },
   {
     "version": "2.7.62",

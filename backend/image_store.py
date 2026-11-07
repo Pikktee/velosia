@@ -282,3 +282,60 @@ def start_sanitize_existing_uploads(upload_dir: str) -> None:
     threading.Thread(
         target=sanitize_existing_uploads, args=(upload_dir,), name="upload-metadata-cleanup", daemon=True
     ).start()
+
+
+# ---------------------------------------------------------------------------
+# List thumbnails
+# ---------------------------------------------------------------------------
+
+# Widths a client may ask for. A fixed set keeps the cache small and stops
+# anyone from making the server render arbitrary sizes.
+THUMB_WIDTHS = (240,)
+THUMB_DIR_NAME = ".thumbs"
+_thumb_lock = threading.Lock()
+
+
+def thumb_local_path(upload_dir: str, filename: str, width: int) -> str:
+    stem = os.path.splitext(filename)[0]
+    return os.path.join(upload_dir, THUMB_DIR_NAME, f"{stem}-w{width}.jpg")
+
+
+def ensure_thumbnail(upload_dir: str, filename: str, width: int) -> Optional[str]:
+    """Local path of a small JPEG of an uploaded photo (rendered once, then
+    cached next to the uploads). None if the original is missing or unreadable.
+
+    The list shows ~64 px squares; stored photos are up to 2560 px and ~1 MB,
+    so loading originals there cost tens of MB on a long list."""
+    if width not in THUMB_WIDTHS:
+        return None
+    original = os.path.join(upload_dir, filename)
+    if not os.path.isfile(original):
+        return None
+    dest = thumb_local_path(upload_dir, filename, width)
+    if os.path.isfile(dest):
+        return dest
+    with _thumb_lock:
+        if os.path.isfile(dest):
+            return dest
+        try:
+            os.makedirs(os.path.dirname(dest), exist_ok=True)
+            with Image.open(original) as img:
+                img.draft("RGB", (width * 2, width * 2))
+                img = ImageOps.exif_transpose(img)
+                img.thumbnail((width, width), Image.Resampling.LANCZOS)
+                _write_jpeg(img, dest, quality=80)
+        except Exception as e:
+            print(f"[images] Vorschaubild fehlgeschlagen ({filename}): {e}", flush=True)
+            return None
+    return dest
+
+
+def remove_thumbnails(upload_dir: str, filename: str) -> None:
+    """Delete the cached thumbnails of one upload. Best-effort."""
+    for width in THUMB_WIDTHS:
+        path = thumb_local_path(upload_dir, filename, width)
+        try:
+            if os.path.isfile(path):
+                os.remove(path)
+        except OSError:
+            pass
