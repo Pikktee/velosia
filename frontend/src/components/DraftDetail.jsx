@@ -4,7 +4,7 @@ import { ArrowLeft, Copy, Check, ExternalLink, Monitor, RefreshCw, AlertCircle, 
 import { updateDraft, getImageUrl, getPlatformToken, uploadDraftImages, deleteDraftImage, regenerateDraftField, refreshListingStatus, setListingStatus } from '../utils/api';
 import { statusMeta, listingPlatforms, TERMINAL, onlineChanges, detailSummary, platformDeleteUrl } from '../utils/listingStatus';
 import { StatusSheet, PublishSheet, PlatformMark } from './ListingSheets';
-import { showError } from '../utils/toast';
+import { showError, showToast } from '../utils/toast';
 import { PRICE_TYPES } from '../utils/priceType';
 import RelistSheet from './RelistSheet';
 import OnlineChangesSheet from './OnlineChangesSheet';
@@ -73,6 +73,12 @@ export default function DraftDetail({ draft, onBack, onUpdateSuccess, onDelete }
     refreshListingStatus(draft.id).then((updated) => {
       if (cancelled || !updated) return;
       onUpdateSuccess(updated);
+      if (forced) {
+        // Back from deleting on the platform: confirm what happened.
+        const gone = live.filter(([p]) => updated[`${p}_status`] === 'geloescht')
+          .map(([p]) => (p === 'ka' ? 'Kleinanzeigen' : 'Vinted'));
+        if (gone.length) showToast(`Anzeige auf ${gone.join(' und ')} gelöscht`, { type: 'success' });
+      }
       if (onlineOffered.current) return;
       const change = onlineChanges(updated, formRef.current)[0];
       if (change) {

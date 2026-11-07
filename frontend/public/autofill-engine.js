@@ -43,7 +43,7 @@
   // and in the extension it is a persistent content script — never redefine.
   if (window.__velosia && window.__velosia.__loaded) return;
 
-  var VERSION = "2.7.74";
+  var VERSION = "2.7.81";
   var KA_TITLE_MAX = 65;
 
   // Cut at the last word boundary within `max`; hard cut if that loses too much.
@@ -3217,6 +3217,60 @@
       return base + "border:1px solid rgba(255,255,255,.14);background:transparent;color:#e2e8f0;";
     }
 
+    // Success signals after "Ja, Anzeige löschen": the delete request answering
+    // 2xx (fetch/XHR naming the ad id), a "gelöscht" notice, or (above) the row
+    // leaving or the page navigating.
+    function watchDeleteSuccess(id, done) {
+      function hit(url, method, body) {
+        var u = String(url || ""), b = typeof body === "string" ? body : "";
+        return (u.indexOf(id) >= 0 || b.indexOf(id) >= 0) && /^(post|delete|put)$/i.test(method || "get");
+      }
+      try {
+        var of = window.fetch;
+        if (of && !of.__velosiaWrapped) {
+          var wrapped = function (input, init) {
+            var url = typeof input === "string" ? input : (input && input.url);
+            var method = (init && init.method) || (input && input.method) || "GET";
+            var watch = hit(url, method, init && init.body);
+            return of.apply(this, arguments).then(function (res) {
+              if (watch && res && res.ok) setTimeout(done, 300);
+              return res;
+            });
+          };
+          wrapped.__velosiaWrapped = true;
+          window.fetch = wrapped;
+        }
+      } catch (e) {}
+      try {
+        var XO = XMLHttpRequest.prototype.open, XS = XMLHttpRequest.prototype.send;
+        if (!XO.__velosiaWrapped) {
+          XMLHttpRequest.prototype.open = function (m, u) { this.__vMethod = m; this.__vUrl = u; return XO.apply(this, arguments); };
+          XMLHttpRequest.prototype.open.__velosiaWrapped = true;
+          XMLHttpRequest.prototype.send = function (body) {
+            var x = this;
+            if (hit(x.__vUrl, x.__vMethod, body)) {
+              x.addEventListener("load", function () { if (x.status >= 200 && x.status < 300) setTimeout(done, 300); });
+            }
+            return XS.apply(this, arguments);
+          };
+        }
+      } catch (e) {}
+    }
+    function successNotice() {
+      var els = document.querySelectorAll("[role='status'], [role='alert'], [class*='toast'], [class*='notification'], [class*='snackbar']");
+      for (var i = 0; i < els.length; i++) {
+        if (/gelöscht/i.test(els[i].textContent || "") && visible(els[i])) return true;
+      }
+      return false;
+    }
+    function otherOpenDialog(mine) {
+      var all = document.querySelectorAll("dialog[open], [role='dialog'][aria-modal='true']");
+      for (var i = 0; i < all.length; i++) {
+        if (all[i] !== mine && !mine.contains(all[i]) && visible(all[i])) return all[i];
+      }
+      return null;
+    }
+
     // Velosia's own confirm sheet, hosted INSIDE KA's (possibly modal) dialog so it
     // stays tappable, anchored to the visible viewport.
     function showSheet(dialog, row) {
@@ -3277,24 +3331,38 @@
         if (!yes) { teardown(); chip("Tippe auf „Ja, Anzeige löschen“."); return; }
         render("busy");
         sync();
+        var finished = false;
+        function success() {
+          if (finished) return;
+          finished = true;
+          var open = dialog.isConnected && (dialog.open || dialog.hasAttribute("open"));
+          (open ? dialog : document.body).appendChild(sheet);
+          render("done");
+          sync();
+          // Back to the draft in Velosia on its own; the button stays as a fallback.
+          setTimeout(goBack, 1100);
+        }
+        watchDeleteSuccess(adId, success);
+        // KA may reload the page after deleting: that navigation is the success.
+        window.addEventListener("pagehide", function () { if (!finished) { finished = true; goBack(); } });
         yes.click();
-        // Done once the ad has left the list. If it is still there after 12 s,
-        // step aside and let KA's own page show what happened.
         var n = 0;
         (function wait() {
-          var gone = !document.querySelector('li[data-adid="' + adId + '"]');
-          if (gone) {
-            var open = dialog.isConnected && (dialog.open || dialog.hasAttribute("open"));
-            // A closed dialog is hidden: move the sheet out (the page is no longer inert).
-            (open ? dialog : document.body).appendChild(sheet);
-            render("done");
-            sync();
-            return;
-          }
-          if (++n < 48) return setTimeout(wait, 250);
+          if (finished) return;
+          var row = document.querySelector('li[data-adid="' + adId + '"]');
+          if (!row || /gelöscht/i.test(row.textContent || "") || successNotice()) return success();
+          // KA asks something else first (another dialog): step aside so the user
+          // can answer it; success is still caught and brings them back.
+          var other = otherOpenDialog(dialog);
+          if (other && sheet.isConnected && sheet.textContent.indexOf("Wird gelöscht") >= 0) teardownSheetOnly();
+          if (++n < 60) return setTimeout(wait, 250);
           teardown();
           chip("Bitte prüfe, ob die Anzeige gelöscht ist.");
         })();
+      }
+      function teardownSheetOnly() {
+        unbindViewport(sync);
+        if (sheet.parentNode) sheet.remove();
       }
       render("ask");
       sync();
