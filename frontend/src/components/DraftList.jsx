@@ -31,6 +31,12 @@ const normalizeSearch = (v) => String(v || '')
   .replace(/[^a-z0-9]+/g, ' ')
   .trim();
 
+// In the app the list refreshes by pulling down (and quietly on opening); the
+// header button is only for desktop, which has no pull gesture.
+const IN_APP = typeof window !== 'undefined' && typeof window.VelosiaBridge !== 'undefined';
+const REFRESHED_KEY = 'velosia_status_refreshed_at';
+const AUTO_REFRESH_MS = 30 * 60 * 1000;
+
 export default function DraftList({ drafts, isLoading, loadError = false, onRetry, onSelectDraft, onDeleteDraft, onBulkDelete, onRefreshStatuses, flashIds = [] }) {
   const [refreshing, setRefreshing] = useState(false);
   // Multi-select: a long press on a row starts it, taps then toggle rows.
@@ -133,24 +139,51 @@ export default function DraftList({ drafts, isLoading, loadError = false, onRetr
     setPullY(0);
   };
   const anyListing = drafts.some(hasListing);
+  // Desktop shows the refresh in its header button; the app (no button) below the header.
+  const ptrSpinning = refreshing && IN_APP;
 
   // One spinner per refresh: the pull indicator only follows the finger; once
   // released, the header icon (right) spins. The indicator would sit over the count.
-  const handleRefresh = async () => {
-    if (refreshing || !onRefreshStatuses) return;
-    setRefreshing(true);
+  // `quiet`: the automatic refresh on opening the list — no spinner, no sheet.
+  const running = useRef(null); // the refresh in flight, if any
+  const handleRefresh = async ({ quiet = false } = {}) => {
+    if (!onRefreshStatuses) return;
+    if (running.current) {
+      // A quiet refresh is already under way: show it instead of starting another.
+      if (!quiet) {
+        setRefreshing(true);
+        running.current.finally(() => setRefreshing(false));
+      }
+      return;
+    }
+    if (!quiet) setRefreshing(true);
+    const job = onRefreshStatuses();
+    running.current = job.catch(() => {});
     try {
-      const data = await onRefreshStatuses();
+      const data = await job;
+      try { localStorage.setItem(REFRESHED_KEY, String(Date.now())); } catch { /* ignore */ }
       // Surface the first cross-posting conflict (sold on one platform, still
       // live on the other) as the take-down sheet.
       const found = (data || []).map(crossPostConflict).find(Boolean);
-      if (found) setConflict(found);
+      if (found && !quiet) setConflict(found);
     } catch (err) {
       console.error('Status-Aktualisierung fehlgeschlagen:', err);
     } finally {
-      setRefreshing(false);
+      running.current = null;
+      if (!quiet) setRefreshing(false);
     }
   };
+
+  // Opening the list refreshes the statuses quietly when the last read is older
+  // than AUTO_REFRESH_MS — so pulling down is rarely needed.
+  useEffect(() => {
+    if (!anyListing || !onRefreshStatuses) return;
+    let last = 0;
+    try { last = Number(localStorage.getItem(REFRESHED_KEY)) || 0; } catch { /* ignore */ }
+    if (Date.now() - last > AUTO_REFRESH_MS) handleRefresh({ quiet: true });
+    // Once per mount, as soon as there is something to refresh.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [anyListing]);
 
 
   if (isLoading && drafts.length === 0) {
@@ -298,12 +331,6 @@ export default function DraftList({ drafts, isLoading, loadError = false, onRetr
       onTouchEnd={handlePtrEnd}
       style={{ display: 'flex', flexDirection: 'column', flex: 1, height: '100%', overflow: 'hidden' }}
     >
-      <div 
-        className={`ptr-indicator${pullY > 0 ? ' visible' : ''}`}
-        style={pullY > 0 ? { transform: `translateX(-50%) translateY(${pullY}px)`, zIndex: 110 } : { zIndex: 110 }}
-      >
-        <RefreshCw size={16} />
-      </div>
 
       <div className={`app-sticky-header${selecting ? ' is-selecting' : ''}`}>
         <div className="app-header-inner">
@@ -364,10 +391,10 @@ export default function DraftList({ drafts, isLoading, loadError = false, onRetr
               >
                 <Search size={16} />
               </button>
-              {anyListing && onRefreshStatuses && (
+              {anyListing && onRefreshStatuses && !IN_APP && (
                 <button
                   className="status-refresh-btn icon-only"
-                  onClick={handleRefresh}
+                  onClick={() => handleRefresh()}
                   disabled={refreshing}
                   title="Status aller Angebote aktualisieren"
                   aria-label="Status aller Angebote aktualisieren"
@@ -381,7 +408,18 @@ export default function DraftList({ drafts, isLoading, loadError = false, onRetr
         </div>
       </div>
 
-      <div className="app-content-container" style={{ paddingBottom: 'calc(85px + env(safe-area-inset-bottom, 0px))' }}>
+      <div className="app-content-container" style={{ position: 'relative', paddingBottom: 'calc(85px + env(safe-area-inset-bottom, 0px))' }}>
+        {/* Pull-to-refresh: follows the finger below the header, then stays
+            there spinning while the refresh runs (Material style). */}
+        <div
+          className={`ptr-indicator${pullY > 0 || ptrSpinning ? ' visible' : ''}${ptrSpinning ? ' refreshing' : ''}`}
+          style={{ transform: `translateX(-50%) translateY(${ptrSpinning ? 56 : pullY}px)`, zIndex: 110 }}
+          aria-hidden={!ptrSpinning}
+          role={ptrSpinning ? 'status' : undefined}
+          aria-label={ptrSpinning ? 'Wird aktualisiert' : undefined}
+        >
+          <RefreshCw size={16} />
+        </div>
         {searching && query && shown.length === 0 && (
           <p className="search-empty">Keine Treffer für „{query.trim()}“</p>
         )}
