@@ -5631,3 +5631,21 @@ textarea.form-control.autogrow.single { min-height: 48px; line-height: 1.4; }
   font-weight: 600;
   cursor: pointer;
 }
+
+/* Rückgängig / Wiederherstellen im Feldkopf (V2.7.89) */
+.field-tools { display: inline-flex; align-items: center; gap: 0.35rem; }
+.undo-buttons { display: inline-flex; gap: 0.25rem; }
+.undo-btn {
+  width: 36px;
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 7px;
+  border: 1px solid var(--glass-border);
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+.undo-btn:disabled { opacity: 0.35; cursor: default; }
+.undo-btn:not(:disabled):active { background: rgba(255, 255, 255, 0.08); }

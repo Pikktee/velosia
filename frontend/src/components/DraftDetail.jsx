@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useLayoutEffect } from 'react';
 import AutoTextarea from './AutoTextarea';
 import { createPortal } from 'react-dom';
-import { ArrowLeft, Copy, Check, ExternalLink, Monitor, RefreshCw, AlertCircle, Trash2, Plus, Sparkles, Share2, Camera, TrendingUp, ChevronDown, ChevronLeft, ChevronRight, Star, Tag, Coins, ArrowUp, ArrowUpRight, MoreVertical } from 'lucide-react';
+import { ArrowLeft, Copy, Check, ExternalLink, Monitor, RefreshCw, AlertCircle, Trash2, Plus, Sparkles, Share2, Camera, TrendingUp, ChevronDown, ChevronLeft, ChevronRight, Star, Tag, Coins, ArrowUp, ArrowUpRight, MoreVertical, Undo2, Redo2 } from 'lucide-react';
 import { updateDraft, getImageUrl, getPlatformToken, uploadDraftImages, deleteDraftImage, regenerateDraftField, refreshListingStatus, setListingStatus } from '../utils/api';
 import { statusMeta, listingPlatforms, TERMINAL, onlineChanges, detailSummary, platformDeleteUrl } from '../utils/listingStatus';
 import { StatusSheet, PublishSheet, PlatformMark } from './ListingSheets';
@@ -12,6 +12,7 @@ import OnlineChangesSheet from './OnlineChangesSheet';
 import { takePendingRelist, takeRecheck, rememberRecheck } from '../utils/relist';
 
 const SOURCES_SHOWN = 5;
+const UNDO_PAUSE_MS = 1000;
 
 // Character offset in `box`'s text at a tap/click, so editing starts where the
 // user tapped (falls back to the end).
@@ -538,33 +539,70 @@ export default function DraftDetail({ draft, onBack, onUpdateSuccess, onDelete }
     setImageToDelete(null);
   };
 
-  // Text edits save themselves, so a slip (select all + delete) is saved too. A
-  // large deletion therefore offers „Rückgängig“ for a few seconds; small edits
-  // stay quiet.
-  const undoBase = useRef({});
-  const offerUndo = (field, previous, message) => {
-    const setter = field === 'title' ? setTitle : setDescription;
-    showToast(message, {
-      duration: 7000,
-      action: { label: 'Rückgängig', onClick: () => setter(previous) },
-    });
+  // Undo/redo per text field. Edits save themselves, so a slip would be saved
+  // too; this is a real history: typing bursts form one step (a pause of
+  // UNDO_PAUSE_MS ends it), pastes/cuts and AI rewrites are steps of their own.
+  const history = useRef({ title: { past: [], future: [], at: 0 }, description: { past: [], future: [], at: 0 } });
+  const [, setHistoryTick] = useState(0);
+  const fieldValue = (field) => (field === 'title' ? title : description);
+  const fieldSetter = (field) => (field === 'title' ? setTitle : setDescription);
+  const pushHistory = (field, prev) => {
+    const h = history.current[field];
+    if (h.past[h.past.length - 1] !== prev) h.past.push(prev);
+    if (h.past.length > 100) h.past.shift();
+    h.future = [];
+    setHistoryTick((t) => t + 1);
   };
   const changeText = (field, next) => {
-    const prev = field === 'title' ? title : description;
-    const setter = field === 'title' ? setTitle : setDescription;
-    const lost = prev.length - next.length;
-    // Remember the text before a burst of deleting, so one undo restores it all.
+    const prev = fieldValue(field);
+    if (next === prev) return;
+    const h = history.current[field];
     const now = Date.now();
-    const base = undoBase.current[field];
-    if (!base || now - base.at > 4000) undoBase.current[field] = { text: prev, at: now, offered: false };
-    else undoBase.current[field].at = now;
-    const b = undoBase.current[field];
-    const gone = b.text.length - next.length;
-    if (!b.offered && lost > 0 && (gone >= 40 || (b.text.length >= 20 && next.length < b.text.length * 0.5))) {
-      b.offered = true;
-      offerUndo(field, b.text, field === 'title' ? 'Titel gelöscht' : 'Text gelöscht');
-    }
-    setter(next);
+    const jump = Math.abs(next.length - prev.length) > 1; // paste, cut, select-and-delete
+    if (jump || now - h.at > UNDO_PAUSE_MS || h.future.length) pushHistory(field, prev);
+    h.at = jump ? 0 : now;
+    fieldSetter(field)(next);
+  };
+  const undoText = (field) => {
+    const h = history.current[field];
+    if (!h.past.length) return;
+    h.future.push(fieldValue(field));
+    fieldSetter(field)(h.past.pop());
+    h.at = 0;
+    setHistoryTick((t) => t + 1);
+  };
+  const redoText = (field) => {
+    const h = history.current[field];
+    if (!h.future.length) return;
+    h.past.push(fieldValue(field));
+    fieldSetter(field)(h.future.pop());
+    h.at = 0;
+    setHistoryTick((t) => t + 1);
+  };
+  // Desktop: Strg/Cmd+Z and Strg/Cmd+Umschalt+Z (or Strg+Y) inside the field.
+  const undoKeys = (field) => (e) => {
+    const mod = e.ctrlKey || e.metaKey;
+    if (!mod) return;
+    const k = e.key.toLowerCase();
+    if (k === 'z' && !e.shiftKey) { e.preventDefault(); undoText(field); }
+    else if ((k === 'z' && e.shiftKey) || k === 'y') { e.preventDefault(); redoText(field); }
+  };
+  // ↶ ↷ next to the AI button; shown only when there is a step to take. They keep
+  // the focus in the field (mousedown), so editing continues.
+  const undoButtons = (field) => {
+    const h = history.current[field];
+    if (!h.past.length && !h.future.length) return null;
+    const keep = (e) => e.preventDefault();
+    return (
+      <span className="undo-buttons">
+        <button type="button" className="undo-btn" onMouseDown={keep} onClick={() => undoText(field)} disabled={!h.past.length} aria-label="Rückgängig" title="Rückgängig">
+          <Undo2 size={15} />
+        </button>
+        <button type="button" className="undo-btn" onMouseDown={keep} onClick={() => redoText(field)} disabled={!h.future.length} aria-label="Wiederherstellen" title="Wiederherstellen">
+          <Redo2 size={15} />
+        </button>
+      </span>
+    );
   };
 
   const handleRegenerateField = async (field) => {
@@ -579,9 +617,9 @@ export default function DraftDetail({ draft, onBack, onUpdateSuccess, onDelete }
         setDescription(updated.description || '');
       }
       onUpdateSuccess(updated);
-      if (before.trim()) {
-        offerUndo(field, before, field === 'title' ? 'Titel neu erstellt' : 'Beschreibung neu erstellt');
-      }
+      // The AI rewrite is one undo step.
+      const after = (field === 'title' ? updated.title : updated.description) || '';
+      if (after !== before) pushHistory(field, before);
     } catch (err) {
       console.error(err);
       showError(`KI-Neugenerierung fehlgeschlagen: ${err.message}`, () => handleRegenerateField(field));
@@ -674,6 +712,8 @@ export default function DraftDetail({ draft, onBack, onUpdateSuccess, onDelete }
     if (changes.price != null && change.type && change.type !== priceType) patch.price_type = change.type;
     try {
       const updated = await updateDraft(draft.id, patch);
+      if (patch.title !== title) pushHistory('title', title);
+      if (patch.description !== description) pushHistory('description', description);
       setTitle(patch.title);
       setDescription(patch.description);
       setPrice(patch.price);
@@ -972,6 +1012,8 @@ export default function DraftDetail({ draft, onBack, onUpdateSuccess, onDelete }
         <div className="form-group" style={{ marginBottom: 0 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem', flexWrap: 'wrap', gap: '0.5rem' }}>
             <label htmlFor="edit-title" style={{ marginBottom: 0 }}>Titel</label>
+            <span className="field-tools">
+            {undoButtons('title')}
             <button 
               type="button"
               className="ki-regen-btn"
@@ -985,6 +1027,7 @@ export default function DraftDetail({ draft, onBack, onUpdateSuccess, onDelete }
                 <Sparkles size={11} />
               )}
             </button>
+            </span>
           </div>
           <AutoTextarea
             singleLine
@@ -992,6 +1035,7 @@ export default function DraftDetail({ draft, onBack, onUpdateSuccess, onDelete }
             className="form-control"
             value={title}
             onChange={(e) => changeText('title', e.target.value.substring(0, 65))}
+            onKeyDown={undoKeys('title')}
             placeholder={regeneratingField === 'title' ? "Generiere..." : "Titel für die Anzeige..."}
             disabled={regeneratingField === 'title'}
             style={{ opacity: regeneratingField === 'title' ? 0.6 : 1 }}
@@ -1006,6 +1050,8 @@ export default function DraftDetail({ draft, onBack, onUpdateSuccess, onDelete }
         <div className="form-group" style={{ marginBottom: 0 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem', flexWrap: 'wrap', gap: '0.5rem' }}>
             <label htmlFor="edit-desc" style={{ marginBottom: 0 }}>Beschreibung</label>
+            <span className="field-tools">
+            {undoButtons('description')}
             <button
               type="button"
               className="ki-regen-btn"
@@ -1019,6 +1065,7 @@ export default function DraftDetail({ draft, onBack, onUpdateSuccess, onDelete }
                 <Sparkles size={11} />
               )}
             </button>
+            </span>
           </div>
           {editingDesc || !description ? (
             <AutoTextarea
@@ -1028,6 +1075,7 @@ export default function DraftDetail({ draft, onBack, onUpdateSuccess, onDelete }
               value={description}
               focusAt={editingDesc ? descCaret : null}
               onChange={(e) => changeText('description', e.target.value)}
+              onKeyDown={undoKeys('description')}
               onBlur={() => { setEditingDesc(false); setDescOpen(false); }}
               placeholder={regeneratingField === 'description' ? "Generiere..." : "Verkaufsbeschreibung schreiben..."}
               disabled={regeneratingField === 'description'}

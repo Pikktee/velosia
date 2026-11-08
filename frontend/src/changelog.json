@@ -1,9 +1,9 @@
 [
   {
-    "version": "2.7.88", "date": "2026-11-08",
-    "items": ["Versehentlich Text gelöscht oder per KI ersetzt? Ein Tipp auf „Rückgängig“ holt ihn zurück."],
-    "fixes": true
+    "version": "2.7.89", "date": "2026-11-08",
+    "items": ["Rückgängig und Wiederherstellen für Titel und Beschreibung: ↶ ↷ neben dem KI-Knopf."]
   },
+  { "version": "2.7.88", "date": "2026-11-08", "fixes": true },
   {
     "version": "2.7.87", "date": "2026-11-08",
     "items": ["Titel und Beschreibung zeigen den ganzen Text, ohne Scrollen im Feld."]
