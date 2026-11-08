@@ -62,6 +62,8 @@ export default function DraftDetail({ draft, onBack, onUpdateSuccess, onDelete }
   const [priceType, setPriceType] = useState(draft.price_type_effective || 'FIXED');
   
   const [saveStatus, setSaveStatus] = useState('saved'); // 'saved', 'saving', 'error'
+  const saveStatusRef = useRef(saveStatus);
+  saveStatusRef.current = saveStatus;
   const [hasChanges, setHasChanges] = useState(false);
   const [copiedField, setCopiedField] = useState(null);
   const [selectedModalImage, setSelectedModalImage] = useState(null);
@@ -216,6 +218,7 @@ export default function DraftDetail({ draft, onBack, onUpdateSuccess, onDelete }
       onUpdateSuccess(updated);
     } catch (err) {
       console.error(err);
+      showError('Die Angabe wurde nicht gespeichert.', () => saveTechValue(key));
       setSaveStatus('error');
     }
   };
@@ -277,6 +280,8 @@ export default function DraftDetail({ draft, onBack, onUpdateSuccess, onDelete }
       onUpdateSuccess(updated);
     } catch (err) {
       console.error(err);
+      // Say it once per failure streak; the header keeps a retry until it works.
+      if (saveStatusRef.current !== 'error') showError('Änderungen wurden nicht gespeichert.', saveDraft);
       setSaveStatus('error');
     }
   };
@@ -297,10 +302,11 @@ export default function DraftDetail({ draft, onBack, onUpdateSuccess, onDelete }
     }
   };
 
-  // Debounced auto-save effect
+  // Debounced auto-save. The status only turns 'saving' while a request runs
+  // (inside saveDraft): set here, an edit undone within the delay would leave it
+  // stuck, since the cleared timer never resets it.
   useEffect(() => {
     if (!hasChanges) return;
-    setSaveStatus('saving');
     const delayDebounceFn = setTimeout(saveDraft, 1200); // snappy but typing-friendly
     return () => clearTimeout(delayDebounceFn);
   }, [title, description, condition, price, hasChanges]);
@@ -318,7 +324,7 @@ export default function DraftDetail({ draft, onBack, onUpdateSuccess, onDelete }
   useEffect(() => {
     return () => {
       const l = latestRef.current;
-      if (l.hasChanges && l.saveStatus !== 'saved') {
+      if (l.hasChanges) {
         updateDraft(l.draftId, {
           title: l.title,
           description: l.description,
@@ -1270,17 +1276,15 @@ export default function DraftDetail({ draft, onBack, onUpdateSuccess, onDelete }
               </div>
             )}
             <div className="detail-header-status">
-              {saveStatus === 'saving' && (
-                <RefreshCw size={16} className="spin" aria-label="Speichern" />
-              )}
+              {/* Saving is silent; only a failed save shows (with retry). */}
               {saveStatus === 'error' && (
                 <button
                   className="detail-save-error"
                   onClick={saveDraft}
-                  title="Erneut versuchen"
+                  title="Erneut speichern"
                 >
                   <AlertCircle size={13} />
-                  <span>Fehler</span>
+                  <span>Nicht gespeichert</span>
                 </button>
               )}
             </div>
