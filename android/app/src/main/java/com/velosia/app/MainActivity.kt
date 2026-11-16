@@ -447,7 +447,11 @@ class MainActivity : AppCompatActivity() {
                 super.onPageStarted(view, url, favicon)
                 currentPageUrl = url
                 if (activeDraftJson == null) return
-                if (formPageOf(url) != FormPage.NONE) injectEarlyBackdrop()
+                // Only where the engine will actually run (and remove it again):
+                // a form page reached a second time in the same session (e.g. an eBay
+                // draft opened from "Entwürfe verwalten") would otherwise stay
+                // covered by a spinner nobody takes down.
+                if (engineWillRun(formPageOf(url))) injectEarlyBackdrop()
             }
 
             override fun onPageFinished(view: WebView, url: String) {
@@ -1068,6 +1072,14 @@ class MainActivity : AppCompatActivity() {
                 null
             )
         }
+    }
+
+    // Whether maybeTriggerAutofill will still inject the engine on this page.
+    private fun engineWillRun(page: FormPage): Boolean = when (page) {
+        FormPage.VINTED_FORM, FormPage.KA_FORM, FormPage.EBAY_FORM -> !hasAutoFilled
+        FormPage.KA_CATEGORY -> !hasAutoCategory
+        FormPage.EBAY_PRELIST, FormPage.EBAY_IDENTIFY -> activePlatform == "ebay" && page !in ebayStepsDone
+        FormPage.NONE -> false
     }
 
     // Fire the autofill once we land on a fillable form URL — called from BOTH

@@ -43,7 +43,7 @@
   // and in the extension it is a persistent content script — never redefine.
   if (window.__velosia && window.__velosia.__loaded) return;
 
-  var VERSION = "2.8.2";
+  var VERSION = "2.8.3";
   var KA_TITLE_MAX = 65;
 
   // Cut at the last word boundary within `max`; hard cut if that loses too much.
@@ -2287,8 +2287,62 @@
     }).join("");
   }
 
+  // Mobile layout (live 2026-11): the description is only a summary with a
+  // "Beschreibung bearbeiten" button that opens a full-screen panel with the editor
+  // (iframe #se-rte-frame__sidepane, a contenteditable div) and "Fertig". No HTML
+  // mode there. eBay only takes over what arrives as editing commands
+  // (insertText/insertParagraph; insertHTML is ignored) followed by keyup + blur,
+  // then "Fertig" — verified by reloading the draft.
+  async function ebaySetDescriptionMobile(text) {
+    var open = document.querySelector("button[aria-label='Beschreibung bearbeiten']");
+    if (!open) return false;
+    open.click();
+    var frame = null, ed = null;
+    for (var i = 0; i < 20 && !ed; i++) {
+      await sleep(250);
+      frame = document.getElementById("se-rte-frame__sidepane");
+      try { ed = frame && frame.contentDocument && frame.contentDocument.querySelector("[contenteditable='true']"); } catch (e) { ed = null; }
+    }
+    if (!ed) return false;
+    var d = frame.contentDocument, w = frame.contentWindow;
+    try { frame.focus(); w.focus(); } catch (e) {}
+    ed.focus();
+    var range = d.createRange();
+    range.selectNodeContents(ed);
+    var sel = w.getSelection();
+    sel.removeAllRanges();
+    sel.addRange(range);
+    var paras = String(text).replace(/\r/g, "").split(/\n\s*\n/);
+    var ok = true;
+    for (var p = 0; p < paras.length; p++) {
+      var lines = paras[p].split("\n");
+      if (p > 0) ok = d.execCommand("insertParagraph") && ok;
+      for (var l = 0; l < lines.length; l++) {
+        if (l > 0) ok = d.execCommand("insertLineBreak") && ok;
+        if (lines[l]) ok = d.execCommand("insertText", false, lines[l]) && ok;
+      }
+    }
+    await sleep(200);
+    ed.dispatchEvent(new KeyboardEvent("keyup", { bubbles: true, key: "." }));
+    await sleep(200);
+    ed.dispatchEvent(new Event("blur", { bubbles: true }));
+    await sleep(300);
+    var done = null;
+    var btns = document.querySelectorAll("button");
+    for (var b = 0; b < btns.length; b++) {
+      if (ebayLabelOf(btns[b]) === "fertig" && ebayVisible(btns[b])) { done = btns[b]; break; }
+    }
+    if (done) { done.click(); await sleep(800); }
+    var first = norm(paras[0]).slice(0, 30);
+    return ok && !!done && norm(ed.innerText || ed.textContent || "").indexOf(first) !== -1;
+  }
+
   async function ebaySetDescription(text) {
     if (!text) return false;
+    if (!document.querySelector("input[name='descriptionEditorMode']") &&
+        document.querySelector("button[aria-label='Beschreibung bearbeiten']")) {
+      return ebaySetDescriptionMobile(text);
+    }
     var mode = document.querySelector("input[name='descriptionEditorMode']");
     var ta = document.querySelector("textarea[name='description']");
     if (!ta) return false;
