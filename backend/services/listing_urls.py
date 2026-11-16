@@ -12,13 +12,22 @@ from urllib.parse import urlsplit
 
 VINTED = "vinted"
 KLEINANZEIGEN = "kleinanzeigen"
-PLATFORMS = (VINTED, KLEINANZEIGEN)
+EBAY = "ebay"
+PLATFORMS = (VINTED, KLEINANZEIGEN, EBAY)
+
+# Draft column prefix per platform ({prefix}_listing_id, {prefix}_status, …).
+PREFIX = {KLEINANZEIGEN: "ka", VINTED: "vinted", EBAY: "ebay"}
 
 HOSTS = {
     VINTED: {"www.vinted.de", "vinted.de", "www.vinted.fr", "vinted.fr"},
     KLEINANZEIGEN: {"www.kleinanzeigen.de", "kleinanzeigen.de"},
+    EBAY: {"www.ebay.de", "ebay.de"},
 }
-ALL_HOSTS = frozenset(h for hosts in HOSTS.values() for h in hosts)
+# Hosts the shared HTTP client may read. eBay is not among them: its public pages
+# answer server-side reads with 403 (bot protection), and we do not work around
+# that — eBay listings are read through eBay's official Browse API instead
+# (services/ebay_api.py).
+ALL_HOSTS = frozenset(h for p, hosts in HOSTS.items() if p != EBAY for h in hosts)
 
 _ID_RE = re.compile(r"^\d{1,15}$")
 _PATH_RE = {
@@ -27,6 +36,8 @@ _PATH_RE = {
     # /s-anzeige/<slug>/<id>-<category>-<location>; the Android shell may also
     # report the short form /s-anzeige/<id>
     KLEINANZEIGEN: re.compile(r"^/s-anzeige/(?:[^/]+/)?(\d{1,15})(?:-[^/]*)?/?$"),
+    # /itm/<id>, older links also /itm/<slug>/<id>
+    EBAY: re.compile(r"^/itm/(?:[^/]+/)?(\d{9,15})/?$"),
 }
 
 
@@ -74,6 +85,8 @@ def canonical_url_for_id(platform: str, listing_id: Optional[str]) -> Optional[s
         return f"https://www.vinted.de/items/{listing_id}"
     if platform == KLEINANZEIGEN:
         return f"https://www.kleinanzeigen.de/s-anzeige/{listing_id}"
+    if platform == EBAY:
+        return f"https://www.ebay.de/itm/{listing_id}"
     return None
 
 

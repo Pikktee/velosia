@@ -2,7 +2,7 @@ import React, { useRef, useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Sparkles, Trash2, ChevronRight, RefreshCw, AlertTriangle, Clock, Coins, X, Check, Search, ArrowLeft } from 'lucide-react';
 import { getThumbUrl } from '../utils/api';
-import { statusMeta, hasListing, listingPlatforms, draftSection, crossPostConflict, STALE_DAYS, platformDeleteUrl, onlineChanges, publishedDays, isActive } from '../utils/listingStatus';
+import { statusMeta, hasListing, listingPlatforms, draftSection, crossPostConflict, STALE_DAYS, platformDeleteUrl, onlineChanges, publishedDays, isActive, PLATFORM_LETTER } from '../utils/listingStatus';
 
 // dd.mm for compact list signals.
 const fmtShort = (iso) => {
@@ -850,7 +850,7 @@ function ListingStatusMeta({ draft }) {
         style={{ color: meta.color, background: meta.bg, borderColor: meta.color }}
         title={`${p.name}: ${meta.label}`}
       >
-        {p.key === 'kleinanzeigen' ? 'K' : 'V'}
+        {PLATFORM_LETTER[p.key]}
       </span>
     );
   });

@@ -132,6 +132,21 @@ def run_migrations():
         # in the detail view; NULL for older rows (frontend falls back to created_at).
         ("ka_published_at", "DATETIME"),
         ("vinted_published_at", "DATETIME"),
+        # eBay as third platform (added V2.8)
+        ("ebay_listing_id", "VARCHAR(50)"),
+        ("ebay_listing_url", "VARCHAR(500)"),
+        ("ebay_status", "VARCHAR(20)"),
+        ("ebay_status_at", "DATETIME"),
+        ("ebay_published_at", "DATETIME"),
+        ("ebay_online_price", "FLOAT"),
+        ("ebay_listed_price", "FLOAT"),
+        ("ebay_online_title", "VARCHAR"),
+        ("ebay_online_description", "VARCHAR"),
+        ("ebay_listed_title", "VARCHAR"),
+        ("ebay_listed_description", "VARCHAR"),
+        ("ebay_category_id", "VARCHAR(20)"),
+        ("ebay_category", "VARCHAR(300)"),
+        ("ebay_aspects", "VARCHAR"),
     ]:
         try:
             db.execute(text(f"ALTER TABLE drafts ADD COLUMN {col_name} {col_type}"))
@@ -182,6 +197,8 @@ def run_migrations():
         ("token_version", "INTEGER DEFAULT 0"),
         # Festpreis/VB preset for new listings (added V2.7.57)
         ("default_price_type", "VARCHAR(20) DEFAULT 'FIXED'"),
+        # eBay as third platform, opt-in (added V2.8)
+        ("ebay_enabled", "BOOLEAN DEFAULT 0"),
     ]:
         try:
             db.execute(text(f"ALTER TABLE users ADD COLUMN {col_name} {col_type}"))
@@ -229,7 +246,7 @@ run_migrations()
 _API_DOCS = os.getenv("ENABLE_API_DOCS", "").lower() in ("1", "true", "yes")
 app = FastAPI(
     title="Velosia API",
-    version="2.7.90",
+    version="2.8.0",
     docs_url="/docs" if _API_DOCS else None,
     redoc_url="/redoc" if _API_DOCS else None,
     openapi_url="/openapi.json" if _API_DOCS else None,
@@ -404,7 +421,7 @@ _APP_ORIGIN_REGEX = (
     r"|chrome-extension://[a-p]{32}"
     r"|moz-extension://[0-9a-fA-F-]{36}"
 )
-_PLATFORM_ORIGIN_REGEX = r"https://(?:[a-z0-9-]+\.)*(?:vinted\.de|vinted\.fr|kleinanzeigen\.de)"
+_PLATFORM_ORIGIN_REGEX = r"https://(?:[a-z0-9-]+\.)*(?:vinted\.de|vinted\.fr|kleinanzeigen\.de|ebay\.de)"
 _PLATFORM_CORS_PATHS = re.compile(
     r"^/(?:api/auth/me|api/drafts(?:/\d+)?|api/listings/published"
     r"|api/telemetry/(?:autofill|debug)|uploads/[^/]+)$"
@@ -1791,12 +1808,22 @@ def update_draft(
             raise HTTPException(status_code=400, detail="Die Bilder können nur umsortiert werden.")
         # The first photo is the cover — keep the legacy single-path column in sync.
         update_data["image_path"] = new_paths[0] if new_paths else None
+    # eBay's category and item specifics were derived from title/attributes; when
+    # those change they are prepared again before the next eBay listing.
+    if any(k in update_data and update_data[k] != getattr(db_draft, k) for k in ("title", "attributes")):
+        _reset_ebay_preparation(db_draft)
     for key, value in update_data.items():
         setattr(db_draft, key, value)
 
     db.commit()
     db.refresh(db_draft)
     return db_draft
+
+def _reset_ebay_preparation(draft):
+    draft.ebay_category_id = None
+    draft.ebay_category = None
+    draft.ebay_aspects = None
+
 
 def _draft_image_paths(draft) -> List[str]:
     if draft.image_paths:
@@ -1984,12 +2011,78 @@ def regenerate_draft_field_endpoint(
 
     if req.field == "title":
         db_draft.title = new_val
+        _reset_ebay_preparation(db_draft)
     elif req.field == "description":
         db_draft.description = new_val
 
     db.commit()
     db.refresh(db_draft)
     return db_draft
+
+@app.post("/api/drafts/{draft_id}/ebay-prepare", response_model=schemas.DraftResponse)
+def prepare_ebay_listing(
+    draft_id: int,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    """Before the eBay form opens: eBay's category for the title and the item
+    specifics ("Artikelmerkmale") for it — required ones are only reported by
+    eBay's form on submit, so the engine needs them up front. One text-only AI
+    call (no image quota). Kept on the draft until title or attributes change.
+    Only for accounts with eBay switched on, and rate-limited: eBay's API quota is
+    per app, shared by all users.
+
+    Without eBay API credentials, or when a step fails, the draft comes back
+    unchanged and the engine fills what it has (the user completes the rest)."""
+    draft = db.query(models.Draft).filter(
+        models.Draft.id == draft_id,
+        models.Draft.user_id == current_user.id,
+    ).first()
+    if not draft:
+        raise HTTPException(status_code=404, detail="Angebot wurde nicht gefunden.")
+    if draft.ebay_aspects is not None or not current_user.ebay_enabled:
+        return draft
+
+    from services import ebay_api
+    if not ebay_api.configured() or not draft.title:
+        return draft
+    rate_limit.enforce(
+        "ebay_prepare", str(current_user.id), rate_limit.EBAY_PREPARE_USER,
+        "Zu viele eBay-Vorbereitungen. Bitte versuche es später erneut.",
+    )
+    category = ebay_api.suggest_category(draft.title)
+    if not category:
+        return draft
+    aspects = ebay_api.category_aspects(category["id"]) or []
+
+    try:
+        attributes = json.loads(draft.attributes) if draft.attributes else {}
+    except Exception:
+        attributes = {}
+    from services.gemini_service import pick_ebay_aspects
+    picked = None
+    try:
+        with track_ai_usage(db, current_user):
+            picked = pick_ebay_aspects({
+                "title": draft.title, "description": draft.description,
+                "condition": draft.condition, "attributes": attributes,
+            }, aspects)
+    except Exception as e:
+        print(f"[ebay-prepare] Merkmale fehlgeschlagen: {e}", flush=True)
+
+    draft.ebay_category_id = category["id"]
+    draft.ebay_category = category["breadcrumb"][:300]
+    if picked is not None:
+        # values: what the engine sets; required: what eBay insists on, so the
+        # engine can name the ones still empty instead of eBay rejecting the submit.
+        draft.ebay_aspects = json.dumps({
+            "values": picked,
+            "required": [a["name"] for a in aspects if a.get("required")],
+        }, ensure_ascii=False)
+    db.commit()
+    db.refresh(draft)
+    return draft
+
 
 # --- Former APK download ------------------------------------------------------
 # The app is distributed through Google Play only. The old self-hosted APK
@@ -2072,7 +2165,11 @@ def _telemetry_alerts_today(db: Session) -> int:
         db.query(models.AlertLog)
         .filter(
             models.AlertLog.created_at >= since,
-            or_(models.AlertLog.signal.like("vinted:%"), models.AlertLog.signal.like("kleinanzeigen:%")),
+            or_(
+                models.AlertLog.signal.like("vinted:%"),
+                models.AlertLog.signal.like("kleinanzeigen:%"),
+                models.AlertLog.signal.like("ebay:%"),
+            ),
         )
         .count()
     )
@@ -2083,7 +2180,7 @@ def check_autofill_anomaly(platform: str):
     failing en masse (site likely changed) and e-mails the maintainer, once per
     signal per cooldown window and at most a few times a day. Never raises into
     the request."""
-    if platform not in ("vinted", "kleinanzeigen"):
+    if platform not in ("vinted", "kleinanzeigen", "ebay"):
         return
     from database import SessionLocal
     db = SessionLocal()
@@ -2218,6 +2315,7 @@ def telemetry_autofill(
 
 from services import listing_status
 from services import listing_urls
+from services import ebay_api
 
 # How often the background poller sweeps all active listings, and how long it
 # spaces individual requests apart, so a sweep never looks like a burst.
@@ -2238,25 +2336,18 @@ def _reset_online_values(draft, prefix, platform):
 
 def _apply_listing_capture(draft, platform, listing_id, listing_url):
     """Store a freshly captured listing id/url and mark it online."""
+    prefix = listing_urls.PREFIX.get(platform)
+    if not prefix:
+        return
     now = datetime.utcnow()
-    if platform == "kleinanzeigen":
-        if listing_id != draft.ka_listing_id:
-            draft.ka_listing_url = None  # belonged to the previous listing
-            _reset_online_values(draft, "ka", platform)
-            draft.ka_published_at = now
-        draft.ka_listing_id = listing_id or draft.ka_listing_id
-        draft.ka_listing_url = listing_url or draft.ka_listing_url
-        draft.ka_status = listing_status.ONLINE
-        draft.ka_status_at = now
-    elif platform == "vinted":
-        if listing_id != draft.vinted_listing_id:
-            draft.vinted_listing_url = None
-            _reset_online_values(draft, "vinted", platform)
-            draft.vinted_published_at = now
-        draft.vinted_listing_id = listing_id or draft.vinted_listing_id
-        draft.vinted_listing_url = listing_url or draft.vinted_listing_url
-        draft.vinted_status = listing_status.ONLINE
-        draft.vinted_status_at = now
+    if listing_id != getattr(draft, f"{prefix}_listing_id"):
+        setattr(draft, f"{prefix}_listing_url", None)  # belonged to the previous listing
+        _reset_online_values(draft, prefix, platform)
+        setattr(draft, f"{prefix}_published_at", now)
+    setattr(draft, f"{prefix}_listing_id", listing_id or getattr(draft, f"{prefix}_listing_id"))
+    setattr(draft, f"{prefix}_listing_url", listing_url or getattr(draft, f"{prefix}_listing_url"))
+    setattr(draft, f"{prefix}_status", listing_status.ONLINE)
+    setattr(draft, f"{prefix}_status_at", now)
 
 
 def _apply_status_updates(draft, updates):
@@ -2323,7 +2414,7 @@ def keep_listing_price(
     ).first()
     if not draft:
         raise HTTPException(status_code=404, detail="Angebot wurde nicht gefunden.")
-    prefix = {"kleinanzeigen": "ka", "vinted": "vinted"}.get(payload.platform)
+    prefix = listing_urls.PREFIX.get(payload.platform)
     if not prefix:
         raise HTTPException(status_code=400, detail="Unbekannte Plattform.")
     for field in ("price", "title", "description"):
@@ -2356,13 +2447,9 @@ def set_listing_status(
     if payload.status not in _MANUAL_STATUSES:
         raise HTTPException(status_code=400, detail="Unbekannter Status.")
 
-    now = datetime.utcnow()
-    if payload.platform == "kleinanzeigen":
-        draft.ka_status = payload.status
-        draft.ka_status_at = now
-    else:
-        draft.vinted_status = payload.status
-        draft.vinted_status_at = now
+    prefix = listing_urls.PREFIX[payload.platform]
+    setattr(draft, f"{prefix}_status", payload.status)
+    setattr(draft, f"{prefix}_status_at", datetime.utcnow())
     db.commit()
     db.refresh(draft)
     return draft
@@ -2410,7 +2497,10 @@ def refresh_all_listings(
     def needs_poll(draft):
         # Only live listings (sold/deleted are final) not read in the last minute —
         # the detail view and the 6-h poller keep many of them fresh already.
-        for prefix in ("ka", "vinted"):
+        for prefix in listing_urls.PREFIX.values():
+            # Without API keys eBay is never read, so it never becomes "due".
+            if prefix == "ebay" and not ebay_api.configured():
+                continue
             if not (getattr(draft, f"{prefix}_listing_url") or getattr(draft, f"{prefix}_listing_id")):
                 continue
             if getattr(draft, f"{prefix}_status") in listing_status.TERMINAL:
@@ -2450,6 +2540,7 @@ def poll_all_active_listings():
         drafts = db.query(models.Draft).filter(
             (models.Draft.ka_listing_url.isnot(None)) | (models.Draft.vinted_listing_url.isnot(None))
             | (models.Draft.ka_listing_id.isnot(None)) | (models.Draft.vinted_listing_id.isnot(None))
+            | (models.Draft.ebay_listing_id.isnot(None))
         ).all()
         checked = 0
         for draft in drafts:

@@ -158,6 +158,9 @@ document.addEventListener("DOMContentLoaded", async () => {
 // Draft list + "launch straight onto a platform" flow
 // ---------------------------------------------------------------------------
 
+// eBay is offered only when switched on in the Velosia settings (V2.8).
+let ebayEnabled = false;
+
 // Load the user's drafts and initialise the auto-submit toggle from their saved
 // profile preference, so an offer can be launched onto a platform in one click.
 async function loadDrafts() {
@@ -177,6 +180,7 @@ async function loadDrafts() {
       if (meRes.ok) {
         const me = await meRes.json();
         if (autoToggle) autoToggle.checked = !!me.auto_submit;
+        ebayEnabled = !!me.ebay_enabled;
       }
     } catch (e) { /* toggle just defaults to off */ }
 
@@ -232,7 +236,8 @@ function renderDrafts(drafts) {
     const draftId = Number(draft.id);
     [
       { platform: "vinted", label: "Vinted", style: "background:#09b0b7; color:#000; border:none;" },
-      { platform: "kleinanzeigen", label: "Kleinanz.", style: "background:rgba(255,255,255,0.08); color:#f8fafc; border:1px solid rgba(255,255,255,0.12);" }
+      { platform: "kleinanzeigen", label: "Kleinanz.", style: "background:rgba(255,255,255,0.08); color:#f8fafc; border:1px solid rgba(255,255,255,0.12);" },
+      ...(ebayEnabled ? [{ platform: "ebay", label: "eBay", style: "background:rgba(255,255,255,0.08); color:#f8fafc; border:1px solid rgba(255,255,255,0.12);" }] : [])
     ].forEach((p) => {
       const btn = document.createElement("button");
       btn.className = "velosia-launch";
@@ -258,11 +263,13 @@ function startAutofill(draftId, platform) {
   const autoToggle = document.getElementById("auto-submit-toggle");
   const autoSubmit = !!(autoToggle && autoToggle.checked);
   chrome.storage.local.set({
-    velosia_pending_autofill: { draftId: draftId, platform: platform, autoSubmit: autoSubmit }
+    velosia_pending_autofill: { draftId: draftId, platform: platform, autoSubmit: autoSubmit, createdAt: Date.now() }
   }, () => {
-    const url = platform === "vinted"
-      ? "https://www.vinted.de/items/new"
-      : "https://www.kleinanzeigen.de/p-anzeige-aufgeben.html";
+    const url = {
+      vinted: "https://www.vinted.de/items/new",
+      kleinanzeigen: "https://www.kleinanzeigen.de/p-anzeige-aufgeben.html",
+      ebay: "https://www.ebay.de/sl/prelist/suggest"
+    }[platform];
     chrome.tabs.create({ url: url });
     window.close();
   });

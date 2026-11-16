@@ -13,16 +13,31 @@ export const STATUS_META = {
 
 export const statusMeta = (status) => STATUS_META[status] || STATUS_META.unbekannt;
 
-// True if the draft has at least one published listing on either platform.
-export const hasListing = (draft) =>
-  !!(draft && (draft.ka_listing_url || draft.vinted_listing_url ||
-               draft.ka_listing_id || draft.vinted_listing_id));
+// The platforms Velosia lists on, in display order. `prefix` names the draft's
+// columns ({prefix}_listing_id, {prefix}_status, …). eBay (V2.8) is opt-in per
+// account (user.ebay_enabled) for new listings; an existing eBay listing always shows.
+export const PLATFORMS = [
+  { key: 'kleinanzeigen', name: 'Kleinanzeigen', short: 'KA', letter: 'K', prefix: 'ka' },
+  { key: 'vinted', name: 'Vinted', short: 'Vinted', letter: 'V', prefix: 'vinted' },
+  { key: 'ebay', name: 'eBay', short: 'eBay', letter: 'E', prefix: 'ebay' },
+];
+const BY_KEY = Object.fromEntries(PLATFORMS.map((p) => [p.key, p]));
+
+const isListedOn = (draft, prefix) => !!(draft && (draft[`${prefix}_listing_url`] || draft[`${prefix}_listing_id`]));
+
+// True if the draft has at least one published listing on any platform.
+export const hasListing = (draft) => PLATFORMS.some((p) => isListedOn(draft, p.prefix));
+
+// Platforms a user can publish to: eBay only when switched on in the settings
+// (or when this draft is already on eBay).
+export const publishablePlatforms = (user, draft) =>
+  PLATFORMS.filter((p) => p.key !== 'ebay' || user?.ebay_enabled || isListedOn(draft, p.prefix));
 
 // Terminal statuses — a listing in one of these is "done" (off the market).
 export const TERMINAL = new Set(['verkauft', 'geloescht']);
 
 // Short platform label for compact list chips.
-export const platformShort = (key) => (key === 'kleinanzeigen' ? 'KA' : 'Vinted');
+export const platformShort = (key) => BY_KEY[key]?.short || key;
 
 // After how many days an *active* listing earns a gentle "seit X Tagen" nudge
 // (invitation to lower the price / re-list). Soft signal — uses created_at as a
@@ -75,28 +90,14 @@ export const statusSummary = (draft) => {
 };
 
 // The platforms this draft is published on, with their status + public URL.
-export const listingPlatforms = (draft) => {
-  const out = [];
-  if (draft && (draft.ka_listing_url || draft.ka_listing_id)) {
-    out.push({
-      key: 'kleinanzeigen',
-      name: 'Kleinanzeigen',
-      status: draft.ka_status || 'unbekannt',
-      url: draft.ka_listing_url || null,
-      at: draft.ka_status_at || null,
-    });
-  }
-  if (draft && (draft.vinted_listing_url || draft.vinted_listing_id)) {
-    out.push({
-      key: 'vinted',
-      name: 'Vinted',
-      status: draft.vinted_status || 'unbekannt',
-      url: draft.vinted_listing_url || null,
-      at: draft.vinted_status_at || null,
-    });
-  }
-  return out;
-};
+export const listingPlatforms = (draft) =>
+  PLATFORMS.filter((p) => isListedOn(draft, p.prefix)).map((p) => ({
+    key: p.key,
+    name: p.name,
+    status: draft[`${p.prefix}_status`] || 'unbekannt',
+    url: draft[`${p.prefix}_listing_url`] || null,
+    at: draft[`${p.prefix}_status_at`] || null,
+  }));
 
 // Edits made on the platform itself (price, title, description): a value last
 // read from the live ad differs from its baseline (what the engine published, or
@@ -108,10 +109,10 @@ const sameText = (a, b) => String(a || '').replace(/\s+/g, ' ').trim() === Strin
 
 export const onlineChanges = (draft, current = draft) => {
   if (!draft) return [];
-  const platforms = [
-    { key: 'kleinanzeigen', name: 'Kleinanzeigen', prefix: 'ka', status: draft.ka_status, type: draft.ka_online_price_type },
-    { key: 'vinted', name: 'Vinted', prefix: 'vinted', status: draft.vinted_status, type: null },
-  ];
+  const platforms = PLATFORMS.map((p) => ({
+    key: p.key, name: p.name, prefix: p.prefix, status: draft[`${p.prefix}_status`],
+    type: p.key === 'kleinanzeigen' ? draft.ka_online_price_type : null,
+  }));
   const listed = (prefix) => !!(draft[`${prefix}_listing_id`] || draft[`${prefix}_listing_url`]);
   return platforms.filter((p) => listed(p.prefix) && !TERMINAL.has(p.status)).map((p) => {
     const changes = {};
@@ -138,10 +139,10 @@ export const formatEuro = (v) => `${Number.isInteger(v) ? v : v.toFixed(2).repla
 // The detail header carries the status as a subtitle and one icon per platform
 // that opens the live ad; everything else sits one tap deeper in sheets.
 
-export const PLATFORM_KEYS = ['kleinanzeigen', 'vinted'];
-export const PLATFORM_LETTER = { kleinanzeigen: 'K', vinted: 'V' };
-export const PLATFORM_LABEL = { kleinanzeigen: 'Kleinanzeigen', vinted: 'Vinted' };
-const PREFIX = { kleinanzeigen: 'ka', vinted: 'vinted' };
+export const PLATFORM_KEYS = PLATFORMS.map((p) => p.key);
+export const PLATFORM_LETTER = Object.fromEntries(PLATFORMS.map((p) => [p.key, p.letter]));
+export const PLATFORM_LABEL = Object.fromEntries(PLATFORMS.map((p) => [p.key, p.name]));
+const PREFIX = Object.fromEntries(PLATFORMS.map((p) => [p.key, p.prefix]));
 
 const parseUtc = (v) => {
   if (!v) return NaN;
@@ -197,11 +198,13 @@ export const relistPriceOptions = (price) => {
 // Where to delete a live ad. Kleinanzeigen's public ad page has no delete
 // control, its own-ads list ("Meine Anzeigen") has one per ad; the fragment
 // tells the app which ad to point at (the app ≥ 2.7.73 scrolls there and
-// highlights "Löschen"; older apps just open the list). Vinted: the ad itself.
+// highlights "Löschen"; older apps just open the list). eBay: the seller's own
+// active listings, where "Angebot beenden" sits per row. Vinted: the ad itself.
 export const platformDeleteUrl = (platform, url, listingId) => {
   if (platform === 'kleinanzeigen') {
     const id = listingId || (String(url || '').match(/\/s-anzeige\/(?:[^/]+\/)?(\d{1,15})/) || [])[1];
     if (id) return `https://www.kleinanzeigen.de/m-meine-anzeigen.html#velosia-ad=${id}`;
   }
+  if (platform === 'ebay') return 'https://www.ebay.de/sh/lst/active';
   return url || '';
 };

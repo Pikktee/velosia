@@ -11,6 +11,7 @@ const KEY = 'velosia_drafts_cache_v1';
 const HEAVY = [
   'ka_online_description', 'ka_listed_description',
   'vinted_online_description', 'vinted_listed_description',
+  'ebay_online_description', 'ebay_listed_description',
 ];
 
 export const readDraftCache = () => {

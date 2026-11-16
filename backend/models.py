@@ -33,6 +33,9 @@ class User(Base):
     # When True the account is suspended: login + all authenticated requests are
     # rejected. Set/cleared by an admin via /api/admin/users/{id}/block.
     is_blocked = Column(Boolean, default=False, nullable=True)
+    # eBay as a third platform is opt-in (V2.8): only accounts that switch it on
+    # see eBay in the publish sheets.
+    ebay_enabled = Column(Boolean, default=False, nullable=True)
     # Rolling 24h Gemini quota (cost control): images charged since
     # `ai_quota_reset_at`, which is when the counter next falls back to zero.
     # Both maintained exclusively by consume_ai_quota() in main.py.
@@ -126,6 +129,29 @@ class Draft(Base):
     vinted_online_description = Column(String, nullable=True)
     vinted_listed_title = Column(String, nullable=True)
     vinted_listed_description = Column(String, nullable=True)
+
+    # --- eBay (V2.8) -----------------------------------------------------------
+    # Same tracking columns as above. eBay's status comes from its official Browse
+    # API (services/ebay_api.py), not from reading the public page.
+    ebay_listing_id = Column(String, nullable=True)
+    ebay_listing_url = Column(String, nullable=True)
+    ebay_status = Column(String, nullable=True)
+    ebay_status_at = Column(DateTime, nullable=True)
+    ebay_published_at = Column(DateTime, nullable=True)
+    ebay_online_price = Column(Float, nullable=True)
+    ebay_listed_price = Column(Float, nullable=True)
+    ebay_online_title = Column(String, nullable=True)
+    ebay_online_description = Column(String, nullable=True)
+    ebay_listed_title = Column(String, nullable=True)
+    ebay_listed_description = Column(String, nullable=True)
+    # eBay's own category for this draft (leaf id + breadcrumb, from eBay's category
+    # suggestion for the title) and the item specifics ("Artikelmerkmale") chosen
+    # for it: JSON {"values": {"Produktart": ["Ohrumschließende Kopfhörer"], …},
+    # "required": ["Produktart", …]}. Values come from eBay's allowed lists;
+    # prepared on demand (POST /api/drafts/{id}/ebay-prepare).
+    ebay_category_id = Column(String, nullable=True)
+    ebay_category = Column(String, nullable=True)
+    ebay_aspects = Column(String, nullable=True)
 
     created_at = Column(DateTime, default=datetime.utcnow)
 

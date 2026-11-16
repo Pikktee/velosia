@@ -11,7 +11,7 @@ from services import listing_urls
 _SHORT = 200
 _SETTING_TEXT = 1000
 _DESCRIPTION = 5000
-Platform = Literal["vinted", "kleinanzeigen"]
+Platform = Literal["vinted", "kleinanzeigen", "ebay"]
 # Kleinanzeigen price type: Festpreis / VB (Verhandlungsbasis).
 PriceType = Literal["FIXED", "NEGOTIABLE"]
 
@@ -54,6 +54,7 @@ class UserResponse(UserBase):
     default_shipping: Optional[str] = None
     auto_submit: Optional[bool] = False
     default_price_type: Optional[str] = "FIXED"
+    ebay_enabled: Optional[bool] = False
     is_admin: Optional[bool] = False
 
     class Config:
@@ -94,6 +95,7 @@ class UserUpdate(BaseModel):
     default_shipping: Optional[str] = Field(None, max_length=_SHORT)
     auto_submit: Optional[bool] = None
     default_price_type: Optional[PriceType] = None
+    ebay_enabled: Optional[bool] = None
 
 # Draft Schemas
 class DraftBase(BaseModel):
@@ -162,6 +164,22 @@ class DraftResponse(DraftBase):
     vinted_online_description: Optional[str] = None
     vinted_listed_title: Optional[str] = None
     vinted_listed_description: Optional[str] = None
+    # eBay (V2.8): tracking as above, plus eBay's category and the chosen item
+    # specifics ({"Produktart": ["…"], …}, JSON string) the engine fills in.
+    ebay_listing_id: Optional[str] = None
+    ebay_listing_url: Optional[str] = None
+    ebay_status: Optional[str] = None
+    ebay_status_at: Optional[datetime] = None
+    ebay_published_at: Optional[datetime] = None
+    ebay_online_price: Optional[float] = None
+    ebay_listed_price: Optional[float] = None
+    ebay_online_title: Optional[str] = None
+    ebay_online_description: Optional[str] = None
+    ebay_listed_title: Optional[str] = None
+    ebay_listed_description: Optional[str] = None
+    ebay_category_id: Optional[str] = None
+    ebay_category: Optional[str] = None
+    ebay_aspects: Optional[str] = None
     created_at: datetime
 
     class Config:
@@ -202,20 +220,24 @@ class DraftResponse(DraftBase):
     def _safe_vinted_url(self, value: Optional[str]) -> Optional[str]:
         return listing_urls.safe_listing_url(listing_urls.VINTED, self.vinted_listing_id, value)
 
+    @field_serializer("ebay_listing_url")
+    def _safe_ebay_url(self, value: Optional[str]) -> Optional[str]:
+        return listing_urls.safe_listing_url(listing_urls.EBAY, self.ebay_listing_id, value)
+
 
 # Listing capture — the engine reports the public id + URL after publishing.
 class ListingPublishedCreate(BaseModel):
     draft_id: int
-    platform: str = Field(max_length=20)   # "vinted" | "kleinanzeigen"
+    platform: str = Field(max_length=20)   # "vinted" | "kleinanzeigen" | "ebay"
     listing_id: Optional[str] = Field(None, max_length=64)
     listing_url: Optional[str] = Field(None, max_length=2048)
 
 
 class ListingPlatform(BaseModel):
-    platform: str = Field(max_length=20)   # "vinted" | "kleinanzeigen"
+    platform: str = Field(max_length=20)   # "vinted" | "kleinanzeigen" | "ebay"
 
 class ListingStatusSet(BaseModel):
-    platform: str = Field(max_length=20)   # "vinted" | "kleinanzeigen"
+    platform: str = Field(max_length=20)   # "vinted" | "kleinanzeigen" | "ebay"
     status: str = Field(max_length=20)     # "online" | "reserviert" | "verkauft" | "geloescht"
 
 class AnalysisResponse(BaseModel):

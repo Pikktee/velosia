@@ -100,11 +100,29 @@ function checkPendingAutofill() {
       const pending = data.velosia_pending_autofill;
       const token = data.velosia_token;
       if (!pending || !token) return;
+      // A queued draft is meant for the page opened right after queuing it — an
+      // abandoned one must not fill a form days later (e.g. eBay's revise form,
+      // which shares /lstng). Entries without a timestamp are from older builds.
+      if (!pending.createdAt || Date.now() - pending.createdAt > 30 * 60 * 1000) {
+        chrome.storage.local.remove("velosia_pending_autofill");
+        return;
+      }
       if (data.velosia_backend_url) backendUrl = data.velosia_backend_url;
 
       const host = window.location.hostname;
       if (pending.platform === "vinted" && !host.includes("vinted")) return;
       if (pending.platform === "kleinanzeigen" && !host.includes("kleinanzeigen")) return;
+      if (pending.platform === "ebay" && !/(^|\.)ebay\.de$/.test(host)) return;
+
+      // eBay: eBay's category + item specifics are prepared once, on the first
+      // page of its flow; the form page then loads the draft with them.
+      if (pending.platform === "ebay" && window.__velosia.detectPhase("ebay") === "prelist") {
+        try {
+          await fetch(`${backendUrl}/api/drafts/${pending.draftId}/ebay-prepare`, {
+            method: "POST", headers: authHeaders(token), signal: AbortSignal.timeout(8000)
+          });
+        } catch (e) { /* publish without them */ }
+      }
 
       const settings = await fetchJson(`${backendUrl}/api/auth/me`, token);
       if (settings) window.velosiaUserSettings = settings;
@@ -452,6 +470,14 @@ async function autofillForm(draft, autoSubmit) {
     chrome.storage.local.remove(CAPTURE_MARKER);
   } catch (e) {}
   const canCapture = !!(platform && draft && draft.id != null);
+
+  // eBay spans several pages (title -> condition -> form). Started from the
+  // floating button on an earlier page, keep the draft queued for the next one.
+  try {
+    if (platform === "ebay" && draft && draft.id != null && window.__velosia.detectPhase("ebay") !== "form") {
+      chrome.storage.local.set({ velosia_pending_autofill: { draftId: draft.id, platform: "ebay", autoSubmit: false, createdAt: Date.now() } });
+    }
+  } catch (e) {}
 
   const settings = window.velosiaUserSettings || {};
   const submit = (typeof autoSubmit === "boolean") ? autoSubmit : !!settings.auto_submit;

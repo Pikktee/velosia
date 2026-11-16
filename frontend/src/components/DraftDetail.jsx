@@ -2,8 +2,8 @@ import React, { useState, useEffect, useRef, useLayoutEffect } from 'react';
 import AutoTextarea from './AutoTextarea';
 import { createPortal } from 'react-dom';
 import { ArrowLeft, Copy, Check, ExternalLink, Monitor, RefreshCw, AlertCircle, Trash2, Plus, Sparkles, Share2, Camera, TrendingUp, ChevronDown, ChevronLeft, ChevronRight, Star, Tag, Coins, ArrowUp, ArrowUpRight, MoreVertical, Undo2, Redo2 } from 'lucide-react';
-import { updateDraft, getImageUrl, getPlatformToken, uploadDraftImages, deleteDraftImage, regenerateDraftField, refreshListingStatus, setListingStatus } from '../utils/api';
-import { statusMeta, listingPlatforms, TERMINAL, onlineChanges, detailSummary, platformDeleteUrl } from '../utils/listingStatus';
+import { updateDraft, prepareEbay, getImageUrl, getPlatformToken, uploadDraftImages, deleteDraftImage, regenerateDraftField, refreshListingStatus, setListingStatus } from '../utils/api';
+import { statusMeta, listingPlatforms, TERMINAL, onlineChanges, detailSummary, platformDeleteUrl, PLATFORMS } from '../utils/listingStatus';
 import { StatusSheet, PublishSheet, PlatformMark } from './ListingSheets';
 import { showError, showToast } from '../utils/toast';
 import { PRICE_TYPES } from '../utils/priceType';
@@ -54,7 +54,7 @@ function takeReturnSpot(draftId) {
 
 const ONLINE_FIELD_LABELS = [['price', 'Preis'], ['title', 'Titel'], ['description', 'Beschreibung']];
 
-export default function DraftDetail({ draft, onBack, onUpdateSuccess, onDelete }) {
+export default function DraftDetail({ draft, user, onBack, onUpdateSuccess, onDelete }) {
   const [title, setTitle] = useState(draft.title || '');
   const [description, setDescription] = useState(draft.description || '');
   const [condition, setCondition] = useState(draft.condition || 'Gut');
@@ -126,7 +126,7 @@ export default function DraftDetail({ draft, onBack, onUpdateSuccess, onDelete }
   formRef.current = { title, description, price };
   useEffect(() => {
     if (relist) return undefined;
-    const live = [['ka', draft.ka_listing_url], ['vinted', draft.vinted_listing_url]]
+    const live = PLATFORMS.map((p) => [p.prefix, draft[`${p.prefix}_listing_url`]])
       .filter(([p, url]) => url && !TERMINAL.has(draft[`${p}_status`]));
     if (!live.length) return undefined;
     const forced = takeRecheck(draft.id); // back from deleting an ad on the platform
@@ -342,6 +342,11 @@ export default function DraftDetail({ draft, onBack, onUpdateSuccess, onDelete }
   };
 
   const handlePostInApp = async (platform) => {
+    if (isAndroidApp && platform === 'ebay' && !ebayInApp) {
+      // An older app build would open Kleinanzeigen instead.
+      showError('Für eBay bitte die App aktualisieren.');
+      return;
+    }
     if (isAndroidApp) {
       if (navigator.vibrate) {
         try { navigator.vibrate([15]); } catch (e) { /* ignore */ }
@@ -356,6 +361,15 @@ export default function DraftDetail({ draft, onBack, onUpdateSuccess, onDelete }
         showError(err.message || 'Veröffentlichen konnte nicht vorbereitet werden.', () => handlePostInApp(platform));
         return;
       }
+      // eBay: its category + item specifics first, so the engine gets them with
+      // the draft (the app loads the draft fresh). A pending text edit is saved
+      // first, so they match the current title. Capped at a few seconds.
+      if (platform === 'ebay') {
+        showToast('eBay wird vorbereitet …', { duration: 3000 });
+        if (latestRef.current?.hasChanges) await saveDraft();
+        const prepared = await prepareEbay(draft.id);
+        if (prepared) onUpdateSuccess(prepared);
+      }
       // Remember which draft we're publishing so that returning from the platform
       // WebView (back gesture OR after a successful publish) lands back on THIS
       // detail page instead of the list. App.jsx reads this marker on (re)mount.
@@ -364,13 +378,25 @@ export default function DraftDetail({ draft, onBack, onUpdateSuccess, onDelete }
     }
   };
 
-  const openPlatformPage = (platform) => {
+  const openPlatformPage = async (platform) => {
     const urls = {
       vinted: 'https://www.vinted.de/items/new',
-      kleinanzeigen: 'https://www.kleinanzeigen.de/p-anzeige-aufgeben.html'
+      kleinanzeigen: 'https://www.kleinanzeigen.de/p-anzeige-aufgeben.html',
+      ebay: 'https://www.ebay.de/sl/prelist/suggest',
     };
-    window.open(urls[platform], '_blank');
+    // Open the tab right away (a popup opened after an await gets blocked).
+    const tab = window.open(urls[platform], '_blank');
+    if (platform === 'ebay') {
+      const prepared = await prepareEbay(draft.id);
+      if (prepared) onUpdateSuccess(prepared);
+    }
+    return tab;
   };
+
+  // eBay needs an app build that knows its pages (2.8+); older builds would open
+  // the wrong platform, so they are offered Kleinanzeigen and Vinted only.
+  const ebayInApp = !isAndroidApp || typeof window.VelosiaBridge?.supportsEbay === 'function';
+  const publishUser = ebayInApp ? user : { ...(user || {}), ebay_enabled: false };
 
   // In the app the engine fills the platform form; on desktop the platform page
   // opens and the extension takes over.
@@ -403,6 +429,10 @@ export default function DraftDetail({ draft, onBack, onUpdateSuccess, onDelete }
   const deleteOnPlatform = (p) => {
     setSheet(null);
     const bridge = window.VelosiaBridge;
+    if (p.key === 'ebay' && bridge && !ebayInApp) {
+      showError('Für eBay bitte die App aktualisieren.');
+      return;
+    }
     if (bridge && typeof bridge.deleteOnPlatform === 'function') {
       rememberRecheck(draft.id);
       try { localStorage.setItem('velosia_return_draft', String(draft.id)); } catch (e) { /* ignore */ }
@@ -740,6 +770,7 @@ export default function DraftDetail({ draft, onBack, onUpdateSuccess, onDelete }
   const PLATFORM_INFO = {
     vinted: { name: 'Vinted', cls: 'btn-vinted' },
     kleinanzeigen: { name: 'Kleinanzeigen', cls: 'btn-kleinanzeigen' },
+    ebay: { name: 'eBay', cls: 'btn-ebay' },
   };
 
   const renderPublishControl = (key, onPublish, { btnLabel, btnIcon, btnExtraCls = '' }) => {
@@ -756,7 +787,10 @@ export default function DraftDetail({ draft, onBack, onUpdateSuccess, onDelete }
     }
 
     const meta = statusMeta(p.status);
-    const canMarkSold = key === 'kleinanzeigen' && !TERMINAL.has(p.status);
+    // eBay can't tell a sale from an ended listing ("geloescht"), so a sale can
+    // still be recorded from there.
+    const canMarkSold = (key === 'kleinanzeigen' && !TERMINAL.has(p.status)) ||
+      (key === 'ebay' && p.status !== 'verkauft');
     return (
       <div className="publish-control published">
         <div className="publish-control-head">
@@ -794,7 +828,7 @@ export default function DraftDetail({ draft, onBack, onUpdateSuccess, onDelete }
             <button
               className="btn-text-link mark-sold-link"
               disabled={settingStatus}
-              onClick={() => handleSetStatus('kleinanzeigen', 'verkauft')}
+              onClick={() => handleSetStatus(key, 'verkauft')}
             >
               <Coins size={13} /> Als verkauft markieren
             </button>
@@ -884,6 +918,12 @@ export default function DraftDetail({ draft, onBack, onUpdateSuccess, onDelete }
                 btnIcon: <ExternalLink size={12} style={{ marginRight: '0.25rem' }} />,
                 btnExtraCls: 'platform-link-btn',
               })}
+              {(user?.ebay_enabled || listingPlatforms(draft).some((x) => x.key === 'ebay')) &&
+                renderPublishControl('ebay', () => openPlatformPage('ebay'), {
+                  btnLabel: 'eBay',
+                  btnIcon: <ExternalLink size={12} style={{ marginRight: '0.25rem' }} />,
+                  btnExtraCls: 'platform-link-btn',
+                })}
             </div>
           </div>
       </div>
@@ -1495,6 +1535,7 @@ export default function DraftDetail({ draft, onBack, onUpdateSuccess, onDelete }
       {sheet === 'status' && (
         <StatusSheet
           draft={draft}
+          user={publishUser}
           priceType={priceType}
           refreshing={refreshingStatus}
           settingStatus={settingStatus}
@@ -1510,7 +1551,7 @@ export default function DraftDetail({ draft, onBack, onUpdateSuccess, onDelete }
       )}
 
       {sheet === 'publish' && (
-        <PublishSheet draft={draft} onPublish={publishTo} onClose={() => setSheet(null)} />
+        <PublishSheet draft={draft} user={publishUser} onPublish={publishTo} onClose={() => setSheet(null)} />
       )}
     </div>
   );

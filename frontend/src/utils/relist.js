@@ -1,4 +1,4 @@
-export const PLATFORM_NAMES = { vinted: 'Vinted', kleinanzeigen: 'Kleinanzeigen' };
+export const PLATFORM_NAMES = { vinted: 'Vinted', kleinanzeigen: 'Kleinanzeigen', ebay: 'eBay' };
 
 // Survives the trip through the platform WebView: deleting the old ad navigates
 // the app away from the frontend, so DraftDetail picks the flow up again from this

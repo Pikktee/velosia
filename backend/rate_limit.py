@@ -59,6 +59,7 @@ DEBUG_BEACON_IP = Policy(limit=120, window_s=3600) # Diagnose-Beacon je IP (nur 
 SET_PASSWORD_USER = Policy(limit=5, window_s=3600) # Passwort festlegen je Nutzer
 EXPORT_LINK_USER = Policy(limit=20, window_s=3600) # Download-Links für den Datenexport je Nutzer
 EXPORT_USER = Policy(limit=5, window_s=3600)       # Datenexport (ZIP mit allen Fotos) je Nutzer
+EBAY_PREPARE_USER = Policy(limit=30, window_s=3600)  # eBay-Vorbereitung (eBay-API-Kontingent gilt für alle)
 
 # Escape hatch for local development and tests.
 DISABLED = os.getenv("RATE_LIMIT_DISABLED", "").lower() in ("1", "true", "yes")

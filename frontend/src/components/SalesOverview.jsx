@@ -1,7 +1,7 @@
 import { TrendingUp } from 'lucide-react';
-import { listingPlatforms } from '../utils/listingStatus';
+import { listingPlatforms, PLATFORMS } from '../utils/listingStatus';
 
-const PREFIX = { kleinanzeigen: 'ka', vinted: 'vinted' };
+const PREFIX = Object.fromEntries(PLATFORMS.map((p) => [p.key, p.prefix]));
 const MONTHS = 6;
 
 const parseUtc = (v) => (v ? Date.parse(/[zZ]|[+-]\d\d:?\d\d$/.test(v) ? v : `${v}Z`) : NaN);

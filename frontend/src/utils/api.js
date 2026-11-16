@@ -346,6 +346,29 @@ export const getPlatformToken = async (draftId) => {
   return data.token;
 };
 
+// Before the eBay form opens: eBay's category and item specifics for this draft
+// (V2.8). Best-effort — on any failure the draft is simply published without
+// them, so this never blocks publishing.
+export const prepareEbay = async (draftId, timeoutMs = 8000) => {
+  // Capped: eBay's API plus the AI pick can take a while; publishing goes on
+  // without them rather than leaving the tap unanswered.
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), timeoutMs);
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/drafts/${draftId}/ebay-prepare`, {
+      method: 'POST',
+      headers: getHeaders(),
+      signal: ctrl.signal,
+    });
+    if (!response.ok) return null;
+    return await response.json();
+  } catch (e) {
+    return null;
+  } finally {
+    clearTimeout(timer);
+  }
+};
+
 export const updateDraft = async (id, draftData) => {
   const response = await fetch(`${API_BASE_URL}/api/drafts/${id}`, {
     method: 'PUT',

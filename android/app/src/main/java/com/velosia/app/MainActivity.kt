@@ -89,6 +89,8 @@ class MainActivity : AppCompatActivity() {
     private var hasAutoFilled = false
     // Guards the automatic category pre-selection on the Kleinanzeigen step 1 page
     private var hasAutoCategory = false
+    // eBay's pre-form pages each get one engine run per post session.
+    private val ebayStepsDone = mutableSetOf<FormPage>()
     // Whether the user enabled "publish automatically" in their profile settings.
     // Default off so the user reviews the prefilled listing and publishes himself.
     private var autoSubmitSetting = false
@@ -116,6 +118,14 @@ class MainActivity : AppCompatActivity() {
     private val devHosts = setOf("localhost", "127.0.0.1", "10.0.2.2")
     private val vintedHosts = setOf("www.vinted.de", "vinted.de", "www.vinted.fr", "vinted.fr")
     private val kleinanzeigenHosts = setOf("www.kleinanzeigen.de", "kleinanzeigen.de")
+    private val ebayHosts = setOf("www.ebay.de", "ebay.de")
+
+    private fun hostsOf(platform: String?): Set<String> = when (platform) {
+        "vinted" -> vintedHosts
+        "kleinanzeigen" -> kleinanzeigenHosts
+        "ebay" -> ebayHosts
+        else -> emptySet()
+    }
     // Latest committed main-frame URL, so the synchronous photo getters can check the
     // origin without touching webView.url off the UI thread.
     @Volatile private var currentPageUrl: String = ""
@@ -146,14 +156,15 @@ class MainActivity : AppCompatActivity() {
         val uri = parseUri(url) ?: return false
         if (!isHttps(uri)) return false
         val h = uri.host?.lowercase() ?: return false
-        return h in vintedHosts || h in kleinanzeigenHosts
+        return h in vintedHosts || h in kleinanzeigenHosts || h in ebayHosts
     }
 
     private fun isTrustedPlatformOrFrontend(url: String?): Boolean =
         isTrustedFrontend(url) || isPlatformPage(url)
 
     // Which listing-form page (if any) a URL is. Host-exact + path-prefix match.
-    private enum class FormPage { VINTED_FORM, KA_CATEGORY, KA_FORM, NONE }
+    // eBay (V2.8): title page -> (wide layout) catalog/condition page -> form.
+    private enum class FormPage { VINTED_FORM, KA_CATEGORY, KA_FORM, EBAY_PRELIST, EBAY_IDENTIFY, EBAY_FORM, NONE }
 
     private fun formPageOf(url: String?): FormPage {
         val uri = parseUri(url) ?: return FormPage.NONE
@@ -164,6 +175,13 @@ class MainActivity : AppCompatActivity() {
             h in vintedHosts && (path == "/items/new" || path.startsWith("/items/new/")) -> FormPage.VINTED_FORM
             h in kleinanzeigenHosts && path == "/p-anzeige-aufgeben.html" -> FormPage.KA_CATEGORY
             h in kleinanzeigenHosts && path.startsWith("/p-anzeige-aufgeben-schritt2") -> FormPage.KA_FORM
+            h in ebayHosts && path.startsWith("/sl/prelist/identify") -> FormPage.EBAY_IDENTIFY
+            h in ebayHosts && (path.startsWith("/sl/prelist") || path.startsWith("/sl/sell")) -> FormPage.EBAY_PRELIST
+            // /lstng also serves "Angebot überarbeiten" / "Ähnlichen Artikel verkaufen"
+            // (mode=ReviseItem…, itemId=…): only a new listing is a Velosia target.
+            h in ebayHosts && (path == "/lstng" || path.startsWith("/lstng/")) &&
+                (uri.getQueryParameter("mode") ?: "AddItem") == "AddItem" &&
+                uri.getQueryParameter("itemId") == null -> FormPage.EBAY_FORM
             else -> FormPage.NONE
         }
     }
@@ -175,6 +193,8 @@ class MainActivity : AppCompatActivity() {
     private val inAppHostSuffixes = listOf(
         // platforms
         "vinted.de", "vinted.fr", "vinted.com", "kleinanzeigen.de", "ebay-kleinanzeigen.de",
+        // eBay (V2.8) incl. its sign-in (signin.ebay.de / .com)
+        "ebay.de", "ebay.com",
         // sign-in providers offered on the platforms' login pages
         "accounts.google.com", "accounts.youtube.com", "facebook.com", "appleid.apple.com",
         "idmsa.apple.com",
@@ -526,6 +546,7 @@ class MainActivity : AppCompatActivity() {
                 Toast.makeText(this@MainActivity, "Lade Angebot #$draftId...", Toast.LENGTH_SHORT).show()
                 hasAutoFilled = false
                 hasAutoCategory = false
+                ebayStepsDone.clear()
                 hasCaptured = false
                 resetCaptureGate()
                 authToken = token
@@ -537,6 +558,11 @@ class MainActivity : AppCompatActivity() {
                 fetchDraftAndPrepare(draftId, platform, token)
             }
         }
+
+        // Feature probe for the frontend (2.8+): this build knows eBay's pages. Older
+        // builds lack it, and the frontend then offers Kleinanzeigen and Vinted only.
+        @JavascriptInterface
+        fun supportsEbay(): Boolean = true
 
         @JavascriptInterface
         fun loginWithGoogle(clientId: String) {
@@ -568,10 +594,11 @@ class MainActivity : AppCompatActivity() {
                 // https host; otherwise build the canonical one from the id.
                 val given = parseUri(listingUrl)
                 val givenOk = given != null && isHttps(given) &&
-                    (given.host?.lowercase() ?: "") in (if (platform == "vinted") vintedHosts else kleinanzeigenHosts)
+                    (given.host?.lowercase() ?: "") in hostsOf(platform)
                 val url = when {
                     givenOk -> listingUrl.substringBefore('#')
                     platform == "vinted" -> "https://www.vinted.de/items/$listingId"
+                    platform == "ebay" -> "https://www.ebay.de/itm/$listingId"
                     else -> "https://www.kleinanzeigen.de/s-anzeige/$listingId"
                 }
                 capturePublishedListing(activeDraftId, platform, listingId, url, token)
@@ -590,8 +617,7 @@ class MainActivity : AppCompatActivity() {
                 val url = webView.url
                 if (!isPlatformPage(url) || activeDraftId < 0) return@runOnUiThread
                 if (platform != activePlatform) return@runOnUiThread
-                val hosts = if (platform == "vinted") vintedHosts else kleinanzeigenHosts
-                if (hostOf(url) !in hosts) return@runOnUiThread
+                if (hostOf(url) !in hostsOf(platform)) return@runOnUiThread
                 publishArmedAt = SystemClock.elapsedRealtime()
             }
         }
@@ -619,6 +645,7 @@ class MainActivity : AppCompatActivity() {
                 draftImageDataUrls = emptyList()
                 hasAutoFilled = false
                 hasAutoCategory = false
+                ebayStepsDone.clear()
                 hasCaptured = false
                 resetCaptureGate()
                 authToken = null
@@ -642,13 +669,18 @@ class MainActivity : AppCompatActivity() {
         // and injects all of them — no file chooser, no cross-origin fetch. Only served
         // while the WebView is on a trusted host, so an arbitrary page can't harvest the
         // user's draft photos.
+        // Listing forms only (and the frontend) — not any page of the platforms, which
+        // with eBay includes search results and other people's ads with ad frames.
+        private fun mayReadDraftPhotos(): Boolean =
+            activeDraftId >= 0 && (isTrustedFrontend(currentPageUrl) || formPageOf(currentPageUrl) != FormPage.NONE)
+
         @JavascriptInterface
         fun getDraftImageCount(): Int =
-            if (activeDraftId >= 0 && isTrustedPlatformOrFrontend(currentPageUrl)) draftImageDataUrls.size else 0
+            if (mayReadDraftPhotos()) draftImageDataUrls.size else 0
 
         @JavascriptInterface
         fun getDraftImageDataUrl(index: Int): String =
-            if (activeDraftId >= 0 && isTrustedPlatformOrFrontend(currentPageUrl)) (draftImageDataUrls.getOrNull(index) ?: "") else ""
+            if (mayReadDraftPhotos()) (draftImageDataUrls.getOrNull(index) ?: "") else ""
 
         // Engine telemetry (structural autofill outcome) is sent natively with the
         // session token, so the page itself never holds credentials. Only during an
@@ -788,12 +820,15 @@ class MainActivity : AppCompatActivity() {
     private fun navigateToPlatformListing(platform: String) {
         hasAutoFilled = false
         hasAutoCategory = false
-        val url = if (platform == "vinted") {
-            "https://www.vinted.de/items/new"
-        } else {
+        ebayStepsDone.clear()
+        val url = when (platform) {
+            "vinted" -> "https://www.vinted.de/items/new"
+            // eBay starts with "Was möchten Sie verkaufen?"; the engine types the title
+            // there and eBay picks the category (then condition, then the form).
+            "ebay" -> "https://www.ebay.de/sl/prelist/suggest"
             // Kleinanzeigen requires picking a category first; the form on
             // p-anzeige-aufgeben-schritt2.html is then auto-filled once it loads.
-            "https://www.kleinanzeigen.de/p-anzeige-aufgeben.html"
+            else -> "https://www.kleinanzeigen.de/p-anzeige-aufgeben.html"
         }
         webView.loadUrl(url)
     }
@@ -837,6 +872,7 @@ class MainActivity : AppCompatActivity() {
         draftImageDataUrls = emptyList()
         hasAutoFilled = false
         hasAutoCategory = false
+        ebayStepsDone.clear()
         hasCaptured = false
         resetCaptureGate()
         fabClose.visibility = View.GONE
@@ -1044,7 +1080,7 @@ class MainActivity : AppCompatActivity() {
         // Kleinanzeigen step 1 is only the category picker; the real form lives on
         // p-anzeige-aufgeben-schritt2.html, so we treat that as the fillable page.
         val isKleinanzeigenCategory = page == FormPage.KA_CATEGORY
-        val isFormPage = page == FormPage.VINTED_FORM || page == FormPage.KA_FORM
+        val isFormPage = page == FormPage.VINTED_FORM || page == FormPage.KA_FORM || page == FormPage.EBAY_FORM
 
         // On the actual form, fill once it has loaded. Whether it ALSO submits depends
         // on the user's "publish automatically" setting (default off -> the user
@@ -1058,6 +1094,12 @@ class MainActivity : AppCompatActivity() {
         // keyword suggestion field so the user reaches the form hands-free.
         if (isKleinanzeigenCategory && !hasAutoCategory) {
             hasAutoCategory = true
+            webView.postDelayed({ injectAutofill(autoSubmit = false) }, 600)
+        }
+        // eBay's title and condition pages: one run each, the engine moves on itself.
+        if ((page == FormPage.EBAY_PRELIST || page == FormPage.EBAY_IDENTIFY) &&
+            activePlatform == "ebay" && page !in ebayStepsDone) {
+            ebayStepsDone.add(page)
             webView.postDelayed({ injectAutofill(autoSubmit = false) }, 600)
         }
     }
@@ -1122,6 +1164,8 @@ class MainActivity : AppCompatActivity() {
             platform == "kleinanzeigen" && host in kleinanzeigenHosts ->
                 Regex("^/s-anzeige/(?:[^/]+/)?(\\d{1,15})").find(path)?.groupValues?.get(1)
                     ?: uri.getQueryParameter("adId")
+            platform == "ebay" && host in ebayHosts ->
+                Regex("^/itm/(?:[^/]+/)?(\\d{9,15})").find(path)?.groupValues?.get(1)
             else -> null
         }
         return id?.takeIf { Regex("\\d{1,15}").matches(it) }
@@ -1143,7 +1187,7 @@ class MainActivity : AppCompatActivity() {
         val uri = parseUri(url)
         val host = uri?.host?.lowercase()
         if (uri == null || host.isNullOrEmpty()) return CapturePage.TRANSIT
-        val onPlatform = host.split('.').any { it == "vinted" || it == "kleinanzeigen" || it == "ebay-kleinanzeigen" }
+        val onPlatform = host.split('.').any { it == "vinted" || it == "kleinanzeigen" || it == "ebay-kleinanzeigen" || it == "ebay" }
         if (!onPlatform) return if (isTrustedFrontend(url)) CapturePage.BROWSING else CapturePage.TRANSIT
         if (host !in kleinanzeigenHosts || !isHttps(uri)) return CapturePage.BROWSING
         val path = uri.path ?: ""
@@ -1206,6 +1250,9 @@ class MainActivity : AppCompatActivity() {
                 else Regex("^/s-anzeige/[^/]+/(\\d{1,15})").find(path)?.groupValues?.get(1)
                     ?: uri.getQueryParameter("adId")?.takeIf { Regex("\\d{1,15}").matches(it) }
             }
+            // eBay: never from the URL. Its form links to other people's /itm/ pages
+            // (price helpers); the engine reports the real id from eBay's success
+            // dialog via onListingPublished.
             else -> null
         }
 
@@ -1214,7 +1261,7 @@ class MainActivity : AppCompatActivity() {
 
         // For a real /s-anzeige/ ad strip the query; for the adId confirmation page keep
         // it (the id lives in the query) so we at least record a resolvable reference.
-        val cleanUrl = if (url.contains("/s-anzeige/")) url.substringBefore('?').substringBefore('#')
+        val cleanUrl = if (url.contains("/s-anzeige/") || url.contains("/itm/")) url.substringBefore('?').substringBefore('#')
                        else url.substringBefore('#')
 
         // Reached by publishing, not by browsing? Otherwise keep waiting (a later page

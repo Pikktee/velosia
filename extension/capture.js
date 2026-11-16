@@ -1,7 +1,9 @@
 // Velosia listing-capture content script.
 // -----------------------------------------------------------------------------
 // Runs on *published* listing pages (Kleinanzeigen ad pages and Vinted item pages
-// reached via a full page load). If the user just published a Velosia draft, this
+// reached via a full page load). eBay is not handled here: its form's price
+// helpers link to other people's /itm/ pages, so only the engine's success-dialog
+// watcher captures eBay listings. If the user just published a Velosia draft, this
 // reads the public listing id from the URL and reports it to the backend so the
 // dashboard can show & track the listing's status (online / reserviert / verkauft
 // / geloescht). It reads ONLY the URL (and the referrer), never the page content,

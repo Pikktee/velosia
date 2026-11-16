@@ -37,6 +37,15 @@ Vinted
     Product: "name", "description", "offers":{"price":9,...} (calibrated 2026-10;
     the description matched the embedded item data on every sampled ad).
 
+eBay
+  * Read through eBay's official Browse API (services/ebay_api.py) — the public
+    item pages answer server-side reads with 403. A live item carries
+    estimatedAvailabilities[].estimatedAvailabilityStatus (IN_STOCK /
+    LIMITED_STOCK / OUT_OF_STOCK) and estimatedSoldQuantity; an ended item is no
+    longer served at all. eBay does not tell "sold" from "taken down" for ended
+    items, so a gone item counts as geloescht unless a sale was seen while it was
+    still served; the user can mark a sale by hand (as on Kleinanzeigen).
+
 Besides the status we read the listing's current price, title and description,
 so changes the user made directly on the platform can be taken over into the
 draft. Baselines (*_listed_*) are what the engine published — the draft's
@@ -59,6 +68,7 @@ TERMINAL = {VERKAUFT, GELOESCHT}
 
 from services import http_client
 from services import listing_urls
+from services import ebay_api
 
 
 # ---------------------------------------------------------------------------
@@ -216,10 +226,61 @@ def check_vinted(url):
 
 
 # ---------------------------------------------------------------------------
+# eBay (Browse API)
+# ---------------------------------------------------------------------------
+
+def _ebay_status(state, item):
+    if state == "gone":
+        return GELOESCHT
+    if state != "ok" or not isinstance(item, dict):
+        return UNBEKANNT
+    sold = 0
+    out = False
+    for a in item.get("estimatedAvailabilities") or []:
+        try:
+            sold += int(a.get("estimatedSoldQuantity") or 0)
+        except (TypeError, ValueError):
+            pass
+        if a.get("estimatedAvailabilityStatus") == "OUT_OF_STOCK":
+            out = True
+    if out or sold > 0:
+        return VERKAUFT
+    return ONLINE
+
+
+def _ebay_offer(state, item):
+    offer = {"price": None, "title": None, "description": None}
+    if state != "ok" or not isinstance(item, dict):
+        return offer
+    title = item.get("title")
+    if isinstance(title, str) and title.strip():
+        offer["title"] = title.strip()[:_MAX_TEXT]
+    try:
+        price = float((item.get("price") or {}).get("value"))
+        offer["price"] = price if price > 0 else None
+    except (TypeError, ValueError):
+        pass
+    desc = item.get("description")
+    if isinstance(desc, str) and desc.strip():
+        # The engine publishes the description as <p> paragraphs; read them back
+        # as lines so an untouched listing matches the draft text.
+        text = re.sub(r"</p\s*>", "\n", desc, flags=re.I)
+        offer["description"] = _html_text(text) or None
+    return offer
+
+
+def check_ebay(listing_id):
+    """(status, offer) of an eBay listing via the Browse API."""
+    state, item = ebay_api.get_item(listing_id)
+    return _ebay_status(state, item), _ebay_offer(state, item)
+
+
+# ---------------------------------------------------------------------------
 # Online changes (price/title/description edited on the platform itself)
 # ---------------------------------------------------------------------------
 
 KA_TITLE_MAX = 65  # mirrors the engine (shared/autofill-engine.js)
+EBAY_TITLE_MAX = 80
 
 
 def clamp_title(title, max_len):
@@ -240,6 +301,8 @@ def published_values(draft, platform):
     title = getattr(draft, "title", None)
     if platform == "kleinanzeigen" and title:
         title = clamp_title(title, KA_TITLE_MAX)
+    elif platform == "ebay" and title:
+        title = clamp_title(title, EBAY_TITLE_MAX)
     return {
         "price": getattr(draft, "price", None),
         "title": title,
@@ -295,5 +358,21 @@ def refresh_draft_status(draft, now):
         updates["vinted_status"] = status
         updates["vinted_status_at"] = now
         updates.update(_offer_updates(draft, "vinted", "vinted", offer))
+
+    # eBay is read by listing id through its API (no page fetch). Without API
+    # credentials the status stays as captured ("online") until set by hand.
+    e_id = listing_urls.clean_listing_id(getattr(draft, "ebay_listing_id", None))
+    if e_id and ebay_api.configured() and getattr(draft, "ebay_status", None) not in TERMINAL:
+        status, offer = check_ebay(e_id)
+        # Right after publishing eBay may not serve the item yet (indexing,
+        # review); "gone" counts only once the listing is a day old, so a fresh
+        # one isn't written off for good.
+        published = getattr(draft, "ebay_published_at", None)
+        if status == GELOESCHT and published is not None and (now - published).total_seconds() < 24 * 3600:
+            status = UNBEKANNT
+        if status != UNBEKANNT:
+            updates["ebay_status"] = status
+            updates["ebay_status_at"] = now
+        updates.update(_offer_updates(draft, "ebay", "ebay", offer))
 
     return updates

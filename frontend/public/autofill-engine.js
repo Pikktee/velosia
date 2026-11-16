@@ -16,7 +16,7 @@
  *   window.__velosia.autofill(draft, options) -> Promise<result>
  *
  *   options = {
- *     platform:   "vinted" | "kleinanzeigen" | null  (null = auto-detect)
+ *     platform:   "vinted" | "kleinanzeigen" | "ebay" | null  (null = auto-detect)
  *     autoSubmit: boolean   (default false -> user reviews & clicks publish himself)
  *     userZip:    string    (Kleinanzeigen postcode, optional)
  *     userCity:   string    (optional)
@@ -43,7 +43,7 @@
   // and in the extension it is a persistent content script — never redefine.
   if (window.__velosia && window.__velosia.__loaded) return;
 
-  var VERSION = "2.7.81";
+  var VERSION = "2.8.0";
   var KA_TITLE_MAX = 65;
 
   // Cut at the last word boundary within `max`; hard cut if that loses too much.
@@ -182,10 +182,19 @@
   // Platform / phase detection
   // ----------------------------------------------------------------------------
 
+  function ebayIsNewListingForm() {
+    try {
+      var q = new URLSearchParams(window.location.search || "");
+      var mode = q.get("mode");
+      return (!mode || mode === "AddItem") && !q.get("itemId");
+    } catch (e) { return false; }
+  }
+
   function detectPlatform() {
     var h = window.location.hostname || "";
     if (h.indexOf("kleinanzeigen") !== -1) return "kleinanzeigen";
     if (h.indexOf("vinted") !== -1) return "vinted";
+    if (/(^|\.)ebay\.de$/.test(h)) return "ebay";
     return null;
   }
 
@@ -196,6 +205,14 @@
     if (platform === "kleinanzeigen") {
       if (p.indexOf("p-anzeige-aufgeben-schritt2") !== -1) return "form";
       if (p.indexOf("p-anzeige-aufgeben") !== -1) return "category";
+      return "form";
+    }
+    if (platform === "ebay") {
+      if (p.indexOf("/sl/prelist/identify") === 0) return "identify";
+      if (p.indexOf("/sl/prelist") === 0 || p.indexOf("/sl/sell") === 0) return "prelist";
+      // /lstng also serves "Angebot überarbeiten" / "Ähnlichen Artikel verkaufen"
+      // (mode=ReviseItem…, itemId=…) — never a Velosia draft's target.
+      if (!ebayIsNewListingForm()) return "other";
       return "form";
     }
     return "form";
@@ -239,6 +256,13 @@
         selectors: ["#ad-price-amount", "input[name='priceAmount']", "#pstad-price", "input[id*='price']"],
         labels: ["preis"], tags: ["input"]
       }
+    },
+    ebay: {
+      // /lstng (live 2026-11). The description textarea is hidden behind the
+      // rich-text editor — filled separately (ebaySetDescription).
+      title: { selectors: ["input[name='title']"], labels: ["angebotstitel"], tags: ["input"] },
+      description: { selectors: ["textarea[name='description']"] },
+      price: { selectors: ["input[name='price']"], labels: ["artikelpreis"], tags: ["input"] }
     }
   };
 
@@ -1982,6 +2006,327 @@
   }
 
   // ----------------------------------------------------------------------------
+  // eBay (V2.8). Calibrated live on ebay.de 2026-11 (narrow + wide layouts), see
+  // memory "ebay-sell-form-recon". The flow has up to three pages:
+  //   /sl/prelist/suggest  — "Was möchten Sie verkaufen?": title + Weiter/Finden.
+  //                          eBay derives the category from the title itself.
+  //   /sl/prelist/identify — (wide layout, electronics) catalog products to pick
+  //                          from + a condition step; we never take a catalog
+  //                          product (it brings foreign photos/specs).
+  //   /lstng               — the listing form (Marko, not React). It autosaves a
+  //                          draft in the user's account as soon as it opens.
+  // ----------------------------------------------------------------------------
+
+  var EBAY_TITLE_MAX = 80;
+
+  // Velosia condition -> eBay condition labels, best first. The offered set
+  // depends on the category (fashion: "Gebraucht - Gut" …; electronics: Neu /
+  // Neu: Sonstige / Gebraucht / Als Ersatzteil/defekt).
+  var EBAY_CONDITION_MAP = {
+    "neu":               ["Neu", "Neu ohne Etikett", "Neu: Sonstige"],
+    "neuwertig":         ["Gebraucht - Hervorragend", "Gebraucht", "Neu: Sonstige"],
+    "sehr gut":          ["Gebraucht - Hervorragend", "Gebraucht"],
+    "gut":               ["Gebraucht - Gut", "Gebraucht"],
+    "zufriedenstellend": ["Gebraucht - Akzeptabel", "Gebraucht"],
+    "in ordnung":        ["Gebraucht - Akzeptabel", "Gebraucht"],
+    "befriedigend":      ["Gebraucht - Akzeptabel", "Gebraucht"],
+    "defekt":            ["Als Ersatzteil / defekt", "Als Ersatzteil/defekt", "Als Ersatzteil"]
+  };
+
+  function ebayConditionCandidates(condition) {
+    var c = norm(condition);
+    return EBAY_CONDITION_MAP[c] || [];
+  }
+
+  // First line of a control's text, whitespace collapsed, lower case.
+  function ebayLabelOf(el) {
+    var t = String((el && (el.innerText || el.textContent)) || "").split("\n")[0];
+    return t.replace(/\s+/g, " ").trim().toLowerCase();
+  }
+
+  // Exact label, or the label plus eBay's bracketed hint ("Neu: Sonstige (siehe
+  // Artikelbeschreibung)"). A bare prefix is not enough: "Neu" must not hit
+  // "Neu mit Etikett", "Gebraucht" not "Gebraucht - Akzeptabel".
+  function ebayLabelMatches(label, cand) {
+    var c = String(cand || "").replace(/\s+/g, " ").trim().toLowerCase();
+    return !!c && (label === c || label.indexOf(c + " (") === 0);
+  }
+
+  function ebayVisible(el) {
+    return !!(el && el.offsetParent !== null && isInteractable(el));
+  }
+
+  // The first visible button whose own text (first line) matches one of the
+  // needles exactly or as a prefix ("Neu: Sonstige (siehe Artikelbeschreibung)").
+  function ebayButton(needles, root) {
+    var btns = (root || document).querySelectorAll("button, [role='button'], a[role='button']");
+    for (var n = 0; n < needles.length; n++) {
+      for (var i = 0; i < btns.length; i++) {
+        var b = btns[i];
+        if (!ebayVisible(b)) continue;
+        if (ebayLabelMatches(ebayLabelOf(b), needles[n])) return b;
+      }
+    }
+    return null;
+  }
+
+  // "Weiter zum Angebot" / "Weiter" — enabled, visible; the last one wins (the
+  // dialog's button sits after the page's).
+  function ebayContinueButton() {
+    var btns = document.querySelectorAll("button");
+    var found = null;
+    for (var i = 0; i < btns.length; i++) {
+      var t = norm(btns[i].innerText || btns[i].textContent || "");
+      if ((t === "weiter zum angebot" || t === "weiter") && ebayVisible(btns[i]) && !btns[i].disabled) found = btns[i];
+    }
+    return found;
+  }
+
+  // Condition on the prelist pages: a dialog of radios (electronics) or a list of
+  // cards (fashion), then "Weiter zum Angebot"/"Weiter".
+  async function ebayPickPrelistCondition(draft) {
+    var cands = ebayConditionCandidates(draft.condition);
+    if (!cands.length) return false;
+    for (var tries = 0; tries < 12; tries++) {
+      // Radios with a label.
+      var labels = document.querySelectorAll("label");
+      for (var c = 0; c < cands.length; c++) {
+        for (var i = 0; i < labels.length; i++) {
+          if (!ebayLabelMatches(ebayLabelOf(labels[i]), cands[c])) continue;
+          var radio = labels[i].control || labels[i].querySelector("input[type='radio']") ||
+                      (labels[i].htmlFor ? document.getElementById(labels[i].htmlFor) : null);
+          if (radio && ebayVisible(labels[i])) {
+            radio.click();
+            await sleep(400);
+            if (radio.checked) return true;
+          }
+        }
+      }
+      // Cards.
+      var card = ebayButton(cands);
+      if (card) { card.click(); await sleep(400); return true; }
+      await sleep(500);
+    }
+    return false;
+  }
+
+  // Phase "prelist": type the title, continue. eBay picks the category.
+  async function ebayPrelist(draft) {
+    // The title field in the page body — never eBay's header search (#gh-…),
+    // which would start a product search instead of a new listing.
+    function titleInput(anywhere) {
+      var els = document.querySelectorAll(anywhere ? "input" : "main input");
+      for (var k = 0; k < els.length; k++) {
+        var el = els[k];
+        var type = (el.getAttribute("type") || "text").toLowerCase();
+        if (type !== "text" && type !== "search") continue;
+        if (!isInteractable(el) || el.offsetParent === null) continue;
+        if (el.closest("header, #gh, [id^='gh-'], nav")) continue;
+        return el;
+      }
+      return null;
+    }
+    var input = null;
+    for (var i = 0; i < 20 && !input; i++) {
+      input = titleInput(false) || (i >= 10 ? titleInput(true) : null);
+      if (!input) await sleep(400);
+    }
+    if (!input || !draft.title) return false;
+    fillField(input, clampTitle(draft.title, EBAY_TITLE_MAX));
+    await sleep(700);
+    var btn = ebayContinueButton() || (input.form ? ebayButton(["finden", "suchen"], input.form) : null);
+    if (btn && !btn.disabled) { btn.click(); return true; }
+    if (input.form) {
+      try { input.form.requestSubmit ? input.form.requestSubmit() : input.form.submit(); return true; } catch (e) {}
+    }
+    return false;
+  }
+
+  // Phase "identify": skip the catalog product, pick the condition, continue.
+  async function ebayIdentify(draft) {
+    for (var i = 0; i < 16; i++) {
+      var skip = ebayButton(["ohne passendes produkt fortfahren", "ohne passendes produkt"]);
+      if (skip) { skip.click(); await sleep(1200); break; }
+      if (document.querySelector("input[type='radio']") || ebayContinueButton()) break;
+      await sleep(500);
+    }
+    var condOk = await ebayPickPrelistCondition(draft);
+    if (!condOk) return { condition: false, continued: false };
+    await sleep(400);
+    var go = ebayContinueButton();
+    if (go) { go.click(); return { condition: true, continued: true }; }
+    return { condition: true, continued: false };
+  }
+
+  // The prepared item specifics: {values: {name: [values]}, required: [names]}.
+  function ebayPreparedAspects(draft) {
+    var raw = draft && draft.ebay_aspects;
+    if (!raw) return null;
+    if (typeof raw === "string") {
+      try { raw = JSON.parse(raw); } catch (e) { return null; }
+    }
+    if (!raw || typeof raw !== "object") return null;
+    return {
+      values: (raw.values && typeof raw.values === "object") ? raw.values : {},
+      required: Array.isArray(raw.required) ? raw.required : []
+    };
+  }
+
+  function ebayAspectButton(name) {
+    var btns = document.querySelectorAll("button[name^='attributes.']");
+    for (var i = 0; i < btns.length; i++) {
+      if (btns[i].getAttribute("name") === "attributes." + name) return btns[i];
+    }
+    return null;
+  }
+
+  function ebayAspectRow(btn) {
+    var r = btn;
+    while (r && !(r.classList && r.classList.contains("summary__attributes--field"))) r = r.parentElement;
+    return r || (btn && btn.parentElement);
+  }
+
+  function ebayAspectValue(btn) {
+    return String((btn && (btn.innerText || btn.textContent)) || "").replace(/\s+/g, " ").trim();
+  }
+
+  async function ebayToggleAspect(btn, open) {
+    var isOpen = btn.getAttribute("aria-expanded") === "true";
+    if (isOpen !== open) { btn.click(); await sleep(open ? 550 : 300); }
+  }
+
+  // Set one aspect. Values are eBay's own spellings (the backend took them from
+  // eBay's lists); each is searched and its exact menu entry clicked — single
+  // choice (menuitemradio) or multiple (menuitemcheckbox). Nothing is invented: a
+  // value without an exact entry is left out.
+  async function ebaySetAspect(name, values) {
+    var btn = ebayAspectButton(name);
+    if (!btn) return null;               // not a field of this category
+    var row = ebayAspectRow(btn);
+    var setAny = false;
+    try {
+      for (var v = 0; v < values.length; v++) {
+        var want = norm(values[v]);
+        if (!want) continue;
+        await ebayToggleAspect(btn, true);
+        var input = row && row.querySelector(
+          "input:not([type='hidden']):not([type='checkbox']):not([type='radio'])");
+        if (input) {
+          try { input.focus(); } catch (e) {}
+          setNativeValue(input, String(values[v]));
+          input.dispatchEvent(new Event("input", { bubbles: true }));
+          await sleep(800);
+        }
+        var items = row ? row.querySelectorAll("[role^='menuitem']") : [];
+        var hit = null;
+        for (var i = 0; i < items.length; i++) {
+          if (norm(items[i].innerText || items[i].textContent || "") === want) { hit = items[i]; break; }
+        }
+        if (hit) {
+          if (hit.getAttribute("aria-checked") !== "true") { hit.click(); await sleep(600); }
+          setAny = true;
+        }
+        if (input && input.value) {
+          setNativeValue(input, "");
+          input.dispatchEvent(new Event("input", { bubbles: true }));
+        }
+      }
+    } finally {
+      try { await ebayToggleAspect(btn, false); } catch (e) {}
+    }
+    // Judge by the field's shown value once the list is closed (eBay re-renders
+    // the menu, so the clicked entry may be stale by now).
+    if (!setAny) return false;
+    var shown = norm(ebayAspectValue(btn));
+    for (var k = 0; k < values.length; k++) {
+      if (norm(values[k]) && shown.indexOf(norm(values[k])) !== -1) return true;
+    }
+    return false;
+  }
+
+  // Velosia's own attributes for the same-named eBay fields, used when no
+  // prepared item specifics exist (no eBay API key, or preparing failed).
+  function ebayAspectsFromAttributes(draft) {
+    var out = {};
+    [["Marke", "marke"], ["Farbe", "farbe"], ["Größe", "größe"], ["Material", "material"]].forEach(function (p) {
+      var v = attrValue(draft, p[1]);
+      if (v) out[p[0]] = [v];
+    });
+    return out;
+  }
+
+  // The description lives in a rich-text iframe for display; what eBay saves is
+  // textarea[name=description], reachable only in the "HTML-Code anzeigen" mode
+  // (writing into the iframe is cosmetic — verified live). Text -> <p> paragraphs.
+  function ebayDescriptionHtml(text) {
+    var esc = function (s) {
+      return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    };
+    return String(text || "").replace(/\r/g, "").split(/\n\s*\n/).map(function (p) {
+      p = p.trim();
+      return p ? "<p>" + esc(p).replace(/\n/g, "<br>") + "</p>" : "";
+    }).join("");
+  }
+
+  async function ebaySetDescription(text) {
+    if (!text) return false;
+    var mode = document.querySelector("input[name='descriptionEditorMode']");
+    var ta = document.querySelector("textarea[name='description']");
+    if (!ta) return false;
+    var switched = false;
+    if (mode && !mode.checked) { mode.click(); switched = true; await sleep(600); }
+    var html = ebayDescriptionHtml(text);
+    try { ta.focus(); } catch (e) {}
+    setNativeValue(ta, html);
+    ta.dispatchEvent(new Event("input", { bubbles: true }));
+    ta.dispatchEvent(new Event("change", { bubbles: true }));
+    try { ta.blur(); } catch (e) {}
+    ta.dispatchEvent(new Event("blur", { bubbles: true }));
+    await sleep(400);
+    if (switched && mode && mode.checked) { mode.click(); await sleep(600); }
+    ta.__velosiaKnown = true;
+    return String(ta.value || "").indexOf(html.slice(0, 40)) !== -1;
+  }
+
+  // Condition inside the form (narrow layout asks for it there): a summary value
+  // means it is already set; else chips, possibly behind "Weitere Artikelzustände".
+  async function ebayFormCondition(draft) {
+    var cands = ebayConditionCandidates(draft.condition);
+    if (!cands.length) return false;
+    // The condition section: from its heading "Zustand" up to the next section.
+    var section = null;
+    var heads = document.querySelectorAll("h2, h3");
+    for (var h = 0; h < heads.length && !section; h++) {
+      if (norm(heads[h].textContent) === "zustand") {
+        section = heads[h].closest("section") || heads[h].parentElement;
+        for (var up = 0; up < 3 && section && norm(section.innerText).length < 25; up++) section = section.parentElement;
+      }
+    }
+    var scope = section || document;
+    var summary = scope.querySelector(".smry--value");
+    if (summary) {
+      var cur = ebayLabelOf(summary);
+      for (var c = 0; c < cands.length; c++) {
+        if (ebayLabelMatches(cur, cands[c])) return true;
+      }
+    }
+    var chip = ebayButton(cands, scope);
+    if (!chip) {
+      var more = ebayButton(["weitere artikelzustände ansehen"], scope);
+      if (more) { more.click(); await sleep(800); }
+      if (await ebayPickPrelistCondition(draft)) {
+        var ok = ebayButton(["fertig", "übernehmen", "speichern", "weiter", "bestätigen"]);
+        if (ok) { ok.click(); await sleep(600); }
+        return true;
+      }
+      return false;
+    }
+    chip.click();
+    await sleep(700);
+    return true;
+  }
+
+  // ----------------------------------------------------------------------------
   // Submit handling
   // ----------------------------------------------------------------------------
 
@@ -1997,6 +2342,10 @@
   }
 
   function findSubmitButton(platform) {
+    if (platform === "ebay") {
+      return findButtonByText(["artikel kostenlos einstellen", "artikel einstellen", "angebot einstellen"]) ||
+             findButtonByText(["einstellen"]);
+    }
     if (platform === "vinted") {
       return document.querySelector("button[data-testid*='submit']") ||
              findButtonByText(["hochladen", "einstellen", "veröffentlichen", "veroffentlichen"]) ||
@@ -2046,7 +2395,8 @@
   // speichern", "Vorschau").
   var PUBLISH_NEEDLES = {
     vinted: ["hochladen", "einstellen", "veröffentlichen", "veroffentlichen"],
-    kleinanzeigen: ["anzeige aufgeben", "veröffentlichen", "veroffentlichen", "einstellen"]
+    kleinanzeigen: ["anzeige aufgeben", "veröffentlichen", "veroffentlichen", "einstellen"],
+    ebay: ["einstellen"]
   };
   var NOT_PUBLISH_WORDS = ["foto", "bild", "video", "entwurf", "vorschau", "abbrechen"];
 
@@ -2355,7 +2705,8 @@
 
       // Name the publish button as the platform labels it ("Hochladen" on Vinted,
       // "Anzeige aufgeben" on Kleinanzeigen); the live label wins when it is short.
-      var submitLabel = result.platform === "vinted" ? "Hochladen" : "Anzeige aufgeben";
+      var submitLabel = result.platform === "vinted" ? "Hochladen"
+        : result.platform === "ebay" ? "Artikel einstellen" : "Anzeige aufgeben";
       try {
         var sb = findSubmitButton(result.platform);
         var live = sb && (sb.textContent || sb.value || "").replace(/\s+/g, " ").trim();
@@ -2458,6 +2809,11 @@
     var descEl = findField(map.description);
     var priceEl = findField(map.price);
     var priceValue = (draft.price !== undefined && draft.price !== null) ? String(Math.round(draft.price)) : null;
+    // eBay keeps cents (its field takes "9,99"); the other forms take whole euros.
+    if (platform === "ebay" && priceValue !== null) {
+      priceValue = (Math.round(Number(draft.price) * 100) / 100).toFixed(2).replace(".", ",").replace(/,00$/, "");
+    }
+    var ebayDescFound = null;
 
     setBackdrop("Titel, Beschreibung & Preis …");
     // A core field that HAS a value but couldn't be filled (selector didn't match)
@@ -2467,9 +2823,19 @@
     if (platform === "kleinanzeigen" && draft.title && draft.title.length > KA_TITLE_MAX) {
       draft = Object.assign({}, draft, { title: clampTitle(draft.title, KA_TITLE_MAX) });
     }
+    if (platform === "ebay" && draft.title && draft.title.length > EBAY_TITLE_MAX) {
+      draft = Object.assign({}, draft, { title: clampTitle(draft.title, EBAY_TITLE_MAX) });
+    }
     if (fillField(titleEl, draft.title)) filled.push("Titel");
     else if (draft.title) manual.push("Titel");
-    if (fillField(descEl, draft.description)) filled.push("Beschreibung");
+    if (platform === "ebay") {
+      var descOk = false;
+      try { descOk = await ebaySetDescription(draft.description); } catch (e) {}
+      if (descOk) filled.push("Beschreibung");
+      else if (draft.description) manual.push("Beschreibung");
+      ebayDescFound = !!document.querySelector("textarea[name='description']");
+      descEl = null;  // hidden textarea: skip the generic re-check below
+    } else if (fillField(descEl, draft.description)) filled.push("Beschreibung");
     else if (draft.description) manual.push("Beschreibung");
     if (priceValue !== null) {
       if (fillField(priceEl, priceValue)) filled.push("Preis");
@@ -2577,6 +2943,74 @@
       }
     }
 
+    if (platform === "ebay") {
+      // Price type: eBay's "Preisvorschläge zulassen" is VB; Festpreis switches it off.
+      var ptE = String(draft.price_type_effective || draft.price_type || "FIXED").toUpperCase();
+      var bo = document.querySelector("input[name='bestOfferEnabled']");
+      if (bo) {
+        var wantBo = ptE === "NEGOTIABLE";
+        if (bo.checked !== wantBo) { try { bo.click(); } catch (e) {} await sleep(300); }
+        if (bo.checked === wantBo) filled.push(wantBo ? "Preisvorschläge an" : "Festpreis");
+      }
+
+      setBackdrop("Zustand …");
+      var eCond = false;
+      if (draft.condition) {
+        try { eCond = await ebayFormCondition(draft); } catch (e) { eCond = false; }
+        fields.condition = eCond;
+        if (eCond) filled.push("Zustand"); else manual.push("Zustand");
+      }
+
+      // Item specifics: the prepared ones (eBay's own values), else Velosia's
+      // attributes for the same-named fields. What eBay pre-filled on its own and
+      // we cannot back up stays, but is named for a quick check.
+      setBackdrop("Artikelmerkmale …");
+      var prepared = ebayPreparedAspects(draft);
+      var wantAspects = prepared ? prepared.values : ebayAspectsFromAttributes(draft);
+      var setNames = [];
+      for (var t = 0; t < 10 && !document.querySelector("button[name^='attributes.']"); t++) await sleep(400);
+      var aspectNames = Object.keys(wantAspects || {});
+      for (var an = 0; an < aspectNames.length; an++) {
+        var nm = aspectNames[an];
+        var vals = wantAspects[nm];
+        if (!Array.isArray(vals)) vals = [vals];
+        var res = null;
+        try { res = await ebaySetAspect(nm, vals); } catch (e) { res = false; }
+        if (res === true) setNames.push(nm);
+        // null = the category has no such field: no telemetry signal then.
+        if (res !== null) {
+          if (nm === "Marke") fields.brand = res === true;
+          if (nm === "Farbe") fields.color = res === true;
+          if (nm === "Größe") fields.size = res === true;
+        }
+      }
+      attrCount = setNames.length;
+      if (setNames.length) filled.push("Merkmale (" + setNames.length + ")");
+
+      var titleKey = norm(draft.title);
+      var unchecked = [];
+      var openRequired = [];
+      var required = prepared ? prepared.required : [];
+      var allBtns = document.querySelectorAll("button[name^='attributes.']");
+      for (var ab = 0; ab < allBtns.length; ab++) {
+        var aName = String(allBtns[ab].getAttribute("name") || "").slice("attributes.".length);
+        var aVal = ebayAspectValue(allBtns[ab]);
+        var row = ebayAspectRow(allBtns[ab]);
+        var starred = row && /\*/.test(String((row.querySelector(".fake-link") || {}).textContent || "") +
+          String(((row.querySelector(".fake-link") || {}).parentElement || {}).textContent || "").slice(0, 60));
+        if (!aVal) {
+          if (required.indexOf(aName) !== -1 || starred) openRequired.push(aName);
+        } else if (setNames.indexOf(aName) === -1 && titleKey.indexOf(norm(aVal)) === -1) {
+          unchecked.push(aName);
+        }
+      }
+      openRequired.forEach(function (n) { manual.push("Merkmal „" + n + "“"); });
+      if (unchecked.length) {
+        manual.push("Von eBay vorbelegt, bitte prüfen: " + unchecked.slice(0, 5).join(", ") +
+          (unchecked.length > 5 ? " …" : ""));
+      }
+    }
+
     // Vinted: drive the category picker automatically (drilled by catalog id / name),
     // then the condition picker (Velosia captures the condition). Brand & size are
     // separate pickers with no reliable source data — still manual.
@@ -2655,7 +3089,7 @@
         ["[data-testid='size-select-dropdown-input']"], sizeAvoid);
       if (!brandOk && hasBrandField) manual.push("Marke" + (brandVal ? "" : " (nicht auf Fotos erkannt)"));
       if (!sizeOk && hasSizeField) manual.push("Größe" + (sizeVal ? "" : " (nicht auf Fotos erkannt)"));
-    } else if (!draft.category) {
+    } else if (!draft.category && platform !== "ebay") {
       manual.push("Kategorie");
     }
 
@@ -2693,7 +3127,7 @@
 
     return {
       filled: filled, manual: manual, photos: photos,
-      found: { title: !!titleEl, description: !!descEl, price: !!priceEl },
+      found: { title: !!titleEl, description: ebayDescFound !== null ? ebayDescFound : !!descEl, price: !!priceEl },
       categoryOk: categoryOk, attrCount: attrCount, fields: fields
     };
   }
@@ -2750,6 +3184,11 @@
       if (/\/items\/new/.test(path)) return null;
       var mv = path.match(/\/items\/(\d+)/);
       if (mv) return { platform: "vinted", listingId: mv[1], listingUrl: url.origin + path };
+      return null;
+    }
+    if (/(^|\.)ebay\.de$/.test(host)) {
+      var me = path.match(/^\/itm\/(?:[^/]+\/)?(\d{9,15})/);
+      if (me) return { platform: "ebay", listingId: me[1], listingUrl: "https://www.ebay.de/itm/" + me[1] };
       return null;
     }
     if (host.indexOf("kleinanzeigen") !== -1) {
@@ -3030,6 +3469,63 @@
     try { if (nav && nav.removeEventListener) nav.removeEventListener("currententrychange", onEntry); } catch (e) {}
   }
 
+  // eBay keeps the URL at /lstng after publishing and only shows a dialog "Ihr
+  // Angebot ist jetzt online" with a link "Angebot anzeigen" -> /itm/<id> (live
+  // 2026-11). Watch for that link — only after the publish action was triggered.
+  var ebayWatch = null;
+
+  // Only the success dialog counts ("Ihr Angebot ist jetzt online"), and only its
+  // "Angebot anzeigen" link: the form's price helpers and duplicate hints also
+  // show /itm/ links — to other people's listings.
+  function ebaySuccessLink() {
+    var dialogs = document.querySelectorAll(".lightbox-dialog, [role='dialog'], dialog");
+    for (var d = 0; d < dialogs.length; d++) {
+      var text = norm(dialogs[d].innerText || dialogs[d].textContent || "");
+      if (text.indexOf("jetzt online") === -1 && text.indexOf("wurde eingestellt") === -1) continue;
+      var links = dialogs[d].querySelectorAll("a[href*='/itm/']");
+      for (var i = 0; i < links.length; i++) {
+        if (norm(links[i].innerText || links[i].textContent) !== "angebot anzeigen") continue;
+        var info = parseListingUrl(links[i].href);
+        if (info && info.platform === "ebay") return info;
+      }
+    }
+    return null;
+  }
+
+  async function watchEbayPublish(draft, options, session) {
+    if (!draft || draft.id == null) return;
+    if (ebayWatch) ebayWatch.done = true;
+    var w = { done: false };
+    ebayWatch = w;
+    var started = Date.now();
+    while (!w.done) {
+      await sleep(1000);
+      if (w.done) break;
+      if (isPublishArmed(session)) {
+        var info = ebaySuccessLink();
+        if (info) {
+          w.done = true;
+          console.log("Velosia: eBay-Angebot erkannt -> id=" + info.listingId);
+          var nb = nativeBridge("onListingPublished");
+          if (options.token || !nb) {
+            captureListing({ backendUrl: options.backendUrl, token: options.token, draftId: draft.id, href: info.listingUrl });
+          }
+          try { if (nb) nb.onListingPublished("ebay", String(info.listingId), info.listingUrl); } catch (e) {}
+          if (typeof options.onListingCaptured === "function") {
+            try { options.onListingCaptured({ platform: "ebay", listingId: info.listingId, listingUrl: info.listingUrl }); } catch (e) {}
+          }
+          break;
+        }
+      }
+      if ((Date.now() - started) > 60 * 60 * 1000 && !isPublishArmed(session)) {
+        w.done = true;
+        if (typeof options.onCaptureAborted === "function") {
+          try { options.onCaptureAborted({ platform: "ebay", reason: "timeout" }); } catch (e) {}
+        }
+      }
+    }
+  }
+
   // ----------------------------------------------------------------------------
   // Public entry point
   // ----------------------------------------------------------------------------
@@ -3041,7 +3537,9 @@
     }
     var platform = options.platform || detectPlatform();
     var phase = detectPhase(platform);
-    var autoSubmit = !!options.autoSubmit;
+    // eBay is never published automatically: its form asks for more than we can
+    // know (item specifics, shipping) — the user always reviews and submits.
+    var autoSubmit = !!options.autoSubmit && platform !== "ebay";
     var showUi = options.showOverlay !== false;
 
     try {
@@ -3072,6 +3570,31 @@
       // user can pick the category manually instead of being stuck behind it.
       if (showUi && !catOk) removeBackdrop();
       return result0;
+    }
+
+    // An eBay page that is not part of creating a new listing (revising a live
+    // one, selling a similar item): nothing to fill there.
+    if (platform === "ebay" && phase === "other") {
+      return { platform: platform, phase: phase, filled: [], manual: [], photos: 0, submitted: false };
+    }
+
+    // eBay before the form: title on the prelist page, then (wide layout) skip
+    // the catalog product and pick the condition. Each step navigates on.
+    if (platform === "ebay" && (phase === "prelist" || phase === "identify")) {
+      if (showUi) { ensureBackdrop(); setBackdrop(phase === "prelist" ? "Artikel wird angelegt …" : "Zustand wird gewählt …"); }
+      var resE = { platform: platform, phase: phase, filled: [], manual: [], photos: 0, submitted: false };
+      var moved = false;
+      try {
+        if (phase === "prelist") moved = await ebayPrelist(draft);
+        else {
+          var idr = await ebayIdentify(draft);
+          moved = idr.continued;
+          sendTelemetry({ platform: platform, phase: phase, condition_ok: draft.condition ? idr.condition : undefined }, options);
+        }
+      } catch (e) { moved = false; }
+      // If nothing moved on, let the user continue by hand instead of being stuck.
+      if (showUi && !moved) removeBackdrop();
+      return resE;
     }
 
     // Form phase: block the page behind a full-screen progress backdrop while the
@@ -3120,6 +3643,12 @@
       try {
         var watching = watchVintedPublish(draft, options, session);
         if (watching && watching.catch) watching.catch(function () {});
+      } catch (e) {}
+    }
+    if (platform === "ebay" && phase === "form") {
+      try {
+        var watchingE = watchEbayPublish(draft, options, session);
+        if (watchingE && watchingE.catch) watchingE.catch(function () {});
       } catch (e) {}
     }
 

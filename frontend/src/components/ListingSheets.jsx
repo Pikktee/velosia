@@ -1,7 +1,7 @@
 import { ArrowUpRight, ChevronRight, CircleCheck, RefreshCw, Repeat, Trash2 } from 'lucide-react';
 import {
   listingPlatforms, statusMeta, isActive, publishedDays, crossPostConflict, formatEuro, STALE_DAYS,
-  PLATFORM_KEYS, PLATFORM_LETTER, PLATFORM_LABEL,
+  PLATFORM_LETTER, PLATFORM_LABEL, PLATFORMS, publishablePlatforms,
 } from '../utils/listingStatus';
 import Sheet from './Sheet';
 
@@ -20,7 +20,7 @@ export function PlatformMark({ platform, status, size = 'md' }) {
 }
 
 const freshness = (draft) => {
-  const times = ['ka_status_at', 'vinted_status_at']
+  const times = PLATFORMS.map((p) => `${p.prefix}_status_at`)
     .map((k) => draft[k])
     .filter(Boolean)
     .map((v) => Date.parse(/[zZ]|[+-]\d\d:?\d\d$/.test(v) ? v : `${v}Z`))
@@ -35,14 +35,17 @@ const freshness = (draft) => {
   return d === 1 ? 'vor 1 Tag' : `vor ${d} Tagen`;
 };
 
-const PREFIX = { kleinanzeigen: 'ka', vinted: 'vinted' };
+const PREFIX = Object.fromEntries(PLATFORMS.map((p) => [p.key, p.prefix]));
+// Platforms that never report "verkauft" by themselves: Kleinanzeigen has no
+// public sold state, eBay does not tell a sale from an ended listing.
+const MANUAL_SOLD = new Set(['kleinanzeigen', 'ebay']);
 
 // "Deine Anzeigen": one card per platform the draft is listed on, plus a quiet
 // card for a platform it isn't on yet.
-export function StatusSheet({ draft, priceType, refreshing, settingStatus, opening, onRefresh, onRelist, onPublish, onMarkSold, onDelete, onOpen, onClose }) {
+export function StatusSheet({ draft, user, priceType, refreshing, settingStatus, opening, onRefresh, onRelist, onPublish, onMarkSold, onDelete, onOpen, onClose }) {
   const platforms = listingPlatforms(draft);
   const conflict = crossPostConflict(draft);
-  const missing = PLATFORM_KEYS.filter((k) => !platforms.some((p) => p.key === k));
+  const missing = publishablePlatforms(user, draft).map((p) => p.key).filter((k) => !platforms.some((p) => p.key === k));
 
   return (
     <Sheet
@@ -93,9 +96,16 @@ export function StatusSheet({ draft, priceType, refreshing, settingStatus, openi
                   <Repeat size={15} /> {active ? 'Neu einstellen' : 'Nochmal einstellen'}
                 </button>
               </div>
+              {p.key === 'ebay' && p.status === 'geloescht' && (
+                <div className="listing-card-more">
+                  <button className="sheet-text-btn small" disabled={settingStatus} onClick={() => onMarkSold(p.key)}>
+                    <CircleCheck size={14} /> Als verkauft markieren
+                  </button>
+                </div>
+              )}
               {active && !isConflict && (
                 <div className="listing-card-more">
-                  {p.key === 'kleinanzeigen' && (
+                  {MANUAL_SOLD.has(p.key) && (
                     <button className="sheet-text-btn small" disabled={settingStatus} onClick={() => onMarkSold(p.key)}>
                       <CircleCheck size={14} /> Als verkauft markieren
                     </button>
@@ -123,9 +133,9 @@ export function StatusSheet({ draft, priceType, refreshing, settingStatus, openi
 }
 
 // "Einstellen auf": the platforms this draft isn't listed on yet.
-export function PublishSheet({ draft, onPublish, onClose }) {
+export function PublishSheet({ draft, user, onPublish, onClose }) {
   const listed = listingPlatforms(draft).map((p) => p.key);
-  const keys = PLATFORM_KEYS.filter((k) => !listed.includes(k));
+  const keys = publishablePlatforms(user, draft).map((p) => p.key).filter((k) => !listed.includes(k));
   return (
     <Sheet title="Einstellen auf" onClose={onClose}>
       <div className="publish-rows">

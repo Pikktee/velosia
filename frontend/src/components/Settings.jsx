@@ -166,6 +166,7 @@ export default function Settings({ user, drafts = [], onLogout, onUpdateUser, on
   const [defaultShipping, setDefaultShipping] = useState('');
   const [autoSubmit, setAutoSubmit] = useState(false);
   const [priceType, setPriceType] = useState('FIXED');
+  const [ebayEnabled, setEbayEnabled] = useState(false);
 
   // Synchronize local state when user prop changes
   useEffect(() => {
@@ -185,6 +186,7 @@ export default function Settings({ user, drafts = [], onLogout, onUpdateUser, on
       setDefaultShipping(user.default_shipping || '');
       setAutoSubmit(user.auto_submit || false);
       setPriceType(user.default_price_type || 'FIXED');
+      setEbayEnabled(!!user.ebay_enabled);
     }
   }, [user]);
 
@@ -221,7 +223,8 @@ export default function Settings({ user, drafts = [], onLogout, onUpdateUser, on
         default_city: '', // Ort ist überflüssig, PLZ reicht
         default_shipping: defaultShipping,
         auto_submit: autoSubmit,
-        default_price_type: priceType
+        default_price_type: priceType,
+        ebay_enabled: ebayEnabled,
       });
       
       setSuccess(true);
@@ -256,10 +259,11 @@ export default function Settings({ user, drafts = [], onLogout, onUpdateUser, on
       defaultZip !== (user.default_zip || '') ||
       defaultShipping !== (user.default_shipping || '') ||
       autoSubmit !== (user.auto_submit || false) ||
-      priceType !== (user.default_price_type || 'FIXED');
+      priceType !== (user.default_price_type || 'FIXED') ||
+      ebayEnabled !== !!user.ebay_enabled;
     
     setHasChanges(hasDiff);
-  }, [aiTone, aiIntro, aiCustomTone, aiCustomFooter, pricingOffset, defaultZip, defaultShipping, autoSubmit, priceType, user]);
+  }, [aiTone, aiIntro, aiCustomTone, aiCustomFooter, pricingOffset, defaultZip, defaultShipping, autoSubmit, priceType, ebayEnabled, user]);
 
   // Debounced auto-save effect
   useEffect(() => {
@@ -273,11 +277,11 @@ export default function Settings({ user, drafts = [], onLogout, onUpdateUser, on
     setSaving(true);
     const delayDebounceFn = setTimeout(saveSettings, 1000); // save 1 second after last change
     return () => clearTimeout(delayDebounceFn);
-  }, [aiTone, aiIntro, aiCustomTone, aiCustomFooter, pricingOffset, defaultZip, defaultShipping, autoSubmit, priceType, hasChanges]);
+  }, [aiTone, aiIntro, aiCustomTone, aiCustomFooter, pricingOffset, defaultZip, defaultShipping, autoSubmit, priceType, ebayEnabled, hasChanges]);
 
   // Latest settings values, reachable from the unmount cleanup below.
   const latestRef = useRef({});
-  latestRef.current = { aiTone, aiIntro, aiCustomTone, aiCustomFooter, pricingOffset, defaultZip, defaultShipping, autoSubmit, priceType, hasChanges };
+  latestRef.current = { aiTone, aiIntro, aiCustomTone, aiCustomFooter, pricingOffset, defaultZip, defaultShipping, autoSubmit, priceType, ebayEnabled, hasChanges };
 
   // Flush a still-pending debounced save on unmount — e.g. the user leaves Settings
   // within the 1s debounce window, which clears the timer and loses the last change.
@@ -297,6 +301,7 @@ export default function Settings({ user, drafts = [], onLogout, onUpdateUser, on
           default_shipping: l.defaultShipping,
           auto_submit: l.autoSubmit,
           default_price_type: l.priceType,
+          ebay_enabled: l.ebayEnabled,
         }).catch(() => {});
       }
     };
@@ -532,7 +537,7 @@ export default function Settings({ user, drafts = [], onLogout, onUpdateUser, on
                     Preisart
                     <span className="tooltip-container">
                       <HelpCircle size={14} />
-                      <span className="tooltip-text">Vorgabe für Kleinanzeigen, pro Angebot änderbar. Vinted kennt keine Preisart.</span>
+                      <span className="tooltip-text">Vorgabe für Kleinanzeigen und eBay, pro Angebot änderbar. Vinted kennt keine Preisart.</span>
                     </span>
                   </label>
                   <div className="segmented-control" role="radiogroup" aria-label="Preisart">
@@ -598,6 +603,44 @@ export default function Settings({ user, drafts = [], onLogout, onUpdateUser, on
                     }}>
                       <span style={{
                         position: 'absolute', top: '3px', left: autoSubmit ? '21px' : '3px',
+                        width: '20px', height: '20px', borderRadius: '50%', background: '#fff',
+                        transition: 'all 0.2s ease', boxShadow: '0 1px 3px rgba(0,0,0,0.3)'
+                      }} />
+                    </span>
+                  </button>
+                </div>
+
+                <div className="form-group" style={{ marginBottom: 0 }}>
+                  <label style={{ display: 'flex', alignItems: 'center' }}>
+                    eBay
+                    <span className="tooltip-container">
+                      <HelpCircle size={14} />
+                      <span className="tooltip-text">Bietet eBay beim Einstellen an. Abschicken tippst du dort immer selbst.</span>
+                    </span>
+                  </label>
+                  <button
+                    type="button"
+                    role="switch"
+                    aria-checked={ebayEnabled}
+                    onClick={() => setEbayEnabled(!ebayEnabled)}
+                    style={{
+                      display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                      gap: '0.75rem', width: '100%', padding: '0.75rem 0.9rem',
+                      background: ebayEnabled ? 'var(--primary-glow)' : 'rgba(255,255,255,0.03)',
+                      border: `1px solid ${ebayEnabled ? 'var(--primary)' : 'var(--glass-border)'}`,
+                      borderRadius: '10px', cursor: 'pointer', transition: 'all 0.2s ease'
+                    }}
+                  >
+                    <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', textAlign: 'left', lineHeight: 1.3 }}>
+                      {ebayEnabled ? 'Beim Einstellen dabei' : 'Aus'}
+                    </span>
+                    <span style={{
+                      flexShrink: 0, width: '44px', height: '26px', borderRadius: '99px',
+                      background: ebayEnabled ? 'var(--primary)' : 'rgba(255,255,255,0.15)',
+                      position: 'relative', transition: 'all 0.2s ease'
+                    }}>
+                      <span style={{
+                        position: 'absolute', top: '3px', left: ebayEnabled ? '21px' : '3px',
                         width: '20px', height: '20px', borderRadius: '50%', background: '#fff',
                         transition: 'all 0.2s ease', boxShadow: '0 1px 3px rgba(0,0,0,0.3)'
                       }} />

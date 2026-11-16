@@ -293,7 +293,7 @@ export function DatenschutzContent() {
           zweck="Angebote erstellen, speichern und auf die Plattformen übertragen."
           grundlage="Art. 6 Abs. 1 lit. b DSGVO."
           dauer="Bis du das Foto, das Angebot oder dein Konto löschst."
-          empfaenger="Railway (Hosting); Google für die KI-Analyse (Abschnitt 5); Vinted bzw. Kleinanzeigen, wenn du dort inserierst (Abschnitt 7)."
+          empfaenger="Railway (Hosting); Google für die KI-Analyse (Abschnitt 5); Vinted, Kleinanzeigen bzw. eBay, wenn du dort inserierst (Abschnitt 7)."
         />
       </section>
 
@@ -319,6 +319,7 @@ export function DatenschutzContent() {
             Telefonnummern, E-Mail-Adressen und Links entfernen wir vorher,
           </li>
           <li>für die Wahl der Vinted-Kategorie den ermittelten Suchbegriff sowie Titel und Beschreibung des Entwurfs,</li>
+          <li>für die eBay-Artikelmerkmale (Abschnitt 7) Titel, Zustand, Merkmale und Beschreibung des Entwurfs sowie die Merkmalslisten der eBay-Kategorie,</li>
           <li>im Turbo-Modus die Fotos mehrerer Artikel, damit die KI sie den einzelnen Angeboten zuordnet,</li>
           <li>beim Neu-Erzeugen von Titel oder Beschreibung erneut die Fotos und deine Stil-Angaben.</li>
         </ul>
@@ -367,19 +368,27 @@ export function DatenschutzContent() {
       </section>
 
       <section style={section}>
-        <h3 style={h3}>7. Inserieren auf Vinted und Kleinanzeigen</h3>
+        <h3 style={h3}>7. Inserieren auf Vinted, Kleinanzeigen und eBay</h3>
         <h4 style={h4}>Ausfüllen der Formulare</h4>
         <p style={p}>
-          In der Android-App öffnet Velosia die Seiten von Vinted und Kleinanzeigen in einem
+          In der Android-App öffnet Velosia die Seiten von Vinted, Kleinanzeigen und eBay in einem
           eingebetteten Browser; am Computer übernimmt das die Browser-Erweiterung. Bei der
-          Plattform meldest du dich dort selbst an; Velosia liest deine Zugangsdaten zu Vinted oder
-          Kleinanzeigen nicht aus und speichert sie nicht. Ein Skript von Velosia (die
+          Plattform meldest du dich dort selbst an; Velosia liest deine Zugangsdaten zu den
+          Plattformen nicht aus und speichert sie nicht. Ein Skript von Velosia (die
           „Autofill-Engine“) trägt dann Titel, Beschreibung, Preis, Kategorie, Merkmale,
           Postleitzahl und Fotos deines Angebots in das Formular der Plattform ein. Ab dem Eintragen
           verarbeitet die Plattform diese Daten in eigener Verantwortung; es gelten ihre
           Datenschutzhinweise. Veröffentlicht wird erst, wenn du selbst auf den
           Veröffentlichen-Button der Plattform tippst – außer du hast „Automatisch veröffentlichen“
-          eingeschaltet.
+          eingeschaltet (gilt nicht für eBay, dort tippst du immer selbst).
+        </p>
+        <h4 style={h4}>eBay</h4>
+        <p style={p}>
+          eBay ist ausgeschaltet, bis du es in den Einstellungen einschaltest. Stellst du ein Angebot
+          auf eBay ein, sendet unser Server vorher dessen Titel an die offizielle Schnittstelle von
+          eBay, um eBays Kategorie und die dort verlangten Artikelmerkmale zu erfahren; die KI
+          (Abschnitt 5) wählt daraus passende Werte. Kategorie und Merkmale speichern wir beim
+          Angebot.
         </p>
         <h4 style={h4}>Erfassen deiner Inserate</h4>
         <p style={p}>
@@ -392,16 +401,17 @@ export function DatenschutzContent() {
         <h4 style={h4}>Status deiner Inserate</h4>
         <p style={p}>
           Damit du siehst, ob ein Inserat noch online, reserviert, verkauft oder gelöscht ist, ruft
-          unser Server die öffentliche Seite deines Inserats ab – automatisch etwa alle 6 Stunden und
-          wenn du „Status aktualisieren“ tippst. Der Abruf erfolgt ohne Anmeldung von unserem Server
-          aus; verkaufte oder gelöschte Inserate fragen wir nicht mehr ab. Bei Kleinanzeigen kannst
-          du „verkauft“ selbst setzen, weil die Plattform das nicht öffentlich anzeigt.
+          unser Server die öffentliche Seite deines Inserats ab – bei eBay über dessen offizielle
+          Schnittstelle mit der Inseratsnummer –, automatisch etwa alle 6 Stunden und wenn du „Status
+          aktualisieren“ tippst. Der Abruf erfolgt ohne Anmeldung von unserem Server aus; verkaufte
+          oder gelöschte Inserate fragen wir nicht mehr ab. Bei Kleinanzeigen und eBay kannst du
+          „verkauft“ selbst setzen, weil die Plattformen das nicht öffentlich unterscheiden.
         </p>
         <Steckbrief
           zweck="Angebote auf den Plattformen einstellen und ihren Status anzeigen."
           grundlage="Art. 6 Abs. 1 lit. b DSGVO."
           dauer="Inserats-Link und Status zusammen mit dem Angebot, bis du es oder dein Konto löschst."
-          empfaenger="Vinted bzw. Kleinanzeigen (die Angebotsdaten, die du dort einstellst; beim Status-Abruf nur die Anfrage nach der Seite deines Inserats)."
+          empfaenger="Vinted, Kleinanzeigen bzw. eBay (die Angebotsdaten, die du dort einstellst; beim Status-Abruf nur die Anfrage nach deinem Inserat; bei eBay vorab der Titel für die Kategorie)."
         />
         <h4 style={h4}>Funktions-Telemetrie</h4>
         <p style={p}>
@@ -411,7 +421,7 @@ export function DatenschutzContent() {
           „gefunden bzw. gesetzt: ja oder nein“ sowie die Anzahl der Fotos und Merkmale. Inhalte
           deines Angebots sind nicht enthalten. Wir speichern die Meldung zusammen mit deiner
           Nutzer-ID – sie ist also <strong>pseudonym, nicht anonym</strong>. Daran erkennen wir
-          automatisch, wenn Vinted oder Kleinanzeigen ihr Formular geändert haben, und erhalten dann
+          automatisch, wenn eine Plattform ihr Formular geändert hat, und erhalten dann
           eine Warn-E-Mail. Diese enthält nur Plattform, Feldname, Fehlerquote und Engine-Versionen.
           Jede ausgelöste Warnung vermerken wir intern ohne personenbezogene Daten und löschen diesen
           Vermerk nach 90 Tagen.
@@ -537,11 +547,11 @@ export function DatenschutzContent() {
             freigibt – eine Berechtigung für deine Fotos oder Dateien hat die App nicht.
           </li>
           <li>
-            <strong>Eingebetteter Browser:</strong> Deine Anmeldung bei Vinted und Kleinanzeigen
+            <strong>Eingebetteter Browser:</strong> Deine Anmeldung bei Vinted, Kleinanzeigen und eBay
             (deren Cookies) bleibt in der App gespeichert, bis du dich dort abmeldest oder die
             App-Daten löschst. Velosia liest diese Cookies nicht. Andere Seiten öffnen sich in deinem
             Standard-Browser; nur Anmelde-, Sicherheitsabfrage- (Captcha) und Zahlungsseiten, die
-            Vinted oder Kleinanzeigen einbinden, bleiben in der App. Die App-Daten sind von
+            Vinted, Kleinanzeigen oder eBay einbinden, bleiben in der App. Die App-Daten sind von
             Android-Sicherungen und von der Übertragung auf ein neues Gerät ausgeschlossen.
           </li>
           <li>
@@ -567,8 +577,8 @@ export function DatenschutzContent() {
         <ul style={ul}>
           <li>
             <strong>Berechtigungen:</strong> Speicher („storage“) und Zugriff nur auf
-            velosia.henrikheil.net, api.velosia.henrikheil.net, vinted.de, vinted.fr und
-            kleinanzeigen.de (dazu localhost für die Entwicklung).
+            velosia.henrikheil.net, api.velosia.henrikheil.net, vinted.de, vinted.fr,
+            kleinanzeigen.de und ebay.de (dazu localhost für die Entwicklung).
           </li>
           <li>
             <strong>Gespeichert</strong> im Speicher der Erweiterung (chrome.storage.local):
@@ -627,8 +637,8 @@ export function DatenschutzContent() {
           </li>
           <li><strong>E-Mail-Dienst</strong> für Benachrichtigungen (Abschnitt 13).</li>
           <li>
-            <strong>Vinted und Kleinanzeigen</strong> – erhalten deine Angebotsdaten, wenn du dort
-            inserierst, und verarbeiten sie in eigener Verantwortung (Abschnitt 7).
+            <strong>Vinted, Kleinanzeigen und eBay</strong> – erhalten deine Angebotsdaten, wenn du
+            dort inserierst, und verarbeiten sie in eigener Verantwortung (Abschnitt 7).
           </li>
         </ul>
         <p style={p}>
@@ -731,8 +741,8 @@ export function NutzungsbedingungenContent() {
         <p style={p}>
           Diese Bedingungen gelten für die Nutzung von <strong>Velosia</strong> – der Web-App, der
           Android-App und der Browser-Erweiterung. Anbieter ist Henrik Heil (Anschrift im
-          Impressum). Velosia ist kostenlos. Velosia ist kein Angebot von Vinted oder Kleinanzeigen
-          und mit diesen Unternehmen nicht verbunden.
+          Impressum). Velosia ist kostenlos. Velosia ist kein Angebot von Vinted, Kleinanzeigen
+          oder eBay und mit diesen Unternehmen nicht verbunden.
         </p>
       </section>
 
@@ -741,7 +751,7 @@ export function NutzungsbedingungenContent() {
         <p style={p}>
           Velosia erzeugt aus deinen Fotos mithilfe einer KI Vorschläge für Titel, Beschreibung,
           Kategorie, Merkmale und Preis eines Second-Hand-Angebots und füllt damit die
-          Inserierformulare von Vinted und Kleinanzeigen für dich aus. Velosia befindet sich in der
+          Inserierformulare von Vinted, Kleinanzeigen und eBay für dich aus. Velosia befindet sich in der
           Testphase. Funktionen können sich ändern oder zeitweise nicht verfügbar sein; einen
           Anspruch auf eine bestimmte Verfügbarkeit gibt es nicht. Die KI-Analyse ist je Konto auf
           ein Tageskontingent an Bildern begrenzt.
@@ -795,9 +805,9 @@ export function NutzungsbedingungenContent() {
       </section>
 
       <section style={section}>
-        <h3 style={h3}>6. Vinted und Kleinanzeigen</h3>
+        <h3 style={h3}>6. Vinted, Kleinanzeigen und eBay</h3>
         <p style={p}>
-          Du inserierst mit deinem eigenen Konto bei Vinted bzw. Kleinanzeigen. Dort gelten
+          Du inserierst mit deinem eigenen Konto bei Vinted, Kleinanzeigen bzw. eBay. Dort gelten
           zusätzlich deren Nutzungsbedingungen und Regeln, zum Beispiel zu verbotenen Artikeln, zur
           richtigen Kategorie oder zu Angaben gewerblicher Verkäufer. Velosia füllt die Formulare
           nur für dich aus; ob ein Inserat diesen Regeln entspricht, verantwortest du. Ob und wie

@@ -780,6 +780,7 @@ export default function App() {
           {view === 'detail' && selectedDraft && (
             <DraftDetail
               draft={selectedDraft}
+              user={user}
               onBack={() => {
                 setView('list');
                 setSelectedDraft(null);
