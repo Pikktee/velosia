@@ -43,7 +43,7 @@
   // and in the extension it is a persistent content script — never redefine.
   if (window.__velosia && window.__velosia.__loaded) return;
 
-  var VERSION = "2.8.3";
+  var VERSION = "2.8.4";
   var KA_TITLE_MAX = 65;
 
   // Cut at the last word boundary within `max`; hard cut if that loses too much.
@@ -208,6 +208,7 @@
       return "form";
     }
     if (platform === "ebay") {
+      if (p.indexOf("/sh/lst/drafts") === 0) return "drafts";
       if (p.indexOf("/sl/prelist/identify") === 0) return "identify";
       if (p.indexOf("/sl/prelist") === 0 || p.indexOf("/sl/sell") === 0) return "prelist";
       // /lstng also serves "Angebot überarbeiten" / "Ähnlichen Artikel verkaufen"
@@ -2177,6 +2178,35 @@
     return { condition: true, continued: false };
   }
 
+  // Photos already on the eBay form: its counter reads "4/25" or
+  // "4 von 25 Fotos oder Videos wurden hochgeladen".
+  function ebayPhotoCount() {
+    var m = /(\d+)\s*von\s*25\s*Fotos/.exec(document.body ? document.body.innerText : "") ||
+            /(^|\n)\s*(\d+)\/25\s*(\n|$)/.exec(document.body ? document.body.innerText : "");
+    if (!m) return 0;
+    var n = parseInt(m[1] && /^\d+$/.test(m[1]) ? m[1] : m[2], 10);
+    return isNaN(n) ? 0 : n;
+  }
+
+  // Phase "drafts": instead of the form, eBay sometimes shows "Entwürfe
+  // verwalten" (seen once in four runs on the phone, with drafts present).
+  // Continue the draft of this item — the newest row with our title — so the
+  // form opens and the engine fills it there. Nothing else is touched here.
+  async function ebayDrafts(draft) {
+    var want = norm(clampTitle(draft.title || "", EBAY_TITLE_MAX));
+    if (!want) return false;
+    for (var t = 0; t < 16; t++) {
+      var rows = document.querySelectorAll("tr");
+      for (var i = 0; i < rows.length; i++) {
+        if (norm(rows[i].innerText || rows[i].textContent || "").indexOf(want) === -1) continue;
+        var link = rows[i].querySelector("a[href*='draft_id'], a[href*='draftId']");
+        if (link) { link.click(); return true; }
+      }
+      await sleep(500);
+    }
+    return false;
+  }
+
   // The prepared item specifics: {values: {name: [values]}, required: [names]}.
   function ebayPreparedAspects(draft) {
     var raw = draft && draft.ebay_aspects;
@@ -2862,9 +2892,16 @@
     var photos = 0;
     // Kleinanzeigen's new react-dropzone uploader also accepts a 'drop' fallback.
     var allowDrop = platform === "kleinanzeigen";
+    // eBay: a draft continued from "Entwürfe verwalten" may already hold the
+    // photos of an earlier run — uploading again would double them.
+    var existingPhotos = platform === "ebay" ? ebayPhotoCount() : 0;
+    if (existingPhotos > 0) {
+      photos = existingPhotos;
+    } else {
     // 1) Android bridge (CORS-immune: native shell supplies the photos as data URLs).
     var bridged = await uploadPhotosFromBridge(allowDrop);
     if (bridged >= 0) photos = bridged;
+    }
     // 2) Browser fetch + DataTransfer (extension, or Android if the bridge is absent).
     if (photos === 0) {
       var urls = resolveImageUrls(draft, options.backendUrl);
@@ -3653,12 +3690,16 @@
 
     // eBay before the form: title on the prelist page, then (wide layout) skip
     // the catalog product and pick the condition. Each step navigates on.
-    if (platform === "ebay" && (phase === "prelist" || phase === "identify")) {
-      if (showUi) { ensureBackdrop(); setBackdrop(phase === "prelist" ? "Artikel wird angelegt …" : "Zustand wird gewählt …"); }
+    if (platform === "ebay" && (phase === "prelist" || phase === "identify" || phase === "drafts")) {
+      if (showUi) {
+        ensureBackdrop();
+        setBackdrop(phase === "prelist" ? "Artikel wird angelegt …" : phase === "drafts" ? "Entwurf wird geöffnet …" : "Zustand wird gewählt …");
+      }
       var resE = { platform: platform, phase: phase, filled: [], manual: [], photos: 0, submitted: false };
       var moved = false;
       try {
         if (phase === "prelist") moved = await ebayPrelist(draft);
+        else if (phase === "drafts") moved = await ebayDrafts(draft);
         else {
           var idr = await ebayIdentify(draft);
           moved = idr.continued;

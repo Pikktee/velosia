@@ -164,7 +164,9 @@ class MainActivity : AppCompatActivity() {
 
     // Which listing-form page (if any) a URL is. Host-exact + path-prefix match.
     // eBay (V2.8): title page -> (wide layout) catalog/condition page -> form.
-    private enum class FormPage { VINTED_FORM, KA_CATEGORY, KA_FORM, EBAY_PRELIST, EBAY_IDENTIFY, EBAY_FORM, NONE }
+    // EBAY_DRAFTS: "Entwürfe verwalten", which eBay sometimes shows instead of the
+    // form — the engine then opens the draft of this item.
+    private enum class FormPage { VINTED_FORM, KA_CATEGORY, KA_FORM, EBAY_PRELIST, EBAY_IDENTIFY, EBAY_DRAFTS, EBAY_FORM, NONE }
 
     private fun formPageOf(url: String?): FormPage {
         val uri = parseUri(url) ?: return FormPage.NONE
@@ -176,6 +178,7 @@ class MainActivity : AppCompatActivity() {
             h in kleinanzeigenHosts && path == "/p-anzeige-aufgeben.html" -> FormPage.KA_CATEGORY
             h in kleinanzeigenHosts && path.startsWith("/p-anzeige-aufgeben-schritt2") -> FormPage.KA_FORM
             h in ebayHosts && path.startsWith("/sl/prelist/identify") -> FormPage.EBAY_IDENTIFY
+            h in ebayHosts && path.startsWith("/sh/lst/drafts") -> FormPage.EBAY_DRAFTS
             h in ebayHosts && (path.startsWith("/sl/prelist") || path.startsWith("/sl/sell")) -> FormPage.EBAY_PRELIST
             // /lstng also serves "Angebot überarbeiten" / "Ähnlichen Artikel verkaufen"
             // (mode=ReviseItem…, itemId=…): only a new listing is a Velosia target.
@@ -1078,7 +1081,8 @@ class MainActivity : AppCompatActivity() {
     private fun engineWillRun(page: FormPage): Boolean = when (page) {
         FormPage.VINTED_FORM, FormPage.KA_FORM, FormPage.EBAY_FORM -> !hasAutoFilled
         FormPage.KA_CATEGORY -> !hasAutoCategory
-        FormPage.EBAY_PRELIST, FormPage.EBAY_IDENTIFY -> activePlatform == "ebay" && page !in ebayStepsDone
+        FormPage.EBAY_PRELIST, FormPage.EBAY_IDENTIFY, FormPage.EBAY_DRAFTS ->
+            activePlatform == "ebay" && page !in ebayStepsDone
         FormPage.NONE -> false
     }
 
@@ -1109,7 +1113,7 @@ class MainActivity : AppCompatActivity() {
             webView.postDelayed({ injectAutofill(autoSubmit = false) }, 600)
         }
         // eBay's title and condition pages: one run each, the engine moves on itself.
-        if ((page == FormPage.EBAY_PRELIST || page == FormPage.EBAY_IDENTIFY) &&
+        if ((page == FormPage.EBAY_PRELIST || page == FormPage.EBAY_IDENTIFY || page == FormPage.EBAY_DRAFTS) &&
             activePlatform == "ebay" && page !in ebayStepsDone) {
             ebayStepsDone.add(page)
             webView.postDelayed({ injectAutofill(autoSubmit = false) }, 600)
