@@ -43,7 +43,7 @@
   // and in the extension it is a persistent content script — never redefine.
   if (window.__velosia && window.__velosia.__loaded) return;
 
-  var VERSION = "2.8.1";
+  var VERSION = "2.8.2";
   var KA_TITLE_MAX = 65;
 
   // Cut at the last word boundary within `max`; hard cut if that loses too much.
@@ -2157,8 +2157,23 @@
     var condOk = await ebayPickPrelistCondition(draft);
     if (!condOk) return { condition: false, continued: false };
     await sleep(400);
-    var go = ebayContinueButton();
-    if (go) { go.click(); return { condition: true, continued: true }; }
+    // On the mobile page the first click only switches the view
+    // (view=sellnode-condition, live 2026-11); click again while the page stays.
+    var startPath = window.location.pathname;
+    var clicked = false;
+    for (var k = 0; k < 3; k++) {
+      var go = ebayContinueButton();
+      if (!go) break;
+      go.click();
+      clicked = true;
+      for (var w = 0; w < 10; w++) {
+        await sleep(500);
+        if (window.location.pathname !== startPath || !ebayContinueButton()) {
+          return { condition: true, continued: true };
+        }
+      }
+    }
+    // Still here: drop the backdrop (caller) so the user can go on by hand.
     return { condition: true, continued: false };
   }
 
