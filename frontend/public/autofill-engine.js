@@ -43,7 +43,7 @@
   // and in the extension it is a persistent content script — never redefine.
   if (window.__velosia && window.__velosia.__loaded) return;
 
-  var VERSION = "2.8.0";
+  var VERSION = "2.8.1";
   var KA_TITLE_MAX = 65;
 
   // Cut at the last word boundary within `max`; hard cut if that loses too much.
@@ -2039,9 +2039,13 @@
   }
 
   // First line of a control's text, whitespace collapsed, lower case.
+  // Icon-only buttons (the mobile title page's search button) carry their name
+  // in aria-label only.
   function ebayLabelOf(el) {
     var t = String((el && (el.innerText || el.textContent)) || "").split("\n")[0];
-    return t.replace(/\s+/g, " ").trim().toLowerCase();
+    t = t.replace(/\s+/g, " ").trim();
+    if (!t && el && el.getAttribute) t = String(el.getAttribute("aria-label") || "").replace(/\s+/g, " ").trim();
+    return t.toLowerCase();
   }
 
   // Exact label, or the label plus eBay's bracketed hint ("Neu: Sonstige (siehe
