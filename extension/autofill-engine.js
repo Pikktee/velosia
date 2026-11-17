@@ -43,7 +43,7 @@
   // and in the extension it is a persistent content script — never redefine.
   if (window.__velosia && window.__velosia.__loaded) return;
 
-  var VERSION = "2.8.14";
+  var VERSION = "2.8.16";
   var KA_TITLE_MAX = 65;
 
   // Cut at the last word boundary within `max`; hard cut if that loses too much.
@@ -1814,6 +1814,8 @@
     if (!picked) {
       vintedDiagPicker(logName);
       console.log("Velosia Vinted: " + logName + "-Option (" + candidates.join("/") + ") nicht gefunden");
+      vintedClosePicker(fieldLabel);
+      await sleep(300);
       return false;
     }
     var rowText = norm(picked.row.textContent || "").slice(0, 24);
@@ -1870,6 +1872,40 @@
           inp.closest("[role='dialog'], [aria-modal='true']")) return inp;
     }
     return null;
+  }
+
+  // Colours: the AI often writes a pair ("Creme/Weiß", "Schwarz & Rot"), but Vinted
+  // and Kleinanzeigen list single colours only. Try the whole value first, then each
+  // part in order (the first named colour is the main one).
+  function colorCandidates(v) {
+    var raw = String(v || "").trim();
+    if (!raw) return [];
+    var out = [raw];
+    raw.split(/\s*(?:\/|,|&|\+|\bund\b|\band\b)\s*/i).forEach(function (part) {
+      part = part.trim().replace(/weiss/i, "Weiß");
+      if (!part) return;
+      part = part.charAt(0).toUpperCase() + part.slice(1);
+      if (out.indexOf(part) === -1) out.push(part);
+    });
+    return out;
+  }
+
+  // Close an option sheet we opened but could not use, so it does not stay over the
+  // form (the user would have to find its X first). Close button of THIS sheet, else Escape.
+  function vintedClosePicker(fieldLabel) {
+    var sheet = vintedOpenPickerFor(fieldLabel);
+    if (!sheet) return;
+    var btns = sheet.querySelectorAll("button, [role='button']");
+    for (var i = 0; i < btns.length; i++) {
+      var b = btns[i];
+      if (!isInteractable(b)) continue;
+      var lbl = norm((b.getAttribute("aria-label") || "") + " " + (b.getAttribute("data-testid") || ""));
+      if (lbl.indexOf("schließ") !== -1 || lbl.indexOf("close") !== -1) {
+        try { vintedPress(b); } catch (e) {}
+        return;
+      }
+    }
+    try { document.body.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true })); } catch (e) {}
   }
 
   // Computer specs (Desktop-Computer / Laptops). Vinted spells capacities "256 GB",
@@ -3200,7 +3236,7 @@
       }
       var kaColor = attrValue(draft, "farbe");
       if (kaColor && !alreadyFilled("farbe")) {
-        var kaColorOk = await trySel("Farbe", [kaColor], false);
+        var kaColorOk = await trySel("Farbe", colorCandidates(kaColor), false);
         fields.color = kaColorOk;
         if (kaColorOk) filled.push("Farbe");
       }
@@ -3355,7 +3391,7 @@
       if (colorVal) {
         try { colorOk = await selectVintedDropdownValue("farbe",
           ["[data-testid='color-select-dropdown-input']", "[data-testid='color-select-dropdown-chevron']"],
-          [colorVal], "Farbe"); } catch (e) {}
+          colorCandidates(colorVal), "Farbe"); } catch (e) {}
       }
       if (materialVal) {
         try { materialOk = await selectVintedDropdownValue("material",
