@@ -43,7 +43,7 @@
   // and in the extension it is a persistent content script — never redefine.
   if (window.__velosia && window.__velosia.__loaded) return;
 
-  var VERSION = "2.8.7";
+  var VERSION = "2.8.9";
   var KA_TITLE_MAX = 65;
 
   // Cut at the last word boundary within `max`; hard cut if that loses too much.
@@ -2346,7 +2346,7 @@
           if (v && values.indexOf(v) === -1) values.push(v);
           if (items[k].getAttribute("role") === "menuitemcheckbox") multi = true;
         }
-        var required = !!(row && String(row.innerText || "").slice(0, 80).indexOf("*") !== -1);
+        var required = !!(row && (!!row.querySelector(".required-field") || String(row.innerText || "").slice(0, 80).indexOf("*") !== -1));
         if (values.length) out.push({ name: name, values: values, multi: multi, required: required });
       } catch (e) {
       } finally {
@@ -3222,7 +3222,7 @@
         var aName = String(allBtns[ab].getAttribute("name") || "").slice("attributes.".length);
         var aVal = ebayAspectValue(allBtns[ab]);
         var row = ebayAspectRow(allBtns[ab]);
-        var starred = !!(row && String(row.innerText || "").slice(0, 80).indexOf("*") !== -1);
+        var starred = !!(row && (!!row.querySelector(".required-field") || String(row.innerText || "").slice(0, 80).indexOf("*") !== -1));
         if (!aVal) {
           if (required.indexOf(aName) !== -1 || starred) openRequired.push(aName);
         } else if (setNames.indexOf(aName) === -1 && titleKey.indexOf(norm(aVal)) === -1) {
