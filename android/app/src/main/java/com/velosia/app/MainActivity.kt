@@ -404,6 +404,7 @@ class MainActivity : AppCompatActivity() {
             override fun doUpdateVisitedHistory(view: WebView, url: String, isReload: Boolean) {
                 super.doUpdateVisitedHistory(view, url, isReload)
                 currentPageUrl = url
+                logPlatformPage("nav", url)
                 // Vinted routes login -> /items/new as an SPA navigation (no document
                 // reload), so onPageFinished never fires for the form after a fresh login
                 // and the autofill wouldn't start until the user reopened. This hook fires
@@ -1108,6 +1109,15 @@ class MainActivity : AppCompatActivity() {
                 null
             )
         }
+    }
+
+    // Diagnostics for a post session (adb logcat -s Velosia): which platform page the
+    // WebView is on — host + path only, never the query (no listing content).
+    private fun logPlatformPage(kind: String, url: String?) {
+        if (activeDraftId < 0) return
+        val uri = parseUri(url) ?: return
+        if (!isPlatformPage(url)) return
+        Log.i("Velosia", "$kind ${uri.host}${uri.path} -> ${formPageOf(url)}")
     }
 
     // Whether maybeTriggerAutofill will still inject the engine on this page.
