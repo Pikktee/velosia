@@ -43,7 +43,7 @@
   // and in the extension it is a persistent content script — never redefine.
   if (window.__velosia && window.__velosia.__loaded) return;
 
-  var VERSION = "2.8.9";
+  var VERSION = "2.8.10";
   var KA_TITLE_MAX = 65;
 
   // Cut at the last word boundary within `max`; hard cut if that loses too much.
@@ -366,6 +366,26 @@
   // same files and verify again. Returns false when nothing landed, so the overlay
   // honestly asks the user to add the photos instead of claiming success.
   async function commitFilesToInput(input, dt, allowDrop) {
+    // eBay: verified against its own counter ("4/25"). Files handed over before
+    // its uploader is wired up are dropped silently (seen on the phone when eBay
+    // jumped straight into an existing draft), so retry on a freshly found input.
+    if (/(^|\.)ebay\.de$/.test(window.location.hostname || "")) {
+      var startCount = ebayPhotoCount();
+      for (var attempt = 0; attempt < 3; attempt++) {
+        var target = attempt === 0 ? input : (findFileInput() || input);
+        try {
+          target.files = dt.files;
+          target.dispatchEvent(new Event("input", { bubbles: true }));
+          target.dispatchEvent(new Event("change", { bubbles: true }));
+        } catch (e) { return false; }
+        // Generous: on a phone several large photos take a while to register.
+        for (var t = 0; t < 24; t++) {
+          await sleep(500);
+          if (ebayPhotoCount() > startCount) return true;
+        }
+      }
+      return false;
+    }
     var section = allowDrop ? photoSection(input) : null;
     var before = allowDrop ? photoPreviewCount(section) : 0;
     try {
@@ -3037,7 +3057,8 @@
       try { descOk = await ebaySetDescription(draft.description); } catch (e) {}
       if (descOk) filled.push("Beschreibung");
       else if (draft.description) manual.push("Beschreibung");
-      ebayDescFound = !!document.querySelector("textarea[name='description']");
+      // The phone layout only mounts the textarea while its editor panel is open.
+      ebayDescFound = descOk || !!document.querySelector("textarea[name='description']");
       descEl = null;  // hidden textarea: skip the generic re-check below
     } else if (fillField(descEl, draft.description)) filled.push("Beschreibung");
     else if (draft.description) manual.push("Beschreibung");
