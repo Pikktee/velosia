@@ -43,7 +43,7 @@
   // and in the extension it is a persistent content script — never redefine.
   if (window.__velosia && window.__velosia.__loaded) return;
 
-  var VERSION = "2.8.6";
+  var VERSION = "2.8.7";
   var KA_TITLE_MAX = 65;
 
   // Cut at the last word boundary within `max`; hard cut if that loses too much.
@@ -2250,8 +2250,18 @@
     return r || (btn && btn.parentElement);
   }
 
+  // Visible text of an eBay list entry or field: without the screen-reader-only
+  // ".clipped" spans eBay appends ("CD-Brenner" + hidden "CD bis Brenner").
+  function ebayVisibleText(el) {
+    if (!el) return "";
+    var c = el.cloneNode(true);
+    var hidden = c.querySelectorAll(".clipped, .clipped--stealth, [aria-hidden='true']");
+    for (var i = 0; i < hidden.length; i++) hidden[i].remove();
+    return String(c.textContent || "").replace(/\s+/g, " ").trim();
+  }
+
   function ebayAspectValue(btn) {
-    return String((btn && (btn.innerText || btn.textContent)) || "").replace(/\s+/g, " ").trim();
+    return ebayVisibleText(btn);
   }
 
   async function ebayToggleAspect(btn, open) {
@@ -2284,7 +2294,7 @@
         var items = row ? row.querySelectorAll("[role^='menuitem']") : [];
         var hit = null;
         for (var i = 0; i < items.length; i++) {
-          if (norm(items[i].innerText || items[i].textContent || "") === want) { hit = items[i]; break; }
+          if (norm(ebayVisibleText(items[i])) === want) { hit = items[i]; break; }
         }
         if (hit) {
           if (hit.getAttribute("aria-checked") !== "true") { hit.click(); await sleep(600); }
@@ -2322,16 +2332,21 @@
       var row = ebayAspectRow(btn);
       try {
         await ebayToggleAspect(btn, true);
-        var items = row ? row.querySelectorAll("[role^='menuitem']") : [];
+        // The list may render a moment after the field opens (slower on phones).
+        var items = [];
+        for (var wait = 0; wait < 8; wait++) {
+          items = row ? row.querySelectorAll("[role^='menuitem']") : [];
+          if (items.length) break;
+          await sleep(250);
+        }
         var values = [];
         var multi = false;
         for (var k = 0; k < items.length && values.length < 400; k++) {
-          var v = String(items[k].innerText || items[k].textContent || "").split("\n")[0].replace(/\s+/g, " ").trim();
+          var v = ebayVisibleText(items[k]);
           if (v && values.indexOf(v) === -1) values.push(v);
           if (items[k].getAttribute("role") === "menuitemcheckbox") multi = true;
         }
-        var label = row && row.querySelector(".fake-link");
-        var required = !!(label && /\*/.test(String((label.parentElement || label).textContent || "")));
+        var required = !!(row && String(row.innerText || "").slice(0, 80).indexOf("*") !== -1);
         if (values.length) out.push({ name: name, values: values, multi: multi, required: required });
       } catch (e) {
       } finally {
@@ -3207,8 +3222,7 @@
         var aName = String(allBtns[ab].getAttribute("name") || "").slice("attributes.".length);
         var aVal = ebayAspectValue(allBtns[ab]);
         var row = ebayAspectRow(allBtns[ab]);
-        var starred = row && /\*/.test(String((row.querySelector(".fake-link") || {}).textContent || "") +
-          String(((row.querySelector(".fake-link") || {}).parentElement || {}).textContent || "").slice(0, 60));
+        var starred = !!(row && String(row.innerText || "").slice(0, 80).indexOf("*") !== -1);
         if (!aVal) {
           if (required.indexOf(aName) !== -1 || starred) openRequired.push(aName);
         } else if (setNames.indexOf(aName) === -1 && titleKey.indexOf(norm(aVal)) === -1) {

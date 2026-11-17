@@ -281,7 +281,8 @@ class DraftRegenerateRequest(BaseModel):
 # phase "category" (KA step 1) or "form"; unknown extra keys are ignored.
 class AutofillEventCreate(BaseModel):
     platform: Optional[Platform] = None
-    phase: Optional[Literal["form", "category"]] = None
+    # "prelist" / "identify" / "drafts": eBay's pages before its listing form (V2.8)
+    phase: Optional[Literal["form", "category", "prelist", "identify", "drafts"]] = None
     engine_version: Optional[str] = Field(None, max_length=20, pattern=r"^[0-9A-Za-z._+-]+$")
     title_found: Optional[bool] = None
     description_found: Optional[bool] = None
