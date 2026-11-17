@@ -43,7 +43,7 @@
   // and in the extension it is a persistent content script — never redefine.
   if (window.__velosia && window.__velosia.__loaded) return;
 
-  var VERSION = "2.8.10";
+  var VERSION = "2.8.11";
   var KA_TITLE_MAX = 65;
 
   // Cut at the last word boundary within `max`; hard cut if that loses too much.
@@ -2083,12 +2083,17 @@
 
   // The first visible button whose own text (first line) matches one of the
   // needles exactly or as a prefix ("Neu: Sonstige (siehe Artikelbeschreibung)").
+  // Buttons of the listing form the engine must never press: they save the
+  // draft and leave the form, show a preview, or publish.
+  var EBAY_FORBIDDEN = ["speichern", "vorschau", "artikel kostenlos einstellen", "artikel einstellen", "angebot einstellen"];
+
   function ebayButton(needles, root) {
     var btns = (root || document).querySelectorAll("button, [role='button'], a[role='button']");
     for (var n = 0; n < needles.length; n++) {
       for (var i = 0; i < btns.length; i++) {
         var b = btns[i];
         if (!ebayVisible(b)) continue;
+        if (EBAY_FORBIDDEN.indexOf(ebayLabelOf(b)) !== -1) continue;
         if (ebayLabelMatches(ebayLabelOf(b), needles[n])) return b;
       }
     }
@@ -2532,7 +2537,15 @@
       var more = ebayButton(["weitere artikelzustände ansehen"], scope);
       if (more) { more.click(); await sleep(800); }
       if (await ebayPickPrelistCondition(draft)) {
-        var ok = ebayButton(["fertig", "übernehmen", "speichern", "weiter", "bestätigen"]);
+        // Confirm only inside an opened condition dialog. NEVER the form's own
+        // buttons: "Speichern" saves the draft and leaves the form (to "Entwürfe
+        // verwalten" / the Seller-Hub page — seen live on the phone, 2026-11).
+        var dlg = null;
+        var dialogs = document.querySelectorAll("[role='dialog'], dialog, .lightbox-dialog, .drawer-dialog");
+        for (var dd = 0; dd < dialogs.length && !dlg; dd++) {
+          if (dialogs[dd].getClientRects().length && dialogs[dd].querySelector("input[type='radio']")) dlg = dialogs[dd];
+        }
+        var ok = dlg ? ebayButton(["fertig", "übernehmen", "bestätigen", "weiter"], dlg) : null;
         if (ok) { ok.click(); await sleep(600); }
         return true;
       }
