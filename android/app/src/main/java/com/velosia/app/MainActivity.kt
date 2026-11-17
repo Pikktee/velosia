@@ -104,6 +104,20 @@ class MainActivity : AppCompatActivity() {
 
     private val okHttpClient = OkHttpClient()
 
+    // For calls that wait on the AI (eBay item specifics): longer read timeout.
+
+    private val slowClient by lazy {
+
+        okHttpClient.newBuilder()
+
+            .readTimeout(45, java.util.concurrent.TimeUnit.SECONDS)
+
+            .callTimeout(48, java.util.concurrent.TimeUnit.SECONDS)
+
+            .build()
+
+    }
+
     // True only on a debuggable (non-Play-release) build. Gates WebView remote
     // inspection and console-log forwarding so neither ships in the released app.
     private val isDebuggable: Boolean
@@ -574,9 +588,17 @@ class MainActivity : AppCompatActivity() {
         @JavascriptInterface
         fun pickEbayAspects(payload: String) {
             runOnUiThread {
+                // Every refusal still answers, so the engine never waits behind its
+                // spinner for a reply that won't come.
+                fun deliverNow(json: String) = webView.evaluateJavascript(
+                    "window.__velosiaEbayAspectsCb && window.__velosiaEbayAspectsCb(${JSONObject.quote(json)});", null
+                )
                 if (formPageOf(webView.url) != FormPage.EBAY_FORM || activeDraftId < 0) return@runOnUiThread
-                if (activePlatform != "ebay" || payload.length > 300_000) return@runOnUiThread
-                val token = authToken ?: return@runOnUiThread
+                val token = authToken
+                if (activePlatform != "ebay" || payload.length > 200_000 || token == null) {
+                    deliverNow("{}")
+                    return@runOnUiThread
+                }
                 val draftId = activeDraftId
                 val request = Request.Builder()
                     .url("$backendUrl/api/drafts/$draftId/ebay-form-aspects")
@@ -585,12 +607,10 @@ class MainActivity : AppCompatActivity() {
                     .build()
                 fun deliver(json: String) = runOnUiThread {
                     if (formPageOf(webView.url) != FormPage.EBAY_FORM || activeDraftId != draftId) return@runOnUiThread
-                    webView.evaluateJavascript(
-                        "window.__velosiaEbayAspectsCb && window.__velosiaEbayAspectsCb(${JSONObject.quote(json)});",
-                        null
-                    )
+                    deliverNow(json)
                 }
-                okHttpClient.newCall(request).enqueue(object : Callback {
+                // The AI pick can take longer than OkHttp's 10-s default read timeout.
+                slowClient.newCall(request).enqueue(object : Callback {
                     override fun onFailure(call: Call, e: IOException) = deliver("{}")
                     override fun onResponse(call: Call, response: Response) {
                         val body = response.use { if (it.isSuccessful) it.body?.string() ?: "{}" else "{}" }
@@ -1112,20 +1132,26 @@ class MainActivity : AppCompatActivity() {
     }
 
     // Diagnostics for a post session (adb logcat -s Velosia): which platform page the
-    // WebView is on — host + path only, never the query (no listing content).
+    // WebView is on — never the query, and no path that carries a listing title.
     private fun logPlatformPage(kind: String, url: String?) {
         if (activeDraftId < 0) return
         val uri = parseUri(url) ?: return
         if (!isPlatformPage(url)) return
-        Log.i("Velosia", "$kind ${uri.host}${uri.path} -> ${formPageOf(url)}")
+        // Path only on eBay's flow pages (no titles there); elsewhere just the host,
+        // since ad URLs carry title slugs (KA /s-anzeige/<titel>/…, Vinted /items/<id>-<titel>).
+        val path = uri.path ?: ""
+        val showPath = (uri.host ?: "") in ebayHosts && !path.startsWith("/itm/")
+        Log.i("Velosia", "$kind ${uri.host}${if (showPath) path else ""} -> ${formPageOf(url)}")
     }
 
     // Whether maybeTriggerAutofill will still inject the engine on this page.
     private fun engineWillRun(page: FormPage): Boolean = when (page) {
         FormPage.VINTED_FORM, FormPage.KA_FORM, FormPage.EBAY_FORM -> !hasAutoFilled
         FormPage.KA_CATEGORY -> !hasAutoCategory
-        FormPage.EBAY_PRELIST, FormPage.EBAY_IDENTIFY, FormPage.EBAY_DRAFTS ->
+        FormPage.EBAY_PRELIST, FormPage.EBAY_IDENTIFY ->
             activePlatform == "ebay" && page !in ebayStepsDone
+        // "Entwürfe verwalten": nothing to do there (engine 2.8.13+).
+        FormPage.EBAY_DRAFTS -> false
         FormPage.NONE -> false
     }
 
@@ -1156,7 +1182,7 @@ class MainActivity : AppCompatActivity() {
             webView.postDelayed({ injectAutofill(autoSubmit = false) }, 600)
         }
         // eBay's title and condition pages: one run each, the engine moves on itself.
-        if ((page == FormPage.EBAY_PRELIST || page == FormPage.EBAY_IDENTIFY || page == FormPage.EBAY_DRAFTS) &&
+        if ((page == FormPage.EBAY_PRELIST || page == FormPage.EBAY_IDENTIFY) &&
             activePlatform == "ebay" && page !in ebayStepsDone) {
             ebayStepsDone.add(page)
             webView.postDelayed({ injectAutofill(autoSubmit = false) }, 600)

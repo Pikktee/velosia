@@ -246,7 +246,7 @@ run_migrations()
 _API_DOCS = os.getenv("ENABLE_API_DOCS", "").lower() in ("1", "true", "yes")
 app = FastAPI(
     title="Velosia API",
-    version="2.8.12",
+    version="2.8.13",
     docs_url="/docs" if _API_DOCS else None,
     redoc_url="/redoc" if _API_DOCS else None,
     openapi_url="/openapi.json" if _API_DOCS else None,
@@ -423,7 +423,7 @@ _APP_ORIGIN_REGEX = (
 )
 _PLATFORM_ORIGIN_REGEX = r"https://(?:[a-z0-9-]+\.)*(?:vinted\.de|vinted\.fr|kleinanzeigen\.de|ebay\.de)"
 _PLATFORM_CORS_PATHS = re.compile(
-    r"^/(?:api/auth/me|api/drafts(?:/\d+)?|api/listings/published"
+    r"^/(?:api/auth/me|api/drafts(?:/\d+)?|api/drafts/\d+/ebay-form-aspects|api/listings/published"
     r"|api/telemetry/(?:autofill|debug)|uploads/[^/]+)$"
 )
 _EXTRA_ORIGINS = [o.strip() for o in os.getenv("CORS_EXTRA_ORIGINS", "").split(",") if o.strip()]

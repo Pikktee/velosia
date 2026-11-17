@@ -43,7 +43,7 @@
   // and in the extension it is a persistent content script — never redefine.
   if (window.__velosia && window.__velosia.__loaded) return;
 
-  var VERSION = "2.8.12";
+  var VERSION = "2.8.13";
   var KA_TITLE_MAX = 65;
 
   // Cut at the last word boundary within `max`; hard cut if that loses too much.
@@ -371,18 +371,28 @@
     // jumped straight into an existing draft), so retry on a freshly found input.
     if (/(^|\.)ebay\.de$/.test(window.location.hostname || "")) {
       var startCount = ebayPhotoCount();
+      var target = input;
       for (var attempt = 0; attempt < 3; attempt++) {
-        var target = attempt === 0 ? input : (findFileInput() || input);
         try {
           target.files = dt.files;
           target.dispatchEvent(new Event("input", { bubbles: true }));
           target.dispatchEvent(new Event("change", { bubbles: true }));
         } catch (e) { return false; }
+        // Without a readable counter there is nothing to verify — hand over once.
+        if (startCount === null) return true;
         // Generous: on a phone several large photos take a while to register.
         for (var t = 0; t < 24; t++) {
           await sleep(500);
-          if (ebayPhotoCount() > startCount) return true;
+          var now = ebayPhotoCount();
+          if (now !== null && now > startCount) return true;
         }
+        // Retry ONLY when eBay replaced its uploader meanwhile (the documented
+        // cause of a silently dropped set). The same input still in place means
+        // the upload may just be slow — sending again would double the photos.
+        var fresh = findFileInput();
+        if (input.isConnected && fresh === input) return true;
+        if (!fresh) return false;
+        target = input = fresh;
       }
       return false;
     }
@@ -2087,13 +2097,20 @@
   // draft and leave the form, show a preview, or publish.
   var EBAY_FORBIDDEN = ["speichern", "vorschau", "artikel kostenlos einstellen", "artikel einstellen", "angebot einstellen"];
 
+  function ebayForbidden(label) {
+    for (var f = 0; f < EBAY_FORBIDDEN.length; f++) {
+      if (label.indexOf(EBAY_FORBIDDEN[f]) !== -1) return true;   // also "Entwurf speichern"
+    }
+    return false;
+  }
+
   function ebayButton(needles, root) {
     var btns = (root || document).querySelectorAll("button, [role='button'], a[role='button']");
     for (var n = 0; n < needles.length; n++) {
       for (var i = 0; i < btns.length; i++) {
         var b = btns[i];
         if (!ebayVisible(b)) continue;
-        if (EBAY_FORBIDDEN.indexOf(ebayLabelOf(b)) !== -1) continue;
+        if (ebayForbidden(ebayLabelOf(b))) continue;
         if (ebayLabelMatches(ebayLabelOf(b), needles[n])) return b;
       }
     }
@@ -2201,17 +2218,17 @@
     // On the mobile page the first click only switches the view
     // (view=sellnode-condition, live 2026-11); click again while the page stays.
     var startPath = window.location.pathname;
-    var clicked = false;
     for (var k = 0; k < 3; k++) {
-      var go = ebayContinueButton();
+      var go = null;
+      for (var g = 0; g < 6 && !go; g++) {
+        go = ebayContinueButton();
+        if (!go) await sleep(400);   // may be re-rendering after a view switch
+      }
       if (!go) break;
       go.click();
-      clicked = true;
       for (var w = 0; w < 10; w++) {
         await sleep(500);
-        if (window.location.pathname !== startPath || !ebayContinueButton()) {
-          return { condition: true, continued: true };
-        }
+        if (window.location.pathname !== startPath) return { condition: true, continued: true };
       }
     }
     // Still here: drop the backdrop (caller) so the user can go on by hand.
@@ -2220,32 +2237,19 @@
 
   // Photos already on the eBay form: its counter reads "4/25" or
   // "4 von 25 Fotos oder Videos wurden hochgeladen".
+  // null when no counter is on the page (unknown — never assume 0 then).
   function ebayPhotoCount() {
-    var m = /(\d+)\s*von\s*25\s*Fotos/.exec(document.body ? document.body.innerText : "") ||
-            /(^|\n)\s*(\d+)\/25\s*(\n|$)/.exec(document.body ? document.body.innerText : "");
-    if (!m) return 0;
-    var n = parseInt(m[1] && /^\d+$/.test(m[1]) ? m[1] : m[2], 10);
-    return isNaN(n) ? 0 : n;
+    var t = document.body ? document.body.innerText : "";
+    var m = /(\d+)\s*von\s*\d+\s*Fotos/.exec(t) || /(?:^|\n)[^\n]{0,12}?(\d+)\s*\/\s*(?:24|25)\s*(?:\n|$)/.exec(t);
+    if (!m) return null;
+    var n = parseInt(m[1], 10);
+    return isNaN(n) ? null : n;
   }
 
-  // Phase "drafts": instead of the form, eBay sometimes shows "Entwürfe
-  // verwalten" (seen once in four runs on the phone, with drafts present).
-  // Continue the draft of this item — the newest row with our title — so the
-  // form opens and the engine fills it there. Nothing else is touched here.
-  async function ebayDrafts(draft) {
-    var want = norm(clampTitle(draft.title || "", EBAY_TITLE_MAX));
-    if (!want) return false;
-    for (var t = 0; t < 16; t++) {
-      var rows = document.querySelectorAll("tr");
-      for (var i = 0; i < rows.length; i++) {
-        if (norm(rows[i].innerText || rows[i].textContent || "").indexOf(want) === -1) continue;
-        var link = rows[i].querySelector("a[href*='draft_id'], a[href*='draftId']");
-        if (link) { link.click(); return true; }
-      }
-      await sleep(500);
-    }
-    return false;
-  }
+  // Phase "drafts" ("Entwürfe verwalten"): nothing is done there any more. The
+  // earlier redirect to it was the engine's own click on "Speichern" (fixed in
+  // 2.8.11); continuing some draft by title could pick another item's draft.
+  async function ebayDrafts() { return false; }
 
   // The prepared item specifics: {values: {name: [values]}, required: [names]}.
   function ebayPreparedAspects(draft) {
@@ -2350,14 +2354,18 @@
   async function ebayReadFormAspects(skipNames) {
     var out = [];
     var btns = document.querySelectorAll("button[name^='attributes.']");
-    for (var i = 0; i < btns.length && out.length < 20; i++) {
+    var deadline = Date.now() + 25000;
+    var opened = 0;
+    for (var i = 0; i < btns.length && out.length < 20 && opened < 30 && Date.now() < deadline; i++) {
       var btn = btns[i];
       var name = String(btn.getAttribute("name") || "").slice("attributes.".length);
       if (!name || skipNames.indexOf(name) !== -1 || ebayAspectValue(btn)) continue;
+      if (!btn.getClientRects().length) continue;   // collapsed "more specifics"
       // Identifiers can't be read off photos and text — never let the AI pick one
       // from a list (it chose the brand as "Herstellernummer" in a live test).
       if (/herstellernummer|mpn|\bean\b|gtin|isbn|upc|seriennummer|modellnummer/i.test(name)) continue;
       var row = ebayAspectRow(btn);
+      opened++;
       try {
         await ebayToggleAspect(btn, true);
         // The list may render a moment after the field opens (slower on phones).
@@ -2371,7 +2379,7 @@
         var multi = false;
         for (var k = 0; k < items.length && values.length < 400; k++) {
           var v = ebayVisibleText(items[k]);
-          if (v && values.indexOf(v) === -1) values.push(v);
+          if (v && v.length <= 65 && values.indexOf(v) === -1) values.push(v);
           if (items[k].getAttribute("role") === "menuitemcheckbox") multi = true;
         }
         var required = !!(row && (!!row.querySelector(".required-field") || String(row.innerText || "").slice(0, 80).indexOf("*") !== -1));
@@ -2388,7 +2396,12 @@
   // native bridge (the page holds no credentials); extension: fetch with its token.
   // Resolves to {name: [values]} or null.
   function ebayRequestAspects(draft, options, aspects) {
+    // Stay well below the backend's request limit (bytes, umlauts count twice).
     var body = JSON.stringify({ aspects: aspects });
+    while (body.length > 100000 && aspects.length) {
+      aspects = aspects.map(function (a) { return Object.assign({}, a, { values: a.values.slice(0, Math.floor(a.values.length / 2)) }); });
+      body = JSON.stringify({ aspects: aspects });
+    }
     var nb = nativeBridge("pickEbayAspects");
     if (nb) {
       return new Promise(function (resolve) {
@@ -2400,7 +2413,7 @@
           catch (e) { resolve(null); }
         };
         try { nb.pickEbayAspects(body); } catch (e) { done = true; resolve(null); return; }
-        setTimeout(function () { if (!done) { done = true; resolve(null); } }, 25000);
+        setTimeout(function () { if (!done) { done = true; resolve(null); } }, 50000);
       });
     }
     if (options && options.backendUrl && options.token && draft && draft.id != null) {
@@ -2455,7 +2468,12 @@
       frame = document.getElementById("se-rte-frame__sidepane");
       try { ed = frame && frame.contentDocument && frame.contentDocument.querySelector("[contenteditable='true']"); } catch (e) { ed = null; }
     }
-    if (!ed) return false;
+    if (!ed) {
+      // Don't leave the full-screen panel over the form.
+      var close = ebayButton(["fertig"]);
+      if (close) { close.click(); await sleep(500); }
+      return false;
+    }
     var d = frame.contentDocument, w = frame.contentWindow;
     try { frame.focus(); w.focus(); } catch (e) {}
     ed.focus();
@@ -3024,7 +3042,17 @@
     var allowDrop = platform === "kleinanzeigen";
     // eBay: a draft continued from "Entwürfe verwalten" may already hold the
     // photos of an earlier run — uploading again would double them.
-    var existingPhotos = platform === "ebay" ? ebayPhotoCount() : 0;
+    var existingPhotos = 0;
+    if (platform === "ebay") {
+      // The photo area of a continued draft renders late: wait for the uploader,
+      // then read the counter (null = not readable -> treat as none).
+      await waitForFileInput();
+      for (var pc = 0; pc < 4; pc++) {
+        var cnt = ebayPhotoCount();
+        if (cnt !== null) { existingPhotos = cnt; break; }
+        await sleep(500);
+      }
+    }
     if (existingPhotos > 0) {
       photos = existingPhotos;
     } else {
@@ -3836,13 +3864,13 @@
 
     // An eBay page that is not part of creating a new listing (revising a live
     // one, selling a similar item): nothing to fill there.
-    if (platform === "ebay" && phase === "other") {
+    if (platform === "ebay" && (phase === "other" || phase === "drafts")) {
       return { platform: platform, phase: phase, filled: [], manual: [], photos: 0, submitted: false };
     }
 
     // eBay before the form: title on the prelist page, then (wide layout) skip
     // the catalog product and pick the condition. Each step navigates on.
-    if (platform === "ebay" && (phase === "prelist" || phase === "identify" || phase === "drafts")) {
+    if (platform === "ebay" && (phase === "prelist" || phase === "identify")) {
       if (showUi) {
         ensureBackdrop();
         setBackdrop(phase === "prelist" ? "Artikel wird angelegt …" : phase === "drafts" ? "Entwurf wird geöffnet …" : "Zustand wird gewählt …");
@@ -3851,7 +3879,6 @@
       var moved = false;
       try {
         if (phase === "prelist") moved = await ebayPrelist(draft);
-        else if (phase === "drafts") moved = await ebayDrafts(draft);
         else {
           var idr = await ebayIdentify(draft);
           moved = idr.continued;
@@ -3860,6 +3887,12 @@
       } catch (e) { moved = false; }
       // If nothing moved on, let the user continue by hand instead of being stuck.
       if (showUi && !moved) removeBackdrop();
+      // Watchdog: a click that "moved" but never navigated must not leave the
+      // spinner up for good (the app runs each of these pages only once).
+      if (showUi && moved) {
+        var hereNow = window.location.href;
+        setTimeout(function () { if (window.location.href === hereNow) removeBackdrop(); }, 15000);
+      }
       return resE;
     }
 
