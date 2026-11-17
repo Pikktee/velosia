@@ -43,7 +43,7 @@
   // and in the extension it is a persistent content script — never redefine.
   if (window.__velosia && window.__velosia.__loaded) return;
 
-  var VERSION = "2.8.16";
+  var VERSION = "2.8.17";
   var KA_TITLE_MAX = 65;
 
   // Cut at the last word boundary within `max`; hard cut if that loses too much.
@@ -2010,7 +2010,18 @@
   // ----------------------------------------------------------------------------
 
   // The brand modal's search input (after the field is opened).
-  function vintedBrandSearchInput() {
+  // Mobile (2026-11): the form's brand field is itself an input with "Marke" in its
+  // placeholder and opens a sheet with its OWN "Marke suchen" box. Typing into the
+  // form field shows no suggestions, so the sheet's box wins; the old document-wide
+  // search (desktop, where the field may be the search box) stays as fallback.
+  function vintedBrandSearchInput(opener) {
+    var sheet = vintedOpenPickerFor("marke");
+    if (sheet) {
+      var own = sheet.querySelectorAll("input[type='text'], input[type='search'], input:not([type])");
+      for (var j = 0; j < own.length; j++) {
+        if (own[j] !== opener && isInteractable(own[j])) return own[j];
+      }
+    }
     var inputs = document.querySelectorAll("input[type='text'], input[type='search'], input:not([type])");
     for (var i = 0; i < inputs.length; i++) {
       var inp = inputs[i];
@@ -2061,7 +2072,7 @@
         if (opener.focus) opener.focus();
       } catch (e) {}
       await sleep(300);
-      search = vintedBrandSearchInput();
+      search = vintedBrandSearchInput(opener);
     }
     if (!search) { console.log("Velosia Vinted: Marken-Suchfeld nicht gefunden — manuell"); return false; }
 
@@ -2074,6 +2085,10 @@
     }
     if (!clicked) {
       console.log("Velosia Vinted: keine EXAKTE Marke '" + brand + "' in Vinteds Vorschlägen — bleibt LEER (keine Halluzination)");
+      // Leave nothing behind: no typed text (it could pass for a brand) and no open sheet.
+      vintedSetSearch(search, "");
+      vintedClosePicker("marke");
+      await sleep(300);
       return false;
     }
     await sleep(250);
