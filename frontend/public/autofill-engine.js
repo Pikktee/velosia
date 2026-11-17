@@ -43,7 +43,7 @@
   // and in the extension it is a persistent content script — never redefine.
   if (window.__velosia && window.__velosia.__loaded) return;
 
-  var VERSION = "2.8.5";
+  var VERSION = "2.8.6";
   var KA_TITLE_MAX = 65;
 
   // Cut at the last word boundary within `max`; hard cut if that loses too much.
@@ -2105,6 +2105,21 @@
             await sleep(400);
             if (radio.checked) return true;
           }
+        }
+      }
+      // Radios whose text sits next to them instead of in a linked <label>
+      // (mobile condition page with only "Neu" / "Gebraucht", live 2026-11).
+      var radios = document.querySelectorAll("input[type='radio']");
+      for (var c2 = 0; c2 < cands.length; c2++) {
+        for (var r = 0; r < radios.length; r++) {
+          var rb = radios[r];
+          if (rb.labels && rb.labels.length) continue;   // handled above
+          var box = rb.parentElement;
+          for (var up = 0; up < 3 && box && !ebayLabelOf(box); up++) box = box.parentElement;
+          if (!box || !ebayLabelMatches(ebayLabelOf(box), cands[c2])) continue;
+          rb.click();
+          await sleep(400);
+          if (rb.checked) return true;
         }
       }
       // Cards.
