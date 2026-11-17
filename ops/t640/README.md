@@ -19,6 +19,20 @@ Farbe, Material ab 3. Die Marke nie (nur exakte Treffer, leer ist oft richtig).
 länger als 3 Stunden (Velosia nicht erreichbar, Token falsch, Skript kaputt), warnt
 Beacon von selbst.
 
+## Sicherheit
+
+- Die Verbindung geht nur vom T640 nach außen (HTTPS mit Zertifikatsprüfung), im
+  Heimnetz wird nichts geöffnet. Railway kennt Beacon nicht.
+- Der Endpunkt gibt nur Zählwerte aus der anonymen Telemetrie heraus (Plattform, Feld,
+  Anzahl, Zeitpunkt, Engine-Version), keine Angebote oder Nutzerdaten. Token: 320 Bit,
+  zeitkonstanter Vergleich, ohne `MONITOR_TOKEN` gibt es den Endpunkt nicht.
+- Telemetrie kann jedes Velosia-Konto senden, also auch Ausfälle vortäuschen. Deshalb
+  übernimmt das Skript nur bekannte Werte (Feld, Plattform, Versionsnummer) in die
+  Nachricht, nie freien Text, und meldet höchstens 3 neue Ausfälle pro Tag, danach eine
+  Sammelmeldung (`state.json`).
+- Der Beacon-Schlüssel `velosia` darf nur Nachrichten und Lebenszeichen dieses Projekts
+  ablegen.
+
 ## Einrichten / ändern
 
 Geheimnisse liegen nur auf dem T640, nie im Repo:
