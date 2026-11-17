@@ -43,7 +43,7 @@
   // and in the extension it is a persistent content script — never redefine.
   if (window.__velosia && window.__velosia.__loaded) return;
 
-  var VERSION = "2.8.18";
+  var VERSION = "2.8.20";
   var KA_TITLE_MAX = 65;
 
   // Cut at the last word boundary within `max`; hard cut if that loses too much.
@@ -3245,15 +3245,17 @@
       var kaSize = attrValue(draft, "größe");
       if (kaSize && !alreadyFilled("größe") && !alreadyFilled("grosse")) {
         var kaSizeOk = await trySel("Größe", kaSizeCandidates(kaSize), false);
-        fields.size = kaSizeOk;
-        if (kaSizeOk) filled.push("Größe");
-        else manual.push("Größe");
+        if (kaSizeOk) { fields.size = true; filled.push("Größe"); }
+        // Only a category that HAS the field counts as a failure (most electronics
+        // categories have no Größe/Farbe). Otherwise telemetry reports a broken
+        // picker that does not exist (seen 2026-11: Farbe "failed" 11 of 12 times).
+        else if (kaHasField("Größe", /\.(size|groesse|größe)\]?$/i)) { fields.size = false; manual.push("Größe"); }
       }
       var kaColor = attrValue(draft, "farbe");
       if (kaColor && !alreadyFilled("farbe")) {
         var kaColorOk = await trySel("Farbe", colorCandidates(kaColor), false);
-        fields.color = kaColorOk;
-        if (kaColorOk) filled.push("Farbe");
+        if (kaColorOk) { fields.color = true; filled.push("Farbe"); }
+        else if (kaHasField("Farbe", /\.(colou?r|farbe)\]?$/i)) fields.color = false;
       }
       var kaBrand = attrValue(draft, "marke");
       // Many KA categories simply have NO Marke field (e.g. "Elektronik > PCs" only
@@ -3421,9 +3423,16 @@
       try { specsDone = await selectVintedComputerSpecs(draft); } catch (e) { specsDone = []; }
       specsDone.forEach(function (n) { filled.push(n); });
 
-      if (sizeVal) fields.size = sizeOk;
-      if (colorVal) fields.color = colorOk;
-      if (materialVal) fields.material = materialOk;
+      // A failure only counts where the category HAS the field (telemetry would
+      // otherwise report a broken picker that does not exist, cf. KA 2026-11).
+      // The mobile form's fields are inputs with ids (2026-11).
+      var vHas = function (id, label, hints, avoid) {
+        return !!(document.querySelector("input#" + id) || vintedDropdownOpener(label, hints, avoid));
+      };
+      if (sizeVal && (sizeOk || vHas("size", "größe", ["[data-testid='category-size-single-grid-input']", "[data-testid='size-select-dropdown-input']"],
+          ["versand", "paket", "pushen", "schneller", "sichtbarkeit", "spotlight"]))) fields.size = sizeOk;
+      if (colorVal && (colorOk || vHas("color", "farbe", ["[data-testid='color-select-dropdown-input']"]))) fields.color = colorOk;
+      if (materialVal && (materialOk || vHas("material", "material", ["[data-testid='category-material-multi-list-input']", "[data-testid='material-select-dropdown-input']"]))) fields.material = materialOk;
       if (brandVal) fields.brand = brandOk;
       if (sizeOk) filled.push("Größe");
       if (colorOk) filled.push("Farbe");

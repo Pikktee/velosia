@@ -23,7 +23,10 @@ import urllib.request
 from pathlib import Path
 
 API = "https://api.velosia.henrikheil.net/api/monitor/autofill-health"
-BEACON = "http://beacon.home"
+# Auf dem T640 selbst löst beacon.home nicht auf. Caddy unterscheidet die Dienste
+# am Host-Kopf, also an 127.0.0.1 mit Host: beacon.home (wie Maptales Jobs).
+BEACON = "http://127.0.0.1"
+BEACON_HOST = "beacon.home"
 PROJECT = "velosia"
 TASK = "autofill-check"
 MAX_HOURS = 3
@@ -50,7 +53,11 @@ def beacon(path, payload):
     req = urllib.request.Request(
         f"{BEACON}{path}",
         data=json.dumps(payload).encode(),
-        headers={"Authorization": f"Bearer {BEACON_KEY}", "Content-Type": "application/json"},
+        headers={
+            "Authorization": f"Bearer {BEACON_KEY}",
+            "Content-Type": "application/json",
+            "Host": BEACON_HOST,  # urllib übernimmt einen gesetzten Host-Kopf
+        },
         method="POST",
     )
     with urllib.request.urlopen(req, timeout=15) as resp:
