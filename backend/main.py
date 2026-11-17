@@ -246,7 +246,7 @@ run_migrations()
 _API_DOCS = os.getenv("ENABLE_API_DOCS", "").lower() in ("1", "true", "yes")
 app = FastAPI(
     title="Velosia API",
-    version="2.8.18",
+    version="2.8.19",
     docs_url="/docs" if _API_DOCS else None,
     redoc_url="/redoc" if _API_DOCS else None,
     openapi_url="/openapi.json" if _API_DOCS else None,
@@ -2289,6 +2289,96 @@ def check_autofill_anomaly(platform: str):
         print(f"[telemetry] Anomalie-Check fehlgeschlagen: {e}", flush=True)
     finally:
         db.close()
+
+
+# --- Health check for the home server (T640 -> Beacon) -------------------------
+#
+# Railway cannot reach Henrik's notification hub (Beacon on the T640 is home
+# network + Tailscale only, on purpose). So the T640 polls this endpoint every
+# 30 min and forwards problems to Beacon (ops/t640/velosia-health.py).
+#
+# Rule, made for a handful of users: a field that normally works fails in the
+# newest N runs of a platform in a row (any user). The per-user rate above needs
+# 3 users and never fired; the Vinted break of 2026-10 went unnoticed for weeks.
+# Each problem carries a stable key (platform, field, first failing event), so
+# Beacon reports an incident once even though it is polled every 30 min.
+_MONITOR_TOKEN = os.getenv("MONITOR_TOKEN", "")
+_HEALTH_SCAN = 200
+# (label, attribute, failures in a row that count as broken)
+_HEALTH_SIGNALS = [
+    ("Titel", "title_found", 2),
+    ("Beschreibung", "description_found", 2),
+    ("Preis", "price_found", 2),
+    ("Kategorie", "category_ok", 2),
+    ("Zustand", "condition_ok", 2),
+    # A value may be missing from the site's list (e.g. a colour Vinted does not
+    # offer), so the pickers need a longer streak. Brand is exact-match only and
+    # often legitimately empty: never a signal.
+    ("Größe", "size_ok", 3),
+    ("Farbe", "color_ok", 3),
+    ("Material", "material_ok", 3),
+]
+_PLATFORM_NAMES = {"vinted": "Vinted", "kleinanzeigen": "Kleinanzeigen", "ebay": "eBay"}
+
+
+def autofill_problems(db: Session) -> list:
+    problems = []
+    for platform, pname in _PLATFORM_NAMES.items():
+        events = (
+            db.query(models.AutofillEvent)
+            .filter(models.AutofillEvent.platform == platform)
+            .order_by(models.AutofillEvent.created_at.desc(), models.AutofillEvent.id.desc())
+            .limit(_HEALTH_SCAN)
+            .all()
+        )
+        for label, attr, needed in _HEALTH_SIGNALS:
+            seen = [e for e in events if getattr(e, attr) is not None]
+            streak = []
+            for e in seen:
+                if getattr(e, attr) is False:
+                    streak.append(e)
+                else:
+                    break
+            if len(streak) < needed:
+                continue
+            # "Normally works": it worked at least once before the streak. A field
+            # that never worked on a platform is a gap, not a break.
+            if len(seen) == len(streak):
+                continue
+            first = streak[-1]
+            problems.append({
+                "key": f"{platform}:{attr}:{first.id}",
+                "platform": platform,
+                "platform_name": pname,
+                "field": label,
+                "failed_in_a_row": len(streak),
+                "since": first.created_at.isoformat() + "Z" if first.created_at else None,
+                "users": len({e.user_id for e in streak}),
+                "engine_versions": sorted({e.engine_version or "?" for e in streak}),
+            })
+    return problems
+
+
+@app.get("/api/monitor/autofill-health")
+def monitor_autofill_health(request: Request, db: Session = Depends(get_db)):
+    """For the T640 health job only (Bearer MONITOR_TOKEN). Without the variable
+    the endpoint does not exist."""
+    if len(_MONITOR_TOKEN) < 32:
+        raise HTTPException(status_code=404, detail="Not Found")
+    auth = request.headers.get("authorization", "")
+    given = auth[7:] if auth.lower().startswith("bearer ") else ""
+    if not secrets.compare_digest(given.encode(), _MONITOR_TOKEN.encode()):
+        raise HTTPException(status_code=401, detail="Nicht berechtigt")
+    last = {}
+    for platform in _PLATFORM_NAMES:
+        ev = (
+            db.query(models.AutofillEvent.created_at)
+            .filter(models.AutofillEvent.platform == platform)
+            .order_by(models.AutofillEvent.created_at.desc())
+            .first()
+        )
+        last[platform] = ev[0].isoformat() + "Z" if ev and ev[0] else None
+    return {"problems": autofill_problems(db), "last_event": last}
 
 
 # Diagnostic beacon of the engine/app (structural info only). Off unless
