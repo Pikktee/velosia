@@ -43,7 +43,7 @@
   // and in the extension it is a persistent content script — never redefine.
   if (window.__velosia && window.__velosia.__loaded) return;
 
-  var VERSION = "2.8.11";
+  var VERSION = "2.8.12";
   var KA_TITLE_MAX = 65;
 
   // Cut at the last word boundary within `max`; hard cut if that loses too much.
@@ -2354,6 +2354,9 @@
       var btn = btns[i];
       var name = String(btn.getAttribute("name") || "").slice("attributes.".length);
       if (!name || skipNames.indexOf(name) !== -1 || ebayAspectValue(btn)) continue;
+      // Identifiers can't be read off photos and text — never let the AI pick one
+      // from a list (it chose the brand as "Herstellernummer" in a live test).
+      if (/herstellernummer|mpn|\bean\b|gtin|isbn|upc|seriennummer|modellnummer/i.test(name)) continue;
       var row = ebayAspectRow(btn);
       try {
         await ebayToggleAspect(btn, true);
