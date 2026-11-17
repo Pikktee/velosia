@@ -240,6 +240,23 @@ class ListingStatusSet(BaseModel):
     platform: str = Field(max_length=20)   # "vinted" | "kleinanzeigen" | "ebay"
     status: str = Field(max_length=20)     # "online" | "reserviert" | "verkauft" | "geloescht"
 
+class EbayFormAspect(BaseModel):
+    """One item specific as the eBay form offers it (read by the engine)."""
+    name: str = Field(max_length=80)
+    values: List[str] = Field(default_factory=list, max_length=400)
+    multi: bool = False
+    required: bool = False
+
+
+class EbayFormAspectsRequest(BaseModel):
+    category: Optional[str] = Field(None, max_length=300)
+    aspects: List[EbayFormAspect] = Field(..., max_length=40)
+
+
+class EbayFormAspectsResponse(BaseModel):
+    values: dict
+
+
 class AnalysisResponse(BaseModel):
     title: str
     description: str

@@ -43,7 +43,7 @@
   // and in the extension it is a persistent content script — never redefine.
   if (window.__velosia && window.__velosia.__loaded) return;
 
-  var VERSION = "2.8.4";
+  var VERSION = "2.8.5";
   var KA_TITLE_MAX = 65;
 
   // Cut at the last word boundary within `max`; hard cut if that loses too much.
@@ -2293,6 +2293,70 @@
     return false;
   }
 
+  // Without eBay's API (no prepared specifics) the form itself says which item
+  // specifics this category has and which values each list offers: open every
+  // still-empty field once, read its entries, close it. Bounded so a huge
+  // category can't keep the backdrop up for long.
+  async function ebayReadFormAspects(skipNames) {
+    var out = [];
+    var btns = document.querySelectorAll("button[name^='attributes.']");
+    for (var i = 0; i < btns.length && out.length < 20; i++) {
+      var btn = btns[i];
+      var name = String(btn.getAttribute("name") || "").slice("attributes.".length);
+      if (!name || skipNames.indexOf(name) !== -1 || ebayAspectValue(btn)) continue;
+      var row = ebayAspectRow(btn);
+      try {
+        await ebayToggleAspect(btn, true);
+        var items = row ? row.querySelectorAll("[role^='menuitem']") : [];
+        var values = [];
+        var multi = false;
+        for (var k = 0; k < items.length && values.length < 400; k++) {
+          var v = String(items[k].innerText || items[k].textContent || "").split("\n")[0].replace(/\s+/g, " ").trim();
+          if (v && values.indexOf(v) === -1) values.push(v);
+          if (items[k].getAttribute("role") === "menuitemcheckbox") multi = true;
+        }
+        var label = row && row.querySelector(".fake-link");
+        var required = !!(label && /\*/.test(String((label.parentElement || label).textContent || "")));
+        if (values.length) out.push({ name: name, values: values, multi: multi, required: required });
+      } catch (e) {
+      } finally {
+        try { await ebayToggleAspect(btn, false); } catch (e2) {}
+      }
+    }
+    return out;
+  }
+
+  // Ask the backend (AI) which offered values fit this draft. Android: through the
+  // native bridge (the page holds no credentials); extension: fetch with its token.
+  // Resolves to {name: [values]} or null.
+  function ebayRequestAspects(draft, options, aspects) {
+    var body = JSON.stringify({ aspects: aspects });
+    var nb = nativeBridge("pickEbayAspects");
+    if (nb) {
+      return new Promise(function (resolve) {
+        var done = false;
+        window.__velosiaEbayAspectsCb = function (json) {
+          if (done) return;
+          done = true;
+          try { var data = typeof json === "string" ? JSON.parse(json) : json; resolve((data && data.values) || null); }
+          catch (e) { resolve(null); }
+        };
+        try { nb.pickEbayAspects(body); } catch (e) { done = true; resolve(null); return; }
+        setTimeout(function () { if (!done) { done = true; resolve(null); } }, 25000);
+      });
+    }
+    if (options && options.backendUrl && options.token && draft && draft.id != null) {
+      return fetch(options.backendUrl + "/api/drafts/" + draft.id + "/ebay-form-aspects", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Authorization": "Bearer " + options.token },
+        body: body
+      }).then(function (r) { return r.ok ? r.json() : null; })
+        .then(function (d) { return (d && d.values) || null; })
+        .catch(function () { return null; });
+    }
+    return Promise.resolve(null);
+  }
+
   // Velosia's own attributes for the same-named eBay fields, used when no
   // prepared item specifics exist (no eBay API key, or preparing failed).
   function ebayAspectsFromAttributes(draft) {
@@ -3094,13 +3158,35 @@
           if (nm === "Größe") fields.size = res === true;
         }
       }
+      // No prepared specifics (no eBay API keys): read the form's empty fields and
+      // let the AI pick from exactly what they offer.
+      var formRequired = [];
+      if (!prepared) {
+        try {
+          setBackdrop("Artikelmerkmale werden gelesen …");
+          var formAspects = await ebayReadFormAspects(setNames);
+          formAspects.forEach(function (a) { if (a.required) formRequired.push(a.name); });
+          if (formAspects.length) {
+            setBackdrop("Artikelmerkmale werden gewählt …");
+            var picked = await ebayRequestAspects(draft, options, formAspects);
+            var pickedNames = Object.keys(picked || {});
+            for (var pn = 0; pn < pickedNames.length; pn++) {
+              var pv = picked[pickedNames[pn]];
+              if (!Array.isArray(pv)) pv = [pv];
+              var pres = null;
+              try { pres = await ebaySetAspect(pickedNames[pn], pv); } catch (e) { pres = false; }
+              if (pres === true && setNames.indexOf(pickedNames[pn]) === -1) setNames.push(pickedNames[pn]);
+            }
+          }
+        } catch (e) {}
+      }
       attrCount = setNames.length;
       if (setNames.length) filled.push("Merkmale (" + setNames.length + ")");
 
       var titleKey = norm(draft.title);
       var unchecked = [];
       var openRequired = [];
-      var required = prepared ? prepared.required : [];
+      var required = prepared ? prepared.required : formRequired;
       var allBtns = document.querySelectorAll("button[name^='attributes.']");
       for (var ab = 0; ab < allBtns.length; ab++) {
         var aName = String(allBtns[ab].getAttribute("name") || "").slice("attributes.".length);

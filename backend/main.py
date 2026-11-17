@@ -246,7 +246,7 @@ run_migrations()
 _API_DOCS = os.getenv("ENABLE_API_DOCS", "").lower() in ("1", "true", "yes")
 app = FastAPI(
     title="Velosia API",
-    version="2.8.4",
+    version="2.8.5",
     docs_url="/docs" if _API_DOCS else None,
     redoc_url="/redoc" if _API_DOCS else None,
     openapi_url="/openapi.json" if _API_DOCS else None,
@@ -663,9 +663,10 @@ def get_platform_principal(
     db: Session = Depends(get_db),
 ) -> Principal:
     """Session token OR platform token (see POST /api/drafts/{id}/platform-token).
-    Only for the endpoints the autofill flow on Vinted/Kleinanzeigen calls:
-    GET /api/auth/me, GET /api/drafts/{id}, POST /api/listings/published and
-    POST /api/telemetry/autofill. Everything else requires a session token."""
+    Only for the endpoints the autofill flow on the platforms calls:
+    GET /api/auth/me, GET /api/drafts/{id}, POST /api/listings/published,
+    POST /api/telemetry/autofill and POST /api/drafts/{id}/ebay-form-aspects.
+    Everything else requires a session token."""
     token = credentials.credentials
     claims = decode_platform_token(token)
     if claims:
@@ -2082,6 +2083,59 @@ def prepare_ebay_listing(
     db.commit()
     db.refresh(draft)
     return draft
+
+
+@app.post("/api/drafts/{draft_id}/ebay-form-aspects", response_model=schemas.EbayFormAspectsResponse)
+def pick_ebay_form_aspects(
+    draft_id: int,
+    payload: schemas.EbayFormAspectsRequest,
+    db: Session = Depends(get_db),
+    principal: Principal = Depends(get_platform_principal),
+):
+    """Item specifics without eBay's API: the engine reads the open eBay form's
+    empty fields and the values its lists offer; the AI picks from exactly those
+    (one text-only call). Used when no prepared specifics exist (no eBay API keys).
+    Values outside the offered lists are dropped — the engine only clicks list
+    entries anyway."""
+    if not principal.may_access_draft(draft_id):
+        raise HTTPException(status_code=404, detail="Angebot wurde nicht gefunden.")
+    draft = db.query(models.Draft).filter(
+        models.Draft.id == draft_id,
+        models.Draft.user_id == principal.user.id,
+    ).first()
+    if not draft:
+        raise HTTPException(status_code=404, detail="Angebot wurde nicht gefunden.")
+    rate_limit.enforce(
+        "ebay_form_aspects", str(principal.user.id), rate_limit.EBAY_FORM_ASPECTS_USER,
+        "Zu viele Anfragen für eBay-Merkmale.",
+    )
+    aspects = [{
+        "name": a.name.strip(),
+        "values": [v.strip()[:65] for v in a.values if v and v.strip()][:400],
+        "multi": a.multi,
+        "required": a.required,
+        # The form only lets the engine click list entries.
+        "mode": "SELECTION_ONLY",
+        "recommended": True,
+    } for a in payload.aspects if a.name and a.name.strip()]
+    aspects = [a for a in aspects if a["values"]]
+    if not aspects:
+        return {"values": {}}
+    try:
+        attributes = json.loads(draft.attributes) if draft.attributes else {}
+    except Exception:
+        attributes = {}
+    from services.gemini_service import pick_ebay_aspects
+    picked = None
+    try:
+        with track_ai_usage(db, principal.user):
+            picked = pick_ebay_aspects({
+                "title": draft.title, "description": draft.description,
+                "condition": draft.condition, "attributes": attributes,
+            }, aspects)
+    except Exception as e:
+        print(f"[ebay-form-aspects] fehlgeschlagen: {e}", flush=True)
+    return {"values": picked or {}}
 
 
 # --- Former APK download ------------------------------------------------------

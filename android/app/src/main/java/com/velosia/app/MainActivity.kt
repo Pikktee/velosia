@@ -566,6 +566,39 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
+        // eBay item specifics without eBay's API (engine 2.8.5+): the engine hands
+        // over the open form's empty fields with their offered values; we ask the
+        // backend (AI pick, draft-scoped platform token) and call back into the page
+        // with {values: {...}}. Only on eBay's listing form of the active session.
+        @JavascriptInterface
+        fun pickEbayAspects(payload: String) {
+            runOnUiThread {
+                if (formPageOf(webView.url) != FormPage.EBAY_FORM || activeDraftId < 0) return@runOnUiThread
+                if (activePlatform != "ebay" || payload.length > 300_000) return@runOnUiThread
+                val token = authToken ?: return@runOnUiThread
+                val draftId = activeDraftId
+                val request = Request.Builder()
+                    .url("$backendUrl/api/drafts/$draftId/ebay-form-aspects")
+                    .header("Authorization", "Bearer $token")
+                    .post(payload.toRequestBody("application/json; charset=utf-8".toMediaTypeOrNull()))
+                    .build()
+                fun deliver(json: String) = runOnUiThread {
+                    if (formPageOf(webView.url) != FormPage.EBAY_FORM || activeDraftId != draftId) return@runOnUiThread
+                    webView.evaluateJavascript(
+                        "window.__velosiaEbayAspectsCb && window.__velosiaEbayAspectsCb(${JSONObject.quote(json)});",
+                        null
+                    )
+                }
+                okHttpClient.newCall(request).enqueue(object : Callback {
+                    override fun onFailure(call: Call, e: IOException) = deliver("{}")
+                    override fun onResponse(call: Call, response: Response) {
+                        val body = response.use { if (it.isSuccessful) it.body?.string() ?: "{}" else "{}" }
+                        deliver(body)
+                    }
+                })
+            }
+        }
+
         // Feature probe for the frontend (2.8+): this build knows eBay's pages. Older
         // builds lack it, and the frontend then offers Kleinanzeigen and Vinted only.
         @JavascriptInterface

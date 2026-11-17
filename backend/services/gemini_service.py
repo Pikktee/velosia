@@ -305,7 +305,8 @@ def pick_ebay_aspects(item: dict, aspects: list, model_name: Optional[str] = Non
         kind = "Pflicht" if a.get("required") else "empfohlen"
         multi = ", mehrere Werte möglich" if a.get("multi") else ""
         if a.get("mode") == "SELECTION_ONLY":
-            choice = "nur aus: " + " | ".join(vals[:_EBAY_VALUES_IN_PROMPT])
+            more = " … (weitere Werte möglich, dann exakt in eBays Schreibweise)" if len(vals) > _EBAY_VALUES_IN_PROMPT else ""
+            choice = "nur aus: " + " | ".join(vals[:_EBAY_VALUES_IN_PROMPT]) + more
         elif vals:
             more = " …" if len(vals) > _EBAY_VALUES_IN_PROMPT else ""
             choice = "bevorzugt aus: " + " | ".join(vals[:_EBAY_VALUES_IN_PROMPT]) + more + " (sonst freie Angabe)"

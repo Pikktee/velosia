@@ -60,6 +60,7 @@ SET_PASSWORD_USER = Policy(limit=5, window_s=3600) # Passwort festlegen je Nutze
 EXPORT_LINK_USER = Policy(limit=20, window_s=3600) # Download-Links für den Datenexport je Nutzer
 EXPORT_USER = Policy(limit=5, window_s=3600)       # Datenexport (ZIP mit allen Fotos) je Nutzer
 EBAY_PREPARE_USER = Policy(limit=30, window_s=3600)  # eBay-Vorbereitung (eBay-API-Kontingent gilt für alle)
+EBAY_FORM_ASPECTS_USER = Policy(limit=30, window_s=3600)  # eBay-Merkmale aus dem Formular (je ein KI-Aufruf)
 
 # Escape hatch for local development and tests.
 DISABLED = os.getenv("RATE_LIMIT_DISABLED", "").lower() in ("1", "true", "yes")
