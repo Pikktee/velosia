@@ -232,6 +232,62 @@ class MainActivity : AppCompatActivity() {
         return inAppHostSuffixes.any { h == it || h.endsWith(".$it") }
     }
 
+    // Google (since 2021) and Facebook refuse OAuth sign-in in embedded WebViews and
+    // answer with a dead end ("Dieser Browser oder diese App ist unter Umständen nicht
+    // sicher"). That is their security policy; we do not disguise the WebView to get
+    // past it. Instead the navigation is stopped and a sheet explains the way that
+    // works: the platform's own e-mail + password login (once; the WebView keeps the
+    // session). Returns the provider name, or null for any other URL.
+    private fun blockedSocialLogin(uri: Uri): String? {
+        val h = uri.host?.lowercase() ?: return null
+        val path = uri.path ?: ""
+        if (h.startsWith("accounts.google.")) return "Google"
+        if ((h == "facebook.com" || h.endsWith(".facebook.com")) &&
+            (path.contains("/dialog/oauth") || path.startsWith("/login"))) return "Facebook"
+        return null
+    }
+
+    private var loginHintDialog: com.google.android.material.bottomsheet.BottomSheetDialog? = null
+
+    private fun platformNameOf(url: String?): String? {
+        val h = parseUri(url)?.host?.lowercase() ?: return null
+        return when {
+            h.contains("vinted.") -> "Vinted"
+            h.contains("kleinanzeigen.") -> "Kleinanzeigen"
+            h.contains("ebay.") -> "eBay"
+            else -> null
+        }
+    }
+
+    private fun showSocialLoginHint(provider: String) {
+        if (isFinishing || loginHintDialog?.isShowing == true) return
+        Log.i("Velosia", "social login blocked: $provider on ${parseUri(currentPageUrl)?.host}")
+        val where = platformNameOf(currentPageUrl)
+        val view = layoutInflater.inflate(R.layout.sheet_login_hint, null)
+        view.findViewById<TextView>(R.id.loginHintTitle).text =
+            "Anmeldung mit $provider geht hier nicht"
+        view.findViewById<TextView>(R.id.loginHintBody).text =
+            "$provider erlaubt die Anmeldung nur im Browser, nicht in Apps. " +
+            "Melde dich ${if (where != null) "bei $where " else ""}deshalb mit E-Mail und Passwort an. " +
+            "Das ist nur einmal nötig, danach bleibst du angemeldet."
+        view.findViewById<TextView>(R.id.loginHintTip).text =
+            "Tippe bei der Anmeldung auf „Passwort vergessen?“ und gib die E-Mail-Adresse " +
+            "deines $provider-Kontos ein. Mit dem Link aus der Mail legst du ein Passwort fest."
+        val dialog = com.google.android.material.bottomsheet.BottomSheetDialog(this)
+        dialog.setContentView(view)
+        view.findViewById<MaterialButton>(R.id.loginHintOk).setOnClickListener { dialog.dismiss() }
+        // Our own rounded background instead of the theme's sheet surface.
+        dialog.setOnShowListener {
+            dialog.findViewById<View>(com.google.android.material.R.id.design_bottom_sheet)
+                ?.setBackgroundColor(android.graphics.Color.TRANSPARENT)
+            dialog.behavior.state = com.google.android.material.bottomsheet.BottomSheetBehavior.STATE_EXPANDED
+            dialog.behavior.skipCollapsed = true
+        }
+        dialog.setOnDismissListener { if (loginHintDialog === dialog) loginHintDialog = null }
+        loginHintDialog = dialog
+        dialog.show()
+    }
+
     // Hand a URL the WebView should not load itself to the system (browser, mail,
     // dialer, Play Store …). intent: URLs are sanitised so a page cannot target a
     // specific (non-exported-to-browser) component.
@@ -391,6 +447,15 @@ class MainActivity : AppCompatActivity() {
                 val uri = request.url
                 val scheme = uri.scheme?.lowercase() ?: return true
                 if (scheme == "about") return false
+                // Google/Facebook refuse sign-in inside a WebView and only show
+                // "Dieser Browser oder diese App ist unter Umständen nicht sicher".
+                // Explain the way that works instead (e-mail + password).
+                blockedSocialLogin(uri)?.let { provider ->
+                    if (!isTrustedFrontend(currentPageUrl)) {
+                        showSocialLoginHint(provider)
+                        return true
+                    }
+                }
                 if (isAllowedInApp(uri)) return false
                 if (scheme == "https") {
                     // A link the user tapped to some other site opens in the browser.
