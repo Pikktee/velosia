@@ -240,7 +240,7 @@ async function openOverlay() {
     <button id="velosia-btn-camera" style="width:100%; padding:12px; background:linear-gradient(135deg, #09b0b7 0%, #ec4899 100%); border:none; border-radius:8px; color:#000000; font-weight:bold; font-size:13px; font-family:'Outfit', 'Inter', sans-serif; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:8px; margin-bottom:16px; box-shadow:0 4px 12px rgba(9, 176, 183, 0.2); transition:all 0.2s ease;">
       📸 Neues Foto aufnehmen
     </button>
-    <div id="velosia-list-container" style="flex-grow:1; overflow-y:auto; display:flex; flexDirection:column; gap:12px; padding-bottom:20px;">
+    <div id="velosia-list-container" style="flex-grow:1; overflow-y:auto; display:flex; flex-direction:column; gap:12px; padding-bottom:20px;">
       <p style="color:#94a3b8; font-size:13px;">Lade Angebote...</p>
     </div>
   `;
@@ -471,11 +471,16 @@ async function autofillForm(draft, autoSubmit) {
   } catch (e) {}
   const canCapture = !!(platform && draft && draft.id != null);
 
-  // eBay spans several pages (title -> condition -> form). Started from the
-  // floating button on an earlier page, keep the draft queued for the next one.
+  // Kleinanzeigen (category -> form) and eBay (title -> condition -> form) span
+  // several pages. Started from the floating button on an earlier page, keep the
+  // draft queued for the next one (the popup queues it itself).
   try {
-    if (platform === "ebay" && draft && draft.id != null && window.__velosia.detectPhase("ebay") !== "form") {
-      chrome.storage.local.set({ velosia_pending_autofill: { draftId: draft.id, platform: "ebay", autoSubmit: false, createdAt: Date.now() } });
+    const multiPage = platform === "ebay" || platform === "kleinanzeigen";
+    if (multiPage && draft && draft.id != null && window.__velosia.detectPhase(platform) !== "form") {
+      const entry = { draftId: draft.id, platform: platform, createdAt: Date.now() };
+      if (platform === "ebay") entry.autoSubmit = false;
+      else if (typeof autoSubmit === "boolean") entry.autoSubmit = autoSubmit;
+      chrome.storage.local.set({ velosia_pending_autofill: entry });
     }
   } catch (e) {}
 

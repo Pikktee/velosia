@@ -43,7 +43,7 @@
   // and in the extension it is a persistent content script — never redefine.
   if (window.__velosia && window.__velosia.__loaded) return;
 
-  var VERSION = "2.8.13";
+  var VERSION = "2.8.14";
   var KA_TITLE_MAX = 65;
 
   // Cut at the last word boundary within `max`; hard cut if that loses too much.
@@ -1344,6 +1344,21 @@
   // hidden radio/checkbox rather than the visible row: prefer clicking the input itself
   // (toggles the radio), else fire a full mousedown→mouseup→click sequence on the
   // resolved clickable cell (some Vinted sheets ignore a bare .click() on the text div).
+  // A full pointer sequence like a real mouse click. Vinted's pickers react to
+  // pointerdown since 2026-10 — a bare click() no longer opens them (live 2026-11).
+  function vintedPress(el) {
+    if (!el) return;
+    var r = el.getBoundingClientRect ? el.getBoundingClientRect() : { left: 0, top: 0, width: 0, height: 0 };
+    var o = { bubbles: true, cancelable: true, view: window, button: 0,
+              clientX: r.left + Math.min(20, r.width / 2), clientY: r.top + r.height / 2 };
+    var po = Object.assign({ pointerType: "mouse", isPrimary: true, pointerId: 1 }, o);
+    try { el.dispatchEvent(new PointerEvent("pointerdown", po)); } catch (e) {}
+    try { el.dispatchEvent(new MouseEvent("mousedown", o)); } catch (e) {}
+    try { el.dispatchEvent(new PointerEvent("pointerup", po)); } catch (e) {}
+    try { el.dispatchEvent(new MouseEvent("mouseup", o)); } catch (e) {}
+    try { el.click(); } catch (e) { try { el.dispatchEvent(new MouseEvent("click", o)); } catch (e2) {} }
+  }
+
   function vintedRobustClick(el) {
     var target = vintedClickable(el);
     if (target === el) {
@@ -1356,11 +1371,8 @@
     }
     var input = (target.querySelector && target.querySelector("input[type='radio'], input[type='checkbox']")) ||
                 (el.querySelector && el.querySelector("input[type='radio'], input[type='checkbox']")) || null;
-    var opts = { bubbles: true, cancelable: true, view: window };
     if (input) { try { input.click(); return; } catch (e) {} }
-    try { target.dispatchEvent(new MouseEvent("mousedown", opts)); } catch (e) {}
-    try { target.dispatchEvent(new MouseEvent("mouseup", opts)); } catch (e) {}
-    try { target.click(); } catch (e) { try { target.dispatchEvent(new MouseEvent("click", opts)); } catch (e2) {} }
+    vintedPress(target);
   }
 
   // Robust, layout-agnostic match for a category row by its visible label. Works for
@@ -1397,14 +1409,14 @@
       var c = vintedPickerContainer();
       if (c && id) {
         var icon = c.querySelector("[data-testid='catalog-icon-" + id + "']");
-        if (icon && isInteractable(icon)) { vintedClickable(icon).click(); return true; }
+        if (icon && isInteractable(icon)) { vintedPress(vintedClickable(icon)); return true; }
       }
       // Match option rows. The picker container often holds only the search box (the
       // option list lives in a sibling subtree), so we also search the whole document
       // — safe because vintedRowMatch excludes navigating links, so a document-wide
       // search can never drift onto a catalog browse link.
       var row = (c && vintedRowMatch(c, name)) || vintedRowMatch(document.body, name);
-      if (row) { vintedClickable(row).click(); return true; }
+      if (row) { vintedPress(vintedClickable(row)); return true; }
       await sleep(350);
     }
     return false;
@@ -1573,8 +1585,7 @@
       if (opener) {
         for (var o = 0; o < 16 && !vintedPickerContainer(); o++) {
           try {
-            opener.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
-            opener.click();
+            vintedPress(opener);
             if (opener.focus) opener.focus();
           } catch (e) {}
           await sleep(300);
@@ -1610,7 +1621,7 @@
       await sleep(300);
       var save = vintedSaveButton();
       console.log("Velosia Vinted: Fertig-Button=" + (save ? "gefunden" : "KEINER"));
-      if (save) { try { vintedClickable(save).click(); } catch (e) {} }
+      if (save) { try { vintedPress(vintedClickable(save)); } catch (e) {} }
       for (var v = 0; v < 16 && vintedModalVisible(); v++) await sleep(300);
       var stillOpen = vintedModalVisible();
       if (stillOpen) { vintedDiagNav(); vintedDiagOptions(); }
@@ -1628,13 +1639,13 @@
       for (var s = 0; s < 12; s++) {
         await sleep(300);
         var res = vintedRowMatch(vintedPickerContainer() || document.body, leaf);
-        if (res) { try { vintedClickable(res).click(); clicked = true; } catch (e) {} break; }
+        if (res) { try { vintedPress(vintedClickable(res)); clicked = true; } catch (e) {} break; }
       }
       console.log("Velosia Vinted: Suche nach '" + leaf + "' -> " + (clicked ? "Treffer geklickt" : "kein Treffer"));
       if (clicked) {
         await sleep(300);
         var save2 = vintedSaveButton();
-        if (save2) { try { vintedClickable(save2).click(); } catch (e) {} }
+        if (save2) { try { vintedPress(vintedClickable(save2)); } catch (e) {} }
         for (var c2 = 0; c2 < 14 && vintedModalVisible(); c2++) await sleep(300);
         var open2 = vintedModalVisible();
         console.log("Velosia Vinted: per Suche gewählt + Fertig, Modal sichtbar=" + open2);
@@ -1784,8 +1795,7 @@
     var picked = null;
     for (var attempt = 0; attempt < 3 && !picked; attempt++) {
       try {
-        opener.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
-        opener.click();
+        vintedPress(opener);
         if (opener.focus) opener.focus();
       } catch (e) {}
       for (var s = 0; s < 8 && !picked; s++) {
@@ -1811,7 +1821,7 @@
     // Some Vinted dropdowns commit on click; the modal variant needs the "Fertig" save.
     await sleep(300);
     var save = vintedSaveButton();
-    if (save) { try { vintedClickable(save).click(); } catch (e) {} await sleep(300); }
+    if (save) { try { vintedPress(vintedClickable(save)); } catch (e) {} await sleep(300); }
 
     // Verify honestly: re-read the collapsed field; it should now show the value
     // instead of the bare label. If nothing changed, the click did NOT take — report
@@ -1934,6 +1944,8 @@
     var candidates = VINTED_CONDITION_MAP[cond];
     if (!candidates) { console.log("Velosia Vinted: Zustand '" + cond + "' ohne Vinted-Entsprechung — manuell"); return false; }
     return selectVintedDropdownValue("zustand", [
+      // Renamed by Vinted (live 2026-11): category-condition-single-list-input.
+      "[data-testid='category-condition-single-list-input']",
       "[data-testid='condition-select-dropdown-input']",
       "[data-testid='condition-select-dropdown-chevron']",
       "[data-testid='status-select-dropdown-input']"
@@ -2009,8 +2021,7 @@
     var search = null;
     for (var o = 0; o < 12 && !search; o++) {
       try {
-        opener.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
-        opener.click();
+        vintedPress(opener);
         if (opener.focus) opener.focus();
       } catch (e) {}
       await sleep(300);
@@ -2023,7 +2034,7 @@
     for (var s = 0; s < 16 && !clicked; s++) {
       await sleep(300);
       var row = vintedBrandExactRow(target);
-      if (row) { try { vintedClickable(row).click(); clicked = true; } catch (e) {} }
+      if (row) { try { vintedPress(vintedClickable(row)); clicked = true; } catch (e) {} }
     }
     if (!clicked) {
       console.log("Velosia Vinted: keine EXAKTE Marke '" + brand + "' in Vinteds Vorschlägen — bleibt LEER (keine Halluzination)");
@@ -2031,7 +2042,7 @@
     }
     await sleep(250);
     var save = vintedSaveButton();
-    if (save) { try { vintedClickable(save).click(); } catch (e) {} await sleep(300); }
+    if (save) { try { vintedPress(vintedClickable(save)); } catch (e) {} await sleep(300); }
     console.log("Velosia Vinted: Marke '" + brand + "' gesetzt (exakter Treffer)");
     return true;
   }
@@ -3337,7 +3348,7 @@
         // Exclude Vinted's shipping PACKAGE size field (also labelled "Größe") via
         // avoidWords, and try several size spellings (W36 L34 / 36/34 / 36 …).
         try { sizeOk = await selectVintedDropdownValue("größe",
-          ["[data-testid='size-select-dropdown-input']", "[data-testid='size-select-dropdown-chevron']"],
+          ["[data-testid='category-size-single-grid-input']", "[data-testid='size-select-dropdown-input']", "[data-testid='size-select-dropdown-chevron']"],
           vintedSizeCandidates(sizeVal), "Größe",
           ["versand", "paket", "pushen", "schneller", "sichtbarkeit", "spotlight"]); } catch (e) {}
       }
@@ -3348,7 +3359,7 @@
       }
       if (materialVal) {
         try { materialOk = await selectVintedDropdownValue("material",
-          ["[data-testid='material-select-dropdown-input']", "[data-testid='material-select-dropdown-chevron']"],
+          ["[data-testid='category-material-multi-list-input']", "[data-testid='material-select-dropdown-input']", "[data-testid='material-select-dropdown-chevron']"],
           [materialVal], "Material"); } catch (e) {}
       }
       if (brandVal) {
@@ -3376,7 +3387,7 @@
       var sizeAvoid = ["versand", "paket", "pushen", "schneller", "sichtbarkeit", "spotlight"];
       var hasBrandField = !!vintedDropdownOpener("marke", ["[data-testid='brand-select-dropdown-input']"]);
       var hasSizeField = !!vintedDropdownOpener("größe",
-        ["[data-testid='size-select-dropdown-input']"], sizeAvoid);
+        ["[data-testid='category-size-single-grid-input']", "[data-testid='size-select-dropdown-input']"], sizeAvoid);
       if (!brandOk && hasBrandField) manual.push("Marke" + (brandVal ? "" : " (nicht auf Fotos erkannt)"));
       if (!sizeOk && hasSizeField) manual.push("Größe" + (sizeVal ? "" : " (nicht auf Fotos erkannt)"));
     } else if (!draft.category && platform !== "ebay") {
