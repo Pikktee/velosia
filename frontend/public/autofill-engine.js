@@ -43,7 +43,7 @@
   // and in the extension it is a persistent content script — never redefine.
   if (window.__velosia && window.__velosia.__loaded) return;
 
-  var VERSION = "2.8.17";
+  var VERSION = "2.8.18";
   var KA_TITLE_MAX = 65;
 
   // Cut at the last word boundary within `max`; hard cut if that loses too much.
@@ -3436,10 +3436,25 @@
       // ...and only when the category HAS that field: electronics (e.g. Desktop-Computer)
       // has no Größe, so nagging about it there is a false alarm.
       var sizeAvoid = ["versand", "paket", "pushen", "schneller", "sichtbarkeit", "spotlight"];
-      var hasBrandField = !!vintedDropdownOpener("marke", ["[data-testid='brand-select-dropdown-input']"]);
+      var brandField = vintedDropdownOpener("marke", ["[data-testid='brand-select-dropdown-input']"]);
+      var hasBrandField = !!brandField;
       var hasSizeField = !!vintedDropdownOpener("größe",
         ["[data-testid='category-size-single-grid-input']", "[data-testid='size-select-dropdown-input']"], sizeAvoid);
-      if (!brandOk && hasBrandField) manual.push("Marke" + (brandVal ? "" : " (nicht auf Fotos erkannt)"));
+      // Vinted pre-fills a brand it guesses from the title ("Sonoro" -> "Sonos").
+      // We never take it over, but name it so the user does not miss a wrong brand.
+      var vintedBrandGuess = "";
+      // The mobile form's field is <input id="brand"> (value = shown brand, 2026-11).
+      var brandInput = document.querySelector("input#brand") || brandField;
+      if (brandInput && !hasBrandField) hasBrandField = isInteractable(brandInput);
+      if (!brandOk && brandInput) {
+        vintedBrandGuess = String(brandInput.value != null && brandInput.value !== "" ? brandInput.value
+          : (brandInput.tagName === "INPUT" ? "" : (brandInput.textContent || ""))).replace(/\s+/g, " ").trim();
+        if (norm(vintedBrandGuess) === "marke" || vintedBrandGuess.length > 40) vintedBrandGuess = "";
+      }
+      if (!brandOk && hasBrandField) {
+        if (vintedBrandGuess) manual.push("Marke: Vinted hat „" + vintedBrandGuess + "“ eingetragen, bitte prüfen");
+        else manual.push("Marke" + (brandVal ? "" : " (nicht auf Fotos erkannt)"));
+      }
       if (!sizeOk && hasSizeField) manual.push("Größe" + (sizeVal ? "" : " (nicht auf Fotos erkannt)"));
     } else if (!draft.category && platform !== "ebay") {
       manual.push("Kategorie");
