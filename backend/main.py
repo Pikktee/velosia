@@ -263,7 +263,7 @@ run_migrations()
 _API_DOCS = os.getenv("ENABLE_API_DOCS", "").lower() in ("1", "true", "yes")
 app = FastAPI(
     title="Velosia API",
-    version="2.8.24",
+    version="2.8.25",
     docs_url="/docs" if _API_DOCS else None,
     redoc_url="/redoc" if _API_DOCS else None,
     openapi_url="/openapi.json" if _API_DOCS else None,
@@ -1620,10 +1620,53 @@ def _upload_cancelled(user_id: int, ref: Optional[str]) -> bool:
     return bool(job and job.get("cancelled"))
 
 
+def _claim_upload(user_id: int, ref: Optional[str]) -> bool:
+    """True: diese Anfrage verarbeitet die Erstellung. False: eine Anfrage mit
+    derselben Kennung läuft schon oder ist fertig — die Android-WebView schickt
+    einen POST nach einem Verbindungsabbruch selbst noch einmal (live 2026-11:
+    zwei Angebote aus einer Erstellung)."""
+    if not ref:
+        return True
+    with _upload_jobs_lock:
+        job = _upload_jobs.get((user_id, ref))
+        if job and job["state"] in ("running", "done"):
+            return False
+        job = job or {"cancelled": False}
+        job.update({"state": "running", "detail": None, "at": time.time()})
+        _upload_jobs[(user_id, ref)] = job
+        return True
+
+
+def _drafts_of_upload(db: Session, user_id: int, ref: str) -> list:
+    return (
+        db.query(models.Draft)
+        .filter(models.Draft.user_id == user_id, models.Draft.client_ref == ref)
+        .order_by(models.Draft.id.asc())
+        .all()
+    )
+
+
+def _await_duplicate(db: Session, user_id: int, ref: str, timeout_s: int = 240) -> list:
+    """Wiederholte Anfrage: auf die erste warten und deren Angebote liefern."""
+    deadline = time.time() + timeout_s
+    while time.time() < deadline:
+        job = _upload_job_get(user_id, ref)
+        if not job or job["state"] != "running":
+            break
+        time.sleep(1)
+    db.expire_all()
+    drafts = _drafts_of_upload(db, user_id, ref)
+    if drafts:
+        return drafts
+    job = _upload_job_get(user_id, ref) or {}
+    if job.get("state") == "failed":
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=job.get("detail"))
+    raise HTTPException(status_code=409, detail="Die Erstellung wurde abgebrochen.")
+
+
 @contextmanager
 def _tracked_upload(user_id: int, ref: Optional[str]):
-    """Hält den Stand einer Erstellung für /api/upload/status fest."""
-    _upload_job_set(user_id, ref, state="running", detail=None)
+    """Hält den Stand einer Erstellung für /api/upload/status fest (nach _claim_upload)."""
     try:
         yield
     except HTTPException as e:
@@ -1738,6 +1781,12 @@ def upload_and_analyze(
     current_user: models.User = Depends(get_current_user)
 ):
     ref = _valid_upload_ref(client_ref)
+    if ref:
+        done = _drafts_of_upload(db, current_user.id, ref)   # auch nach einem Neustart
+        if done:
+            return done[0]
+        if not _claim_upload(current_user.id, ref):
+            return _await_duplicate(db, current_user.id, ref)[0]
     with _tracked_upload(current_user.id, ref):
         return _upload_and_analyze(file, files, condition, details, ref, db, current_user)
 
@@ -1807,6 +1856,12 @@ def upload_turbo(
     current_user: models.User = Depends(get_current_user)
 ):
     ref = _valid_upload_ref(client_ref)
+    if ref:
+        done = _drafts_of_upload(db, current_user.id, ref)
+        if done:
+            return list(reversed(done))   # neueste zuerst, wie _upload_turbo
+        if not _claim_upload(current_user.id, ref):
+            return list(reversed(_await_duplicate(db, current_user.id, ref)))
     with _tracked_upload(current_user.id, ref):
         return _upload_turbo(files, ref, db, current_user)
 
