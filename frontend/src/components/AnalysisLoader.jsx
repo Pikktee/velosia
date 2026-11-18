@@ -103,8 +103,6 @@ export default function AnalysisLoader({ isFinished = false, turbo = false, onCo
       </h3>
       <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', marginTop: '0.25rem', marginBottom: 0 }}>
         {turbo ? 'Aus deinen Fotos entstehen mehrere Angebote.' : 'Dein Angebot entsteht.'}
-        <br />
-        Du kannst die App solange verlassen.
       </p>
 
       {/* Stepper Container */}

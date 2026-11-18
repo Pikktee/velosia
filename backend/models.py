@@ -1,6 +1,7 @@
 from sqlalchemy import Column, Integer, String, Float, Boolean, DateTime, ForeignKey
 from sqlalchemy.orm import relationship
 from datetime import datetime
+import json
 from database import Base
 from typing import Optional
 
@@ -185,8 +186,21 @@ class Draft(Base):
     def delivery_effective(self) -> str:
         """Versand/Abholung, mit dem das Angebot eingestellt wird: eigene Wahl, sonst
         die Vorgabe, sonst beides (das Verhalten vor 2.8.23)."""
+        if self.delivery:
+            return self.delivery
+        # Angebote von vor 2.8.23: die KI hatte „Nur Abholung“ als Merkmal notiert.
+        if self.attributes and "nur abholung" in self.attributes.lower():
+            try:
+                attrs = json.loads(self.attributes)
+                if isinstance(attrs, dict) and any(
+                    str(k).strip().lower() == "versand" and "abholung" in str(v).lower()
+                    for k, v in attrs.items()
+                ):
+                    return "PICKUP"
+            except Exception:
+                pass
         preset = self.user.default_delivery if self.user else None
-        return self.delivery or preset or "BOTH"
+        return preset or "BOTH"
 
     @property
     def category_path(self) -> Optional[str]:

@@ -164,6 +164,13 @@ def run_migrations():
             db.rollback()
             print(f"Migration note: {col_name} column might already exist. ({e})", flush=True)
 
+    try:
+        db.execute(text("CREATE INDEX IF NOT EXISTS ix_drafts_client_ref ON drafts (user_id, client_ref)"))
+        db.commit()
+    except Exception as e:
+        db.rollback()
+        print(f"Migration note: client_ref index ({e})", flush=True)
+
     # 2.7.60 took the first online price reading as baseline, so a price changed
     # on the platform before that deploy never showed up. Once: fall back to the
     # draft price as baseline (recomputed on the next poll).
@@ -256,7 +263,7 @@ run_migrations()
 _API_DOCS = os.getenv("ENABLE_API_DOCS", "").lower() in ("1", "true", "yes")
 app = FastAPI(
     title="Velosia API",
-    version="2.8.23",
+    version="2.8.24",
     docs_url="/docs" if _API_DOCS else None,
     redoc_url="/redoc" if _API_DOCS else None,
     openapi_url="/openapi.json" if _API_DOCS else None,
@@ -1581,6 +1588,7 @@ def _store_uploads(files: List[UploadFile]):
 # auch einen Neustart.
 _UPLOAD_REF_RE = re.compile(r"^[A-Za-z0-9-]{8,64}$")
 _UPLOAD_JOB_TTL_S = 3600
+_UPLOAD_JOBS_PER_USER = 30
 _upload_jobs: dict = {}
 _upload_jobs_lock = threading.Lock()
 
@@ -1631,6 +1639,25 @@ def _tracked_upload(user_id: int, ref: Optional[str]):
         _upload_job_set(user_id, ref, state="done")
 
 
+def _delivery_from_attributes(draft: models.Draft, adopt: bool = True):
+    """Die KI nennt „Versand“ als Merkmal („Nur Abholung“ bei Sperrigem). Seit 2.8.23
+    gilt dafür die Übergabe-Wahl: „Nur Abholung“ wird zu delivery=PICKUP, das
+    Merkmal entfällt (sonst widersprächen sich Merkmal und Wahl)."""
+    try:
+        attrs = json.loads(draft.attributes) if draft.attributes else {}
+    except Exception:
+        return
+    if not isinstance(attrs, dict):
+        return
+    key = next((k for k in attrs if str(k).strip().lower() == "versand"), None)
+    if key is None:
+        return
+    if adopt and "abholung" in str(attrs.get(key) or "").lower() and not draft.delivery:
+        draft.delivery = "PICKUP"
+    attrs.pop(key, None)
+    draft.attributes = json.dumps(attrs, ensure_ascii=False)
+
+
 def _raise_if_cancelled(user_id: int, ref: Optional[str], local_paths: list):
     """Vor dem Speichern: wurde die Erstellung abgebrochen, entsteht kein Angebot."""
     if _upload_cancelled(user_id, ref):
@@ -1666,14 +1693,37 @@ def upload_status(
 @app.post("/api/upload/{ref}/cancel", status_code=status.HTTP_204_NO_CONTENT)
 def cancel_upload(
     ref: str,
+    db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user)
 ):
-    """„Abbrechen“ im Ladebildschirm: die laufende Analyse legt danach kein Angebot an."""
-    if _valid_upload_ref(ref):
-        if _upload_job_get(current_user.id, ref):
-            _upload_job_set(current_user.id, ref, cancelled=True)
-        else:   # Upload noch unterwegs: kommt er doch an, wird er verworfen
+    """„Abbrechen“ im Ladebildschirm: die laufende Analyse legt danach kein Angebot
+    an, und ein schon fertiges (Antwort nie angekommen) wird wieder entfernt."""
+    if not _valid_upload_ref(ref):
+        return Response(status_code=status.HTTP_204_NO_CONTENT)
+    if _upload_job_get(current_user.id, ref):
+        _upload_job_set(current_user.id, ref, cancelled=True)
+    else:
+        # Upload noch unterwegs: kommt er doch an, wird er verworfen. Gedeckelt,
+        # damit beliebige Kennungen den Speicher nicht füllen.
+        with _upload_jobs_lock:
+            mine = sum(1 for (uid, _r) in _upload_jobs if uid == current_user.id)
+        if mine < _UPLOAD_JOBS_PER_USER:
             _upload_job_set(current_user.id, ref, state="cancelled", cancelled=True)
+    # Nur frisch angelegte Angebote dieser Erstellung — nie ältere.
+    since = datetime.utcnow() - timedelta(minutes=30)
+    finished = (
+        db.query(models.Draft)
+        .filter(models.Draft.user_id == current_user.id, models.Draft.client_ref == ref,
+                models.Draft.created_at >= since)
+        .all()
+    )
+    if finished:
+        paths = []
+        for d in finished:
+            paths.extend(_draft_image_paths(d))
+            db.delete(d)
+        db.commit()
+        _remove_upload_files(paths)
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
@@ -1704,6 +1754,7 @@ def _upload_and_analyze(file, files, condition, details, ref, db: Session, curre
     _ensure_disk_space(db)
 
     saved_paths, local_paths = _store_uploads(uploaded_files)
+    _raise_if_cancelled(current_user.id, ref, local_paths)   # vor Kontingent und KI
     try:
         consume_ai_quota(db, current_user, len(uploaded_files))
     except Exception:
@@ -1733,6 +1784,7 @@ def _upload_and_analyze(file, files, condition, details, ref, db: Session, curre
         image_paths=json.dumps(saved_paths), # Store all images as a JSON list
         client_ref=ref,
     )
+    _delivery_from_attributes(db_draft)
     _raise_if_cancelled(current_user.id, ref, local_paths)
 
     try:
@@ -1772,6 +1824,7 @@ def _upload_turbo(files, ref, db: Session, current_user: models.User):
 
     # 1. Save all uploaded images
     saved_paths, local_paths = _store_uploads(files)
+    _raise_if_cancelled(current_user.id, ref, local_paths)   # vor Kontingent und KI
 
     # Turbo sends every photo through grouping AND one analysis per group, so it
     # is the most expensive path per request.
@@ -1838,6 +1891,7 @@ def _upload_turbo(files, ref, db: Session, current_user: models.User):
             is_turbo=True,
             client_ref=ref,
         ))
+        _delivery_from_attributes(created_drafts[-1])
 
     if not created_drafts:
         _cleanup(local_paths)
@@ -1950,6 +2004,8 @@ def update_draft(
         _reset_ebay_preparation(db_draft)
     for key, value in update_data.items():
         setattr(db_draft, key, value)
+    if "delivery" in update_data:
+        _delivery_from_attributes(db_draft, adopt=False)   # altes KI-Merkmal „Versand“ entfernen
 
     db.commit()
     db.refresh(db_draft)

@@ -161,13 +161,22 @@ def ka_category(page: str, details: Dict[str, str]) -> Optional[str]:
     return node.get("breadcrumb")
 
 
-_KA_SHIPPING_RE = re.compile(r'class="boxedarticle--details--shipping"[^>]*>([^<]*)<')
+_KA_SHIPPING_RE = re.compile(r'class="[^"]*boxedarticle--details--shipping[^"]*"[^>]*>(.{0,200}?)</span>', re.S)
 
 
-def ka_pickup_only(page: str) -> bool:
-    """Neben dem Preis steht „Nur Abholung“ statt „+ Versand ab …“ (live 2026-11)."""
+def ka_delivery(page: str) -> Optional[str]:
+    """Neben dem Preis steht „Nur Abholung“ oder „+ Versand ab …“ (live 2026-11):
+    PICKUP bzw. BOTH (bei KA ist Abholung mit Versand immer mit möglich); None,
+    wenn die Angabe fehlt (dann gilt die Vorgabe des Kontos)."""
     m = _KA_SHIPPING_RE.search(page or "")
-    return bool(m and "nur abholung" in m.group(1).lower())
+    if not m:
+        return None
+    text_ = re.sub(r"<[^>]+>", " ", m.group(1)).lower()
+    if "nur abholung" in text_:
+        return "PICKUP"
+    if "versand" in text_:
+        return "BOTH"
+    return None
 
 
 def ka_condition(details: Dict[str, str]) -> Optional[str]:
@@ -325,8 +334,7 @@ def fill_draft(draft_id: int) -> None:
         if offer.get("price_type") in ("FIXED", "NEGOTIABLE"):
             draft.price_type = offer["price_type"]
         draft.condition = ka_condition(details) or draft.condition
-        if ka_pickup_only(page):
-            draft.delivery = "PICKUP"
+        draft.delivery = ka_delivery(page) or draft.delivery
         category = ka_category(page, details)
         if category:
             draft.category = category

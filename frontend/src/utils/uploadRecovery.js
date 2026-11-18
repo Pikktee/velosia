@@ -98,12 +98,17 @@ export async function waitForUpload(ref, { turbo = false, signal, stillSending =
     }
     await sleep(POLL_MS, signal);
   }
-  throw new Error('Das Erstellen dauert ungewöhnlich lange. Schau gleich in deiner Liste nach.');
+  throw new Error('Das hat zu lange gedauert. Bitte versuche es noch einmal.');
 }
+
+// No answer from the server itself: no HTTP status, or the edge's 502/504 while
+// the server may still be working (its own failures show up in the status).
+const isLost = (err) => !err?.status || err.status === 502 || err.status === 504;
 
 // Run `send()` (the upload request). If its connection is lost, or the app comes
 // back from the background while it is still waiting, the result is fetched by
-// `ref` instead — whichever answers first wins.
+// `ref` instead — whichever answers first wins. When this gives up, the caller
+// cancels `ref` so a late arrival creates nothing (see App.jsx).
 export async function uploadWithRecovery(send, ref, { turbo = false, signal } = {}) {
   let sending = true;
   const direct = send().then(
@@ -130,11 +135,16 @@ export async function uploadWithRecovery(send, ref, { turbo = false, signal } = 
       const err = first.error;
       // A real answer from the server (quota, analysis failed …) or a cancel
       // stands; only a request without any answer is looked up.
-      if (err?.name === 'AbortError' || err?.status) throw err;
+      if (err?.name === 'AbortError' || !isLost(err)) throw err;
     }
     return await Promise.race([
-      // A late direct answer still counts; its error is left to the polling.
-      direct.then((r) => ('value' in r ? r.value : new Promise(() => {}))),
+      // A late direct answer still counts; a real server error too (e.g. 413/422,
+      // which never reach the status), a lost connection is left to the polling.
+      direct.then((r) => {
+        if ('value' in r) return r.value;
+        if (r.error?.name !== 'AbortError' && !isLost(r.error)) throw r.error;
+        return new Promise(() => {});
+      }),
       waitForUpload(ref, { turbo, signal: poll.signal, stillSending: () => sending }),
     ]);
   } finally {

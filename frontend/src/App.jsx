@@ -215,6 +215,15 @@ export default function App() {
     setPendingReturnDraftId(null);
   }, [pendingReturnDraftId, loading, drafts]);
 
+  // The creation failed or was given up: stop the request still on its way and
+  // tell the server, so a late arrival creates no offer the user does not expect
+  // (they will usually just try again).
+  const giveUpUpload = (ref, controller) => {
+    try { controller.abort(); } catch { /* already done */ }
+    cancelUpload(ref);
+    if (uploadRef.current === ref) uploadRef.current = null;
+  };
+
   // The app was closed (or killed by Android) while an offer was being created:
   // pick up its result instead of losing it (utils/uploadRecovery.js).
   const resumePendingUpload = async () => {
@@ -235,6 +244,7 @@ export default function App() {
       setIsAnalysisFinished(true);
     } catch (err) {
       clearPendingUpload();
+      if (err?.name !== 'AbortError') giveUpUpload(pending.ref, controller);
       setAbortController(null);
       setTurboMode(false);
       setView('list');
@@ -416,6 +426,7 @@ export default function App() {
     setUser(null);
     setDrafts([]);
     clearDraftCache();
+    clearPendingUpload();
     setSelectedDraft(null);
     localStorage.removeItem('velosia_user_email');
     setView('list');
@@ -547,6 +558,7 @@ export default function App() {
       setIsAnalysisFinished(true);
     } catch (err) {
       clearPendingUpload();
+      if (err.name !== 'AbortError') giveUpUpload(ref, controller);
       if (err.name === 'AbortError') {
         console.log("Turbo analysis cancelled by user.");
         setView('capture');
@@ -584,6 +596,7 @@ export default function App() {
       setIsAnalysisFinished(true);
     } catch (err) {
       clearPendingUpload();
+      if (err.name !== 'AbortError') giveUpUpload(ref, controller);
       if (err.name === 'AbortError') {
         console.log("Analysis cancelled by user.");
         setView('capture');

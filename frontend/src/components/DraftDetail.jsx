@@ -1220,9 +1220,9 @@ export default function DraftDetail({ draft, user, onBack, onUpdateSuccess, onDe
             ))}
           </div>
           <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.35rem' }}>
-            {delivery === 'PICKUP'
-              ? 'Vinted verkauft immer mit Versand.'
-              : draft.delivery ? 'Gilt für Kleinanzeigen und eBay.' : 'Vorgabe aus deinen Einstellungen.'}
+            {draft.delivery ? 'Gilt für ' : 'Vorgabe · gilt für '}
+            {user?.ebay_enabled ? 'Kleinanzeigen und eBay.' : 'Kleinanzeigen.'}
+            {delivery === 'PICKUP' ? ' Vinted versendet immer.' : ''}
           </div>
         </div>
 

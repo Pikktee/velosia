@@ -43,7 +43,7 @@
   // and in the extension it is a persistent content script — never redefine.
   if (window.__velosia && window.__velosia.__loaded) return;
 
-  var VERSION = "2.8.23";
+  var VERSION = "2.8.24";
   var KA_TITLE_MAX = 65;
 
   // Cut at the last word boundary within `max`; hard cut if that loses too much.
@@ -2301,7 +2301,8 @@
   // Category sheet on the identify page: when eBay cannot derive a category from
   // the title (URL without caty=, e.g. "Spielepaket Konvolut …", live 2026-11)
   // it opens "Kategorie" with "Empfohlen" cards plus the full tree. A plain click
-  // on a card closes the sheet and reloads the page with caty= set. We take the
+  // on a card closes the sheet and sets caty= in the URL without a reload (the app
+  // does not run the engine again for it), so ebayIdentify goes on. We take the
   // card that best matches the draft's own categories, else eBay's first.
   function ebaySuggestedCategoryCards() {
     var cards = document.querySelectorAll(".category-picker__suggested-section .se-field-card__body");
@@ -2367,7 +2368,11 @@
   // pick the condition, continue.
   async function ebayIdentify(draft) {
     var catAsked = false;
+    // eBay may move on to the form within this document; then this run is done
+    // (the form phase has its own run) and must not report or clean up anything.
+    function left() { return (window.location.pathname || "").indexOf("/sl/prelist/identify") !== 0; }
     for (var i = 0; i < 16; i++) {
+      if (left()) return { continued: true, left: true };
       if (ebaySuggestedCategoryCards().length) {
         catAsked = true;
         if (!(await ebayPickSuggestedCategory(draft))) return { condition: false, continued: false, category: false };
@@ -2382,7 +2387,9 @@
       if (document.querySelector("input[type='radio']") || ebayContinueButton()) break;
       await sleep(500);
     }
+    if (left()) return { continued: true, left: true, category: catAsked || undefined };
     var condOk = await ebayPickPrelistCondition(draft);
+    if (left()) return { continued: true, left: true, category: catAsked || undefined };
     if (!condOk) return { condition: false, continued: false, category: catAsked || undefined };
     await sleep(400);
     // On the mobile page the first click only switches the view
@@ -3329,7 +3336,9 @@
       // only keep waiting/retrying while attributes are still missing — when the
       // first pass already caught everything we skip the (formerly fixed) 3.5s.
       setBackdrop("Kategorie-Details werden ausgefüllt …");
-      var wantAttr = Object.keys(parseAttributes(draft)).length;
+      var wantAttr = Object.keys(parseAttributes(draft)).filter(function (k) {
+        return !(deliveryOf(draft) && norm(k).indexOf("versand") !== -1);   // set below instead
+      }).length;
       var attrFilled = fillAttributes(draft);
       for (var pass = 0; pass < 2 && attrFilled.length < wantAttr; pass++) {
         await sleep(900);
@@ -3341,14 +3350,13 @@
       dedupAttr.forEach(function (lbl) { filled.push(lbl); });
 
       // Versand/Abholung after the attributes (the field belongs to them and
-      // renders with them). Pickup-only is a deliberate choice: reported even when
-      // the field is missing; the default only when it could not be set.
+      // renders with them). Categories without the field: nothing to report.
       var kaDelivery = deliveryOf(draft);
       if (kaDelivery) {
         var kd = { found: false, ok: false };
         try { kd = await setKleinanzeigenDelivery(kaDelivery); } catch (e) {}
         if (kd.ok) filled.push(kaDelivery === "PICKUP" ? "Nur Abholung" : "Versand möglich");
-        else if (kaDelivery === "PICKUP" || kd.found) manual.push(kaDelivery === "PICKUP" ? "Versand „Nur Abholung“" : "Versand „Versand möglich“");
+        else if (kd.found) manual.push(kaDelivery === "PICKUP" ? "Versand „Nur Abholung“" : "Versand „Versand möglich“");
       }
 
       // Zustand: set it directly from draft.condition. First the old <select>/pill
@@ -3422,7 +3430,10 @@
         if (bo.checked === wantBo) filled.push(wantBo ? "Preisvorschläge an" : "Festpreis");
       }
 
+      // "Versand und Abholung" is eBay's own preselection; an account may have set
+      // another one there, so BOTH is only clicked when chosen on the draft itself.
       var eDelivery = deliveryOf(draft);
+      if (eDelivery === "BOTH" && String(draft.delivery || "").toUpperCase() !== "BOTH") eDelivery = null;
       if (eDelivery) {
         var ed = { found: false, ok: false };
         try { ed = await ebaySetDelivery(eDelivery); } catch (e) {}
@@ -3513,8 +3524,6 @@
     // then the condition picker (Velosia captures the condition). Brand & size are
     // separate pickers with no reliable source data — still manual.
     if (platform === "vinted") {
-      // Vinted always ships; a pickup-only offer is named so the user can decide.
-      if (deliveryOf(draft) === "PICKUP") manual.push("Nur Abholung gibt es bei Vinted nicht");
       setBackdrop("Kategorie wird ausgewählt …");
       var vintedCatOk = false;
       if (draft.vinted_path || draft.vintedPath || draft.vinted_category || draft.vintedCategory) {
@@ -4114,7 +4123,7 @@
         else {
           var idr = await ebayIdentify(draft);
           moved = idr.continued;
-          sendTelemetry({ platform: platform, phase: phase, condition_ok: draft.condition ? idr.condition : undefined, category_ok: idr.category }, options);
+          if (!idr.left) sendTelemetry({ platform: platform, phase: phase, condition_ok: draft.condition ? idr.condition : undefined, category_ok: idr.category }, options);
         }
       } catch (e) { moved = false; }
       // If nothing moved on, let the user continue by hand instead of being stuck.
