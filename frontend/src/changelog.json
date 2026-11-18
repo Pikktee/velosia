@@ -1,5 +1,12 @@
 [
   {
+    "version": "2.8.22", "date": "2026-11-18",
+    "fixes": true,
+    "items": [
+      "Während ein Angebot entsteht, kannst du die App verlassen – es ist fertig, wenn du zurückkommst."
+    ]
+  },
+  {
     "version": "2.8.21", "date": "2026-11-18",
     "items": [
       {"text": "Vorhandene Kleinanzeigen-Anzeigen samt Fotos, Preis und Beschreibung übernehmen (Einstellungen).", "app": true}

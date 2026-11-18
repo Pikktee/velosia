@@ -43,7 +43,7 @@
   // and in the extension it is a persistent content script — never redefine.
   if (window.__velosia && window.__velosia.__loaded) return;
 
-  var VERSION = "2.8.20";
+  var VERSION = "2.8.22";
   var KA_TITLE_MAX = 65;
 
   // Cut at the last word boundary within `max`; hard cut if that loses too much.
@@ -2266,16 +2266,92 @@
     return false;
   }
 
-  // Phase "identify": skip the catalog product, pick the condition, continue.
+  // Category sheet on the identify page: when eBay cannot derive a category from
+  // the title (URL without caty=, e.g. "Spielepaket Konvolut …", live 2026-11)
+  // it opens "Kategorie" with "Empfohlen" cards plus the full tree. A plain click
+  // on a card closes the sheet and reloads the page with caty= set. We take the
+  // card that best matches the draft's own categories, else eBay's first.
+  function ebaySuggestedCategoryCards() {
+    var cards = document.querySelectorAll(".category-picker__suggested-section .se-field-card__body");
+    var out = [];
+    for (var i = 0; i < cards.length; i++) if (ebayVisible(cards[i])) out.push(cards[i]);
+    return out;
+  }
+
+  function ebayCategoryScore(cardText, draft) {
+    var c = norm(cardText);
+    if (draft.ebay_category) {
+      var e = norm(draft.ebay_category);
+      if (e && (e === c || e.slice(-c.length) === c || c.slice(-e.length) === e)) return 1000;
+    }
+    // Each card word counts once ("Puzzles & Geduldspiele > Puzzles"); a word
+    // from the draft's own categories weighs 2, one only from the title 1; the
+    // leaf's words count twice.
+    var parts = String(cardText || "").split(">");
+    var leafWords = norm(parts[parts.length - 1]).split(" ");
+    var catHay = norm([draft.category, draft.vinted_category].join(" ")).split(" ");
+    var titleHay = norm(draft.title).split(" ");
+    function inHay(w, hay) {
+      for (var h = 0; h < hay.length; h++) {
+        var x = hay[h];
+        if (x.length < 4) continue;
+        if (x === w || (w.length >= 6 && x.length >= 6 && x.slice(0, 6) === w.slice(0, 6))) return true;
+      }
+      return false;
+    }
+    function weight(w) {
+      if (w.length < 4) return 0;
+      return inHay(w, catHay) ? 2 : inHay(w, titleHay) ? 1 : 0;
+    }
+    var score = 0, seen = {};
+    var words = c.split(" ");
+    for (var k = 0; k < words.length; k++) {
+      if (seen[words[k]]) continue;
+      seen[words[k]] = true;
+      var wt = weight(words[k]);
+      score += leafWords.indexOf(words[k]) !== -1 ? wt * 2 : wt;
+    }
+    return score;
+  }
+
+  async function ebayPickSuggestedCategory(draft) {
+    var cards = ebaySuggestedCategoryCards();
+    if (!cards.length) return false;
+    var best = cards[0], bestScore = -1;
+    for (var i = 0; i < cards.length; i++) {
+      var s = ebayCategoryScore(cards[i].innerText || cards[i].textContent, draft);
+      if (s > bestScore) { best = cards[i]; bestScore = s; }   // ties keep eBay's order
+    }
+    try { console.log("Velosia: eBay-Kategorie aus Vorschlägen gewählt (Treffer " + bestScore + ")"); } catch (e) {}
+    best.click();
+    for (var w = 0; w < 16; w++) {
+      await sleep(400);
+      if (!ebaySuggestedCategoryCards().length) return true;
+    }
+    return false;
+  }
+
+  // Phase "identify": pick a category if eBay asks, skip the catalog product,
+  // pick the condition, continue.
   async function ebayIdentify(draft) {
+    var catAsked = false;
     for (var i = 0; i < 16; i++) {
+      if (ebaySuggestedCategoryCards().length) {
+        catAsked = true;
+        if (!(await ebayPickSuggestedCategory(draft))) return { condition: false, continued: false, category: false };
+        await sleep(1200);   // the page reloads its product list for the new category
+        continue;
+      }
+      // Without caty= eBay is about to ask for the category — give the sheet a
+      // moment to open before skipping the product list behind it.
+      if (!catAsked && i < 4 && !/[?&]caty=/.test(window.location.search || "")) { await sleep(500); continue; }
       var skip = ebayButton(["ohne passendes produkt fortfahren", "ohne passendes produkt"]);
       if (skip) { skip.click(); await sleep(1200); break; }
       if (document.querySelector("input[type='radio']") || ebayContinueButton()) break;
       await sleep(500);
     }
     var condOk = await ebayPickPrelistCondition(draft);
-    if (!condOk) return { condition: false, continued: false };
+    if (!condOk) return { condition: false, continued: false, category: catAsked || undefined };
     await sleep(400);
     // On the mobile page the first click only switches the view
     // (view=sellnode-condition, live 2026-11); click again while the page stays.
@@ -2290,11 +2366,11 @@
       go.click();
       for (var w = 0; w < 10; w++) {
         await sleep(500);
-        if (window.location.pathname !== startPath) return { condition: true, continued: true };
+        if (window.location.pathname !== startPath) return { condition: true, continued: true, category: catAsked || undefined };
       }
     }
     // Still here: drop the backdrop (caller) so the user can go on by hand.
-    return { condition: true, continued: false };
+    return { condition: true, continued: false, category: catAsked || undefined };
   }
 
   // Photos already on the eBay form: its counter reads "4/25" or
@@ -3968,7 +4044,7 @@
         else {
           var idr = await ebayIdentify(draft);
           moved = idr.continued;
-          sendTelemetry({ platform: platform, phase: phase, condition_ok: draft.condition ? idr.condition : undefined }, options);
+          sendTelemetry({ platform: platform, phase: phase, condition_ok: draft.condition ? idr.condition : undefined, category_ok: idr.category }, options);
         }
       } catch (e) { moved = false; }
       // If nothing moved on, let the user continue by hand instead of being stuck.

@@ -18,7 +18,8 @@ import Toaster from './components/Toaster';
 import WhatsNewSheet from './components/WhatsNewSheet';
 import { seedWhatsNewIfFresh, takeWhatsNew } from './utils/whatsNew';
 import { showError } from './utils/toast';
-import { getDrafts, deleteDraft, bulkDeleteDrafts, isAuthenticated, setAuthToken, getMe, refreshSessionIfDue, uploadAndAnalyze, uploadTurbo, refreshAllListings } from './utils/api';
+import { getDrafts, deleteDraft, bulkDeleteDrafts, isAuthenticated, setAuthToken, getMe, refreshSessionIfDue, uploadAndAnalyze, uploadTurbo, refreshAllListings, cancelUpload } from './utils/api';
+import { newUploadRef, rememberPendingUpload, clearPendingUpload, readPendingUpload, uploadWithRecovery, waitForUpload, NOT_ARRIVED } from './utils/uploadRecovery';
 import { isImportPending } from './utils/listingImport';
 import { version } from '../package.json';
 
@@ -82,6 +83,8 @@ export default function App() {
   const [route, setRoute] = useState(window.location.hash || '#/');
   const [capturedImages, setCapturedImages] = useState([]);
   const [abortController, setAbortController] = useState(null);
+  // Kennung der laufenden Erstellung (utils/uploadRecovery.js).
+  const uploadRef = useRef(null);
   const [isAnalysisFinished, setIsAnalysisFinished] = useState(false);
   const [tempAnalysisResult, setTempAnalysisResult] = useState(null);
   const [prevView, setPrevView] = useState('list');
@@ -212,6 +215,37 @@ export default function App() {
     setPendingReturnDraftId(null);
   }, [pendingReturnDraftId, loading, drafts]);
 
+  // The app was closed (or killed by Android) while an offer was being created:
+  // pick up its result instead of losing it (utils/uploadRecovery.js).
+  const resumePendingUpload = async () => {
+    const pending = readPendingUpload();
+    if (!pending) return;
+    uploadRef.current = pending.ref;
+    setTurboMode(!!pending.turbo);
+    setAnalysisError(null);
+    setIsAnalysisFinished(false);
+    setView('analyzing');
+    const controller = new AbortController();
+    setAbortController(controller);
+    try {
+      const result = await waitForUpload(pending.ref, { turbo: !!pending.turbo, signal: controller.signal });
+      clearPendingUpload();
+      if (pending.turbo) setTempTurboResults(result);
+      else setTempAnalysisResult(result);
+      setIsAnalysisFinished(true);
+    } catch (err) {
+      clearPendingUpload();
+      setAbortController(null);
+      setTurboMode(false);
+      setView('list');
+      if (err?.name !== 'AbortError') {
+        showError(err?.message === NOT_ARRIVED
+          ? 'Das Erstellen wurde unterbrochen. Bitte nimm die Fotos noch einmal auf.'
+          : analysisErrorMessage(err, 'Das Angebot konnte nicht erstellt werden.'));
+      }
+    }
+  };
+
   // Check auth state on mount and manage redirects
   useEffect(() => {
     const isAuth = isAuthenticated();
@@ -219,6 +253,7 @@ export default function App() {
       setToken(localStorage.getItem('velosia_token'));
       fetchCurrentUser();
       fetchDrafts();
+      resumePendingUpload();
       if (window.location.hash === '#/' || window.location.hash === '#/login' || !window.location.hash) {
         window.location.hash = '#/app';
       }
@@ -498,14 +533,20 @@ export default function App() {
 
     const controller = new AbortController();
     setAbortController(controller);
+    const ref = newUploadRef();
+    uploadRef.current = ref;
+    rememberPendingUpload(ref, true);
 
     try {
       const filesToSend = capturedImages.map(img => img.file);
-      const results = await uploadTurbo(filesToSend, controller.signal);
+      const results = await uploadWithRecovery(
+        () => uploadTurbo(filesToSend, controller.signal, ref), ref, { turbo: true, signal: controller.signal });
+      clearPendingUpload();
 
       setTempTurboResults(results);
       setIsAnalysisFinished(true);
     } catch (err) {
+      clearPendingUpload();
       if (err.name === 'AbortError') {
         console.log("Turbo analysis cancelled by user.");
         setView('capture');
@@ -529,14 +570,20 @@ export default function App() {
 
     const controller = new AbortController();
     setAbortController(controller);
+    const ref = newUploadRef();
+    uploadRef.current = ref;
+    rememberPendingUpload(ref, false);
 
     try {
       const filesToSend = capturedImages.map(img => img.file);
-      const result = await uploadAndAnalyze(filesToSend, condition, details, controller.signal);
+      const result = await uploadWithRecovery(
+        () => uploadAndAnalyze(filesToSend, condition, details, controller.signal, ref), ref, { signal: controller.signal });
+      clearPendingUpload();
 
       setTempAnalysisResult(result);
       setIsAnalysisFinished(true);
     } catch (err) {
+      clearPendingUpload();
       if (err.name === 'AbortError') {
         console.log("Analysis cancelled by user.");
         setView('capture');
@@ -557,8 +604,10 @@ export default function App() {
       setTurboImages([]); // turbo finished successfully -> drop the backup
       setAbortController(null);
 
+      uploadRef.current = null;
       const newIds = tempTurboResults.map((d) => d.id);
-      setDrafts((prev) => [...tempTurboResults, ...prev]);
+      // Deduplicated: a creation picked up after a restart is already in the list.
+      setDrafts((prev) => [...tempTurboResults, ...prev.filter((d) => !newIds.includes(d.id))]);
       setTempTurboResults(null);
       setIsAnalysisFinished(false);
       setTurboMode(false);
@@ -578,7 +627,8 @@ export default function App() {
     setAbortController(null);
 
     // Add to drafts list and show details
-    setDrafts((prev) => [tempAnalysisResult, ...prev]);
+    uploadRef.current = null;
+    setDrafts((prev) => [tempAnalysisResult, ...prev.filter((d) => d.id !== tempAnalysisResult.id)]);
     setSelectedDraft(tempAnalysisResult);
     setIsAnalysisFinished(false);
     setTempAnalysisResult(null);
@@ -586,6 +636,11 @@ export default function App() {
   };
 
   const handleCancelAnalysis = () => {
+    if (uploadRef.current) {
+      cancelUpload(uploadRef.current);
+      uploadRef.current = null;
+      clearPendingUpload();
+    }
     if (abortController) {
       abortController.abort();
     } else {

@@ -6,14 +6,14 @@ export default function AnalysisLoader({ isFinished = false, turbo = false, onCo
 
   const steps = turbo
     ? [
-        "Fotos werden den Artikeln zugeordnet...",
-        "Vergleichspreise werden live gescrapt...",
-        "Deine Angebote werden automatisch erstellt..."
+        "Fotos sortieren",
+        "Preise vergleichen",
+        "Angebote schreiben"
       ]
     : [
-        "Fotos werden per Vision-AI analysiert...",
-        "Vergleichspreise werden live gescrapt...",
-        "Angebot wird finalisiert..."
+        "Fotos ansehen",
+        "Preise vergleichen",
+        "Angebot schreiben"
       ];
 
   useEffect(() => {
@@ -99,12 +99,12 @@ export default function AnalysisLoader({ isFinished = false, turbo = false, onCo
       </svg>
 
       <h3 style={{ fontFamily: 'var(--font-title)', fontSize: '1.35rem', fontWeight: 700, color: 'var(--text-primary)', margin: 0 }}>
-        {turbo ? 'Turbo-Modus läuft...' : 'Velosia arbeitet...'}
+        {turbo ? 'Turbo läuft …' : 'Einen Moment …'}
       </h3>
       <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', marginTop: '0.25rem', marginBottom: 0 }}>
-        {turbo
-          ? 'Aus deinen Fotos werden automatisch mehrere Angebote erstellt.'
-          : 'Dein Angebot wird in Echtzeit analysiert und erstellt.'}
+        {turbo ? 'Aus deinen Fotos entstehen mehrere Angebote.' : 'Dein Angebot entsteht.'}
+        <br />
+        Du kannst die App solange verlassen.
       </p>
 
       {/* Stepper Container */}
@@ -175,7 +175,7 @@ export default function AnalysisLoader({ isFinished = false, turbo = false, onCo
             e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.1)';
           }}
         >
-          Analyse abbrechen
+          Abbrechen
         </button>
       )}
     </div>

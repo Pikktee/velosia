@@ -158,6 +158,11 @@ class Draft(Base):
     # war nicht lesbar, NULL = fertig bzw. nie übernommen.
     import_status = Column(String, nullable=True)
 
+    # Kennung der Erstellung, die das Angebot angelegt hat (V2.8.22): das Frontend
+    # schickt sie mit dem Upload und fragt darüber den Stand ab, wenn die Antwort
+    # unterwegs verloren geht (App im Hintergrund, Verbindung weg).
+    client_ref = Column(String, nullable=True)
+
     created_at = Column(DateTime, default=datetime.utcnow)
 
     # Relationships

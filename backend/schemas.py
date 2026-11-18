@@ -395,3 +395,10 @@ class UserBlockRequest(BaseModel):
     blocked: bool
 
 
+class UploadStatus(BaseModel):
+    # running = Server arbeitet noch, done = Angebote liegen vor, failed = Fehler
+    # (detail für den Nutzer), cancelled = abgebrochen, unknown = nie angekommen
+    # oder vom Neustart vergessen.
+    state: str
+    detail: Optional[str] = None
+    drafts: List[DraftResponse] = []

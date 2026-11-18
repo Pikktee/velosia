@@ -244,7 +244,17 @@ export const updateMe = async (settingsData) => {
 
 // --- DRAFTS API (AUTHENTICATED) ---
 
-export const uploadAndAnalyze = async (files, condition, details, signal) => {
+// Error with the HTTP status, so callers can tell a server answer from a lost
+// connection (no status). Non-JSON bodies (gateway pages) fall back to `fallback`.
+const httpError = async (response, fallback) => {
+  let detail = null;
+  try { detail = (await response.json())?.detail; } catch { /* not JSON */ }
+  const err = new Error(typeof detail === 'string' ? detail : fallback);
+  err.status = response.status;
+  return err;
+};
+
+export const uploadAndAnalyze = async (files, condition, details, signal, clientRef) => {
   const formData = new FormData();
   if (Array.isArray(files)) {
     files.forEach(file => {
@@ -259,6 +269,9 @@ export const uploadAndAnalyze = async (files, condition, details, signal) => {
   if (details) {
     formData.append('details', details);
   }
+  if (clientRef) {
+    formData.append('client_ref', clientRef);
+  }
 
   // For multipart/form-data, fetch determines the boundary automatically.
   // We pass null for Content-Type but still attach the Authorization header!
@@ -272,8 +285,7 @@ export const uploadAndAnalyze = async (files, condition, details, signal) => {
   });
 
   if (!response.ok) {
-    const errorData = await response.json();
-    throw new Error(errorData.detail || 'Fehler beim Hochladen und Analysieren.');
+    throw await httpError(response, 'Fehler beim Hochladen und Analysieren.');
   }
 
   return response.json();
@@ -281,12 +293,15 @@ export const uploadAndAnalyze = async (files, condition, details, signal) => {
 
 // Turbo mode: upload many photos at once, the backend groups them by item
 // and returns an ARRAY of auto-created drafts (one per detected offer).
-export const uploadTurbo = async (files, signal) => {
+export const uploadTurbo = async (files, signal, clientRef) => {
   const formData = new FormData();
   if (Array.isArray(files)) {
     files.forEach(file => formData.append('files', file));
   } else {
     formData.append('files', files);
+  }
+  if (clientRef) {
+    formData.append('client_ref', clientRef);
   }
 
   // For multipart/form-data, fetch sets the boundary itself (Content-Type null),
@@ -301,11 +316,33 @@ export const uploadTurbo = async (files, signal) => {
   });
 
   if (!response.ok) {
-    const errorData = await response.json();
-    throw new Error(errorData.detail || 'Fehler beim Turbo-Upload.');
+    throw await httpError(response, 'Fehler beim Turbo-Upload.');
   }
 
   return response.json();
+};
+
+// State of a creation by its client_ref (see utils/uploadRecovery.js).
+export const getUploadStatus = async (ref, signal) => {
+  const response = await fetch(`${API_BASE_URL}/api/upload/status/${encodeURIComponent(ref)}`, {
+    method: 'GET',
+    headers: getHeaders(),
+    signal,
+  });
+  if (!response.ok) throw await httpError(response, 'Stand der Erstellung nicht abrufbar.');
+  return response.json();
+};
+
+// "Abbrechen" on the loading screen: the server then creates no offer, even if
+// its analysis is already running.
+export const cancelUpload = async (ref) => {
+  try {
+    await fetch(`${API_BASE_URL}/api/upload/${encodeURIComponent(ref)}/cancel`, {
+      method: 'POST',
+      headers: getHeaders(),
+      keepalive: true,
+    });
+  } catch { /* best effort */ }
 };
 
 export const getDrafts = async () => {

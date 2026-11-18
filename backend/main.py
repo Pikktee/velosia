@@ -8,6 +8,7 @@ import re
 import json
 import logging
 import time
+import threading
 import asyncio
 import base64
 import binascii
@@ -150,6 +151,8 @@ def run_migrations():
         ("ebay_aspects", "VARCHAR"),
         # Übernahme vorhandener Anzeigen (added V2.8.21)
         ("import_status", "VARCHAR(20)"),
+        # Kennung der Erstellung (added V2.8.22, /api/upload/status)
+        ("client_ref", "VARCHAR(64)"),
     ]:
         try:
             db.execute(text(f"ALTER TABLE drafts ADD COLUMN {col_name} {col_type}"))
@@ -249,7 +252,7 @@ run_migrations()
 _API_DOCS = os.getenv("ENABLE_API_DOCS", "").lower() in ("1", "true", "yes")
 app = FastAPI(
     title="Velosia API",
-    version="2.8.21",
+    version="2.8.22",
     docs_url="/docs" if _API_DOCS else None,
     redoc_url="/redoc" if _API_DOCS else None,
     openapi_url="/openapi.json" if _API_DOCS else None,
@@ -1563,15 +1566,129 @@ def _store_uploads(files: List[UploadFile]):
     return saved_paths, local_paths
 
 
+# ── Erstellungen nachverfolgen (V2.8.22) ─────────────────────────────────────
+# Eine Erstellung ist eine lange Anfrage (Upload + KI, oft 20–40 s). Geht die App
+# dabei in den Hintergrund, kappt Android gern die Verbindung — der Server legt
+# das Angebot trotzdem an, die Antwort kommt aber nie an. Deshalb schickt das
+# Frontend eine Kennung (client_ref) mit und fragt bei Verbindungsabbruch oder
+# Rückkehr in die App GET /api/upload/status/{ref} ab. Laufende/gescheiterte
+# Erstellungen stehen prozesslokal im Speicher (ein uvicorn-Worker, siehe
+# rate_limit.py); fertige erkennt der Status an drafts.client_ref, das übersteht
+# auch einen Neustart.
+_UPLOAD_REF_RE = re.compile(r"^[A-Za-z0-9-]{8,64}$")
+_UPLOAD_JOB_TTL_S = 3600
+_upload_jobs: dict = {}
+_upload_jobs_lock = threading.Lock()
+
+
+def _valid_upload_ref(ref: Optional[str]) -> Optional[str]:
+    return ref if ref and _UPLOAD_REF_RE.match(ref) else None
+
+
+def _upload_job_set(user_id: int, ref: Optional[str], **fields):
+    if not ref:
+        return
+    now = time.time()
+    with _upload_jobs_lock:
+        for k in [k for k, v in _upload_jobs.items() if now - v["at"] > _UPLOAD_JOB_TTL_S]:
+            _upload_jobs.pop(k, None)
+        job = _upload_jobs.setdefault((user_id, ref), {"state": "running", "detail": None, "cancelled": False})
+        job.update(fields)
+        job["at"] = now
+
+
+def _upload_job_get(user_id: int, ref: str) -> Optional[dict]:
+    with _upload_jobs_lock:
+        job = _upload_jobs.get((user_id, ref))
+        return dict(job) if job else None
+
+
+def _upload_cancelled(user_id: int, ref: Optional[str]) -> bool:
+    job = _upload_job_get(user_id, ref) if ref else None
+    return bool(job and job.get("cancelled"))
+
+
+@contextmanager
+def _tracked_upload(user_id: int, ref: Optional[str]):
+    """Hält den Stand einer Erstellung für /api/upload/status fest."""
+    _upload_job_set(user_id, ref, state="running", detail=None)
+    try:
+        yield
+    except HTTPException as e:
+        cancelled = _upload_cancelled(user_id, ref)
+        _upload_job_set(user_id, ref, state="cancelled" if cancelled else "failed",
+                        detail=None if cancelled else str(e.detail))
+        raise
+    except Exception:
+        _upload_job_set(user_id, ref, state="failed",
+                        detail="Das Angebot konnte nicht erstellt werden. Bitte versuche es noch einmal.")
+        raise
+    else:
+        _upload_job_set(user_id, ref, state="done")
+
+
+def _raise_if_cancelled(user_id: int, ref: Optional[str], local_paths: list):
+    """Vor dem Speichern: wurde die Erstellung abgebrochen, entsteht kein Angebot."""
+    if _upload_cancelled(user_id, ref):
+        _remove_local_files(local_paths)
+        raise HTTPException(status_code=409, detail="Die Erstellung wurde abgebrochen.")
+
+
+@app.get("/api/upload/status/{ref}", response_model=schemas.UploadStatus)
+def upload_status(
+    ref: str,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user)
+):
+    if not _valid_upload_ref(ref):
+        raise HTTPException(status_code=404, detail="Unbekannte Erstellung.")
+    drafts = (
+        db.query(models.Draft)
+        .filter(models.Draft.user_id == current_user.id, models.Draft.client_ref == ref)
+        .order_by(models.Draft.id.desc())
+        .all()
+    )
+    if drafts:
+        return {"state": "done", "drafts": drafts}
+    job = _upload_job_get(current_user.id, ref)
+    if not job:
+        return {"state": "unknown"}
+    state = job["state"]
+    if state == "done":   # fertig, aber die Angebote sind schon wieder gelöscht
+        state = "unknown"
+    return {"state": state, "detail": job.get("detail")}
+
+
+@app.post("/api/upload/{ref}/cancel", status_code=status.HTTP_204_NO_CONTENT)
+def cancel_upload(
+    ref: str,
+    current_user: models.User = Depends(get_current_user)
+):
+    """„Abbrechen“ im Ladebildschirm: die laufende Analyse legt danach kein Angebot an."""
+    if _valid_upload_ref(ref):
+        if _upload_job_get(current_user.id, ref):
+            _upload_job_set(current_user.id, ref, cancelled=True)
+        else:   # Upload noch unterwegs: kommt er doch an, wird er verworfen
+            _upload_job_set(current_user.id, ref, state="cancelled", cancelled=True)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
 @app.post("/api/upload", response_model=schemas.DraftResponse, status_code=status.HTTP_201_CREATED)
 def upload_and_analyze(
     file: Optional[UploadFile] = File(None), 
     files: Optional[List[UploadFile]] = File(None),
     condition: Optional[str] = Form(None, max_length=50),
     details: Optional[str] = Form(None, max_length=1000),
+    client_ref: Optional[str] = Form(None, max_length=64),
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user)
 ):
+    ref = _valid_upload_ref(client_ref)
+    with _tracked_upload(current_user.id, ref):
+        return _upload_and_analyze(file, files, condition, details, ref, db, current_user)
+
+
+def _upload_and_analyze(file, files, condition, details, ref, db: Session, current_user: models.User):
     uploaded_files = []
     if files:
         uploaded_files = files
@@ -1609,9 +1726,11 @@ def upload_and_analyze(
         attributes=analysis.get("attributes"), # Store JSON string of Kleinanzeigen attribute fields
         vinted_category=analysis.get("vinted_category"), # Vinted breadcrumb (separate taxonomy)
         image_path=saved_paths[0], # Primary image for backward compatibility
-        image_paths=json.dumps(saved_paths) # Store all images as a JSON list
+        image_paths=json.dumps(saved_paths), # Store all images as a JSON list
+        client_ref=ref,
     )
-    
+    _raise_if_cancelled(current_user.id, ref, local_paths)
+
     try:
         db.add(db_draft)
         db.commit()
@@ -1627,9 +1746,16 @@ def upload_and_analyze(
 @app.post("/api/upload/turbo", response_model=List[schemas.DraftResponse], status_code=status.HTTP_201_CREATED)
 def upload_turbo(
     files: List[UploadFile] = File(...),
+    client_ref: Optional[str] = Form(None, max_length=64),
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user)
 ):
+    ref = _valid_upload_ref(client_ref)
+    with _tracked_upload(current_user.id, ref):
+        return _upload_turbo(files, ref, db, current_user)
+
+
+def _upload_turbo(files, ref, db: Session, current_user: models.User):
     """
     Turbo mode: accepts many photos of several different items in one go,
     lets the AI group the photos by item, then auto-creates one finished
@@ -1705,7 +1831,8 @@ def upload_turbo(
             vinted_category=analysis.get("vinted_category"),
             image_path=group_saved[0],
             image_paths=json.dumps(group_saved),
-            is_turbo=True
+            is_turbo=True,
+            client_ref=ref,
         ))
 
     if not created_drafts:
@@ -1714,6 +1841,7 @@ def upload_turbo(
 
     # Remove images that belong to failed groups (no draft references them)
     _cleanup([p for j, p in enumerate(local_paths) if j not in used_indices])
+    _raise_if_cancelled(current_user.id, ref, [p for j, p in enumerate(local_paths) if j in used_indices])
 
     try:
         for d in created_drafts:
