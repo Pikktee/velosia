@@ -14,6 +14,7 @@ _DESCRIPTION = 5000
 Platform = Literal["vinted", "kleinanzeigen", "ebay"]
 # Kleinanzeigen price type: Festpreis / VB (Verhandlungsbasis).
 PriceType = Literal["FIXED", "NEGOTIABLE"]
+Delivery = Literal["BOTH", "SHIP", "PICKUP"]
 
 # Auth Token Schemas
 class Token(BaseModel):
@@ -54,6 +55,7 @@ class UserResponse(UserBase):
     default_shipping: Optional[str] = None
     auto_submit: Optional[bool] = False
     default_price_type: Optional[str] = "FIXED"
+    default_delivery: Optional[str] = "BOTH"
     ebay_enabled: Optional[bool] = False
     is_admin: Optional[bool] = False
 
@@ -95,6 +97,7 @@ class UserUpdate(BaseModel):
     default_shipping: Optional[str] = Field(None, max_length=_SHORT)
     auto_submit: Optional[bool] = None
     default_price_type: Optional[PriceType] = None
+    default_delivery: Optional[Delivery] = None
     ebay_enabled: Optional[bool] = None
 
 # Draft Schemas
@@ -108,6 +111,7 @@ class DraftBase(BaseModel):
     attributes: Optional[str] = None # JSON string: {"Größe": "M", "Marke": "Nike", ...}
     vinted_category: Optional[str] = None # Vinted breadcrumb: "Damen > Kleidung > Jeans > Boyfriend Jeans"
     price_type: Optional[str] = None # "FIXED" | "NEGOTIABLE" | None (= account preset)
+    delivery: Optional[str] = None # "BOTH" | "SHIP" | "PICKUP" | None (= account preset)
     image_paths: Optional[str] = None
     is_turbo: Optional[bool] = False
 
@@ -127,6 +131,7 @@ class DraftUpdate(DraftBase):
     image_paths: Optional[str] = Field(None, max_length=10_000)
     # None resets the draft to the account preset.
     price_type: Optional[PriceType] = None
+    delivery: Optional[Delivery] = None
 
 class DraftResponse(DraftBase):
     id: int
@@ -140,6 +145,8 @@ class DraftResponse(DraftBase):
     # price_type, or the account preset when the draft has none (Kleinanzeigen
     # "Festpreis"/"VB"). This is what the autofill engine sets.
     price_type_effective: Optional[str] = None
+    # delivery, or the account preset (Versand/Abholung on Kleinanzeigen and eBay).
+    delivery_effective: Optional[str] = None
     # Published-listing tracking (filled once a listing goes live).
     ka_listing_id: Optional[str] = None
     ka_listing_url: Optional[str] = None

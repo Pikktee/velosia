@@ -43,7 +43,7 @@
   // and in the extension it is a persistent content script — never redefine.
   if (window.__velosia && window.__velosia.__loaded) return;
 
-  var VERSION = "2.8.22";
+  var VERSION = "2.8.23";
   var KA_TITLE_MAX = 65;
 
   // Cut at the last word boundary within `max`; hard cut if that loses too much.
@@ -632,6 +632,9 @@
       var value = attrs[key] == null ? "" : String(attrs[key]);
       if (!label || !value) return;
 
+      // Versand comes from the delivery setting (setKleinanzeigenDelivery) when
+      // the backend sends one; an AI/imported attribute must not override it.
+      if (label.indexOf("versand") !== -1 && deliveryOf(draft)) return;
       // Shipping is usually a checkbox/radio on Kleinanzeigen, not a select.
       if (label.indexOf("versand") !== -1) {
         var wantsShip = norm(value).indexOf("moglich") !== -1 || norm(value).indexOf("versand") !== -1;
@@ -717,6 +720,35 @@
   function kaRadioLabelText(radio) {
     var lbl = radio.id ? document.querySelector("label[for='" + radio.id + "']") : null;
     return (lbl || radio.closest("label") || {}).textContent || "";
+  }
+
+  // Versand/Abholung (V2.8.23): draft.delivery_effective = BOTH | SHIP | PICKUP
+  // (the draft's own choice or the account preset). null = not sent (old backend).
+  function deliveryOf(draft) {
+    var d = String((draft && (draft.delivery_effective || draft.delivery)) || "").toUpperCase();
+    return d === "BOTH" || d === "SHIP" || d === "PICKUP" ? d : null;
+  }
+
+  var DELIVERY_REPORT = { BOTH: "Versand und Abholung", SHIP: "Nur Versand", PICKUP: "Nur Abholung" };
+
+  // Kleinanzeigen "Versand": radios "Versand möglich" (#ad-shipping-enabled-yes,
+  // value ja) / "Nur Abholung" (#ad-shipping-enabled-no), name
+  // attributeMap[<kategorie>.versand]; a plain click commits (live 2026-11). KA has
+  // no "only shipping" — pickup is always by arrangement — so SHIP and BOTH are
+  // "Versand möglich". Some categories have no such field.
+  async function setKleinanzeigenDelivery(delivery) {
+    var wantShip = delivery !== "PICKUP";
+    var el = document.getElementById(wantShip ? "ad-shipping-enabled-yes" : "ad-shipping-enabled-no");
+    if (!el) {
+      var radios = document.querySelectorAll("input[type='radio'][name*='versand']");
+      for (var i = 0; i < radios.length && !el; i++) {
+        var v = String(radios[i].value || "").toLowerCase();
+        if (wantShip ? v === "ja" : v === "nein") el = radios[i];
+      }
+    }
+    if (!el) return { found: false, ok: false };
+    if (!el.checked) { try { el.click(); } catch (e) {} await sleep(300); }
+    return { found: true, ok: !!el.checked };
   }
 
   async function setKleinanzeigenPriceType(type) {
@@ -2384,6 +2416,23 @@
     return isNaN(n) ? null : n;
   }
 
+  // "Lieferung": three toggle cards "Versand und Abholung" / "Nur Versand" /
+  // "Nur Abholung" (button.toggle-button, choice in aria-pressed, a plain click
+  // commits and autosaves; same in narrow and wide layouts, live 2026-11).
+  var EBAY_DELIVERY_LABEL = { BOTH: "versand und abholung", SHIP: "nur versand", PICKUP: "nur abholung" };
+
+  async function ebaySetDelivery(delivery) {
+    var want = EBAY_DELIVERY_LABEL[delivery];
+    var btns = document.querySelectorAll("button.toggle-button, button[aria-pressed]");
+    var hit = null;
+    for (var i = 0; i < btns.length && !hit; i++) {
+      if (ebayLabelOf(btns[i]) === want && btns[i].offsetParent !== null) hit = btns[i];
+    }
+    if (!hit) return { found: false, ok: false };
+    if (hit.getAttribute("aria-pressed") !== "true") { hit.click(); await sleep(600); }
+    return { found: true, ok: hit.getAttribute("aria-pressed") === "true" };
+  }
+
   // Phase "drafts" ("Entwürfe verwalten"): nothing is done there any more. The
   // earlier redirect to it was the engine's own click on "Speichern" (fixed in
   // 2.8.11); continuing some draft by title could pick another item's draft.
@@ -3291,6 +3340,17 @@
       attrCount = dedupAttr.length;
       dedupAttr.forEach(function (lbl) { filled.push(lbl); });
 
+      // Versand/Abholung after the attributes (the field belongs to them and
+      // renders with them). Pickup-only is a deliberate choice: reported even when
+      // the field is missing; the default only when it could not be set.
+      var kaDelivery = deliveryOf(draft);
+      if (kaDelivery) {
+        var kd = { found: false, ok: false };
+        try { kd = await setKleinanzeigenDelivery(kaDelivery); } catch (e) {}
+        if (kd.ok) filled.push(kaDelivery === "PICKUP" ? "Nur Abholung" : "Versand möglich");
+        else if (kaDelivery === "PICKUP" || kd.found) manual.push(kaDelivery === "PICKUP" ? "Versand „Nur Abholung“" : "Versand „Versand möglich“");
+      }
+
       // Zustand: set it directly from draft.condition. First the old <select>/pill
       // layout, then the new 2026 React modal (radios + "Bestätigen"). Report once.
       var zustandDone = filled.some(function (l) { return norm(l).indexOf("zustand") !== -1; });
@@ -3360,6 +3420,14 @@
         var wantBo = ptE === "NEGOTIABLE";
         if (bo.checked !== wantBo) { try { bo.click(); } catch (e) {} await sleep(300); }
         if (bo.checked === wantBo) filled.push(wantBo ? "Preisvorschläge an" : "Festpreis");
+      }
+
+      var eDelivery = deliveryOf(draft);
+      if (eDelivery) {
+        var ed = { found: false, ok: false };
+        try { ed = await ebaySetDelivery(eDelivery); } catch (e) {}
+        if (ed.ok) filled.push(DELIVERY_REPORT[eDelivery]);
+        else if (eDelivery !== "BOTH" || ed.found) manual.push("Lieferung „" + DELIVERY_REPORT[eDelivery] + "“");
       }
 
       setBackdrop("Zustand …");
@@ -3445,6 +3513,8 @@
     // then the condition picker (Velosia captures the condition). Brand & size are
     // separate pickers with no reliable source data — still manual.
     if (platform === "vinted") {
+      // Vinted always ships; a pickup-only offer is named so the user can decide.
+      if (deliveryOf(draft) === "PICKUP") manual.push("Nur Abholung gibt es bei Vinted nicht");
       setBackdrop("Kategorie wird ausgewählt …");
       var vintedCatOk = false;
       if (draft.vinted_path || draft.vintedPath || draft.vinted_category || draft.vintedCategory) {

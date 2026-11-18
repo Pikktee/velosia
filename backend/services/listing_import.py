@@ -161,6 +161,15 @@ def ka_category(page: str, details: Dict[str, str]) -> Optional[str]:
     return node.get("breadcrumb")
 
 
+_KA_SHIPPING_RE = re.compile(r'class="boxedarticle--details--shipping"[^>]*>([^<]*)<')
+
+
+def ka_pickup_only(page: str) -> bool:
+    """Neben dem Preis steht „Nur Abholung“ statt „+ Versand ab …“ (live 2026-11)."""
+    m = _KA_SHIPPING_RE.search(page or "")
+    return bool(m and "nur abholung" in m.group(1).lower())
+
+
 def ka_condition(details: Dict[str, str]) -> Optional[str]:
     return KA_CONDITION.get((details.get("Zustand") or "").strip().lower())
 
@@ -316,6 +325,8 @@ def fill_draft(draft_id: int) -> None:
         if offer.get("price_type") in ("FIXED", "NEGOTIABLE"):
             draft.price_type = offer["price_type"]
         draft.condition = ka_condition(details) or draft.condition
+        if ka_pickup_only(page):
+            draft.delivery = "PICKUP"
         category = ka_category(page, details)
         if category:
             draft.category = category

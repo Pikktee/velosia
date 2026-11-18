@@ -115,6 +115,8 @@ def run_migrations():
         ("vinted_status_at", "DATETIME"),
         # Festpreis/VB per draft (added V2.7.57); NULL = account preset
         ("price_type", "VARCHAR(20)"),
+        # Versand/Abholung per draft (added V2.8.23); NULL = account preset
+        ("delivery", "VARCHAR(20)"),
         # Price read from the live listing page (added V2.7.60)
         ("ka_online_price", "FLOAT"),
         ("ka_online_price_type", "VARCHAR(20)"),
@@ -203,6 +205,8 @@ def run_migrations():
         ("token_version", "INTEGER DEFAULT 0"),
         # Festpreis/VB preset for new listings (added V2.7.57)
         ("default_price_type", "VARCHAR(20) DEFAULT 'FIXED'"),
+        # Versand/Abholung preset (added V2.8.23)
+        ("default_delivery", "VARCHAR(20) DEFAULT 'BOTH'"),
         # eBay as third platform, opt-in (added V2.8)
         ("ebay_enabled", "BOOLEAN DEFAULT 0"),
     ]:
@@ -252,7 +256,7 @@ run_migrations()
 _API_DOCS = os.getenv("ENABLE_API_DOCS", "").lower() in ("1", "true", "yes")
 app = FastAPI(
     title="Velosia API",
-    version="2.8.22",
+    version="2.8.23",
     docs_url="/docs" if _API_DOCS else None,
     redoc_url="/redoc" if _API_DOCS else None,
     openapi_url="/openapi.json" if _API_DOCS else None,

@@ -1,5 +1,11 @@
 [
   {
+    "version": "2.8.23", "date": "2026-11-18",
+    "items": [
+      "Versand oder Abholung: Vorgabe in den Einstellungen, pro Angebot änderbar – wird bei Kleinanzeigen und eBay eingetragen."
+    ]
+  },
+  {
     "version": "2.8.22", "date": "2026-11-18",
     "fixes": true,
     "items": [

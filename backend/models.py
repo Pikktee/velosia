@@ -30,6 +30,9 @@ class User(Base):
     # Price type preset for new listings on Kleinanzeigen: "FIXED" (Festpreis) or
     # "NEGOTIABLE" (VB). A draft may override it (Draft.price_type).
     default_price_type = Column(String, default="FIXED", nullable=True)
+    # Übergabe-Vorgabe (V2.8.23): "BOTH" (Versand und Abholung), "SHIP" (nur
+    # Versand) oder "PICKUP" (nur Abholung). Ein Angebot kann abweichen (Draft.delivery).
+    default_delivery = Column(String, default="BOTH", nullable=True)
     # When True the account is suspended: login + all authenticated requests are
     # rejected. Set/cleared by an admin via /api/admin/users/{id}/block.
     is_blocked = Column(Boolean, default=False, nullable=True)
@@ -93,6 +96,9 @@ class Draft(Base):
     # "FIXED" (Festpreis) / "NEGOTIABLE" (VB), or None = the account preset
     # (User.default_price_type). Clients read price_type_effective.
     price_type = Column(String, nullable=True)
+    # "BOTH" / "SHIP" / "PICKUP", or None = the account preset (User.default_delivery).
+    # Clients read delivery_effective.
+    delivery = Column(String, nullable=True)
     # True if this draft was auto-created in "Turbo" batch mode (multiple offers from one photo session)
     is_turbo = Column(Boolean, default=False, nullable=True)
 
@@ -174,6 +180,13 @@ class Draft(Base):
         else the account preset, else Festpreis (the behaviour before 2.7.57)."""
         preset = self.user.default_price_type if self.user else None
         return self.price_type or preset or "FIXED"
+
+    @property
+    def delivery_effective(self) -> str:
+        """Versand/Abholung, mit dem das Angebot eingestellt wird: eigene Wahl, sonst
+        die Vorgabe, sonst beides (das Verhalten vor 2.8.23)."""
+        preset = self.user.default_delivery if self.user else None
+        return self.delivery or preset or "BOTH"
 
     @property
     def category_path(self) -> Optional[str]:

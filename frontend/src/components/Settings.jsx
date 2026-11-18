@@ -6,6 +6,7 @@ import DataExportSection from './DataExport';
 import SalesOverview from './SalesOverview';
 import { canImportListings, startListingImport } from '../utils/listingImport';
 import { PRICE_TYPES } from '../utils/priceType';
+import { DELIVERY_OPTIONS } from '../utils/delivery';
 import { version } from '../../package.json';
 import LegalModal, { LegalLinks } from './LegalModal';
 
@@ -164,7 +165,7 @@ export default function Settings({ user, drafts = [], onLogout, onUpdateUser, on
   const [aiCustomFooter, setAiCustomFooter] = useState('');
   const [pricingOffset, setPricingOffset] = useState(0);
   const [defaultZip, setDefaultZip] = useState('');
-  const [defaultShipping, setDefaultShipping] = useState('');
+  const [defaultDelivery, setDefaultDelivery] = useState('BOTH');
   const [autoSubmit, setAutoSubmit] = useState(false);
   const [priceType, setPriceType] = useState('FIXED');
   const [ebayEnabled, setEbayEnabled] = useState(false);
@@ -184,7 +185,7 @@ export default function Settings({ user, drafts = [], onLogout, onUpdateUser, on
       setAiCustomFooter(user.ai_custom_footer || '');
       setPricingOffset(user.pricing_offset || 0);
       setDefaultZip(user.default_zip || '');
-      setDefaultShipping(user.default_shipping || '');
+      setDefaultDelivery(user.default_delivery || 'BOTH');
       setAutoSubmit(user.auto_submit || false);
       setPriceType(user.default_price_type || 'FIXED');
       setEbayEnabled(!!user.ebay_enabled);
@@ -222,7 +223,7 @@ export default function Settings({ user, drafts = [], onLogout, onUpdateUser, on
         pricing_offset: Number(pricingOffset),
         default_zip: defaultZip,
         default_city: '', // Ort ist überflüssig, PLZ reicht
-        default_shipping: defaultShipping,
+        default_delivery: defaultDelivery,
         auto_submit: autoSubmit,
         default_price_type: priceType,
         ebay_enabled: ebayEnabled,
@@ -258,13 +259,13 @@ export default function Settings({ user, drafts = [], onLogout, onUpdateUser, on
       aiCustomFooter !== (user.ai_custom_footer || '') ||
       Number(pricingOffset) !== (user.pricing_offset || 0) ||
       defaultZip !== (user.default_zip || '') ||
-      defaultShipping !== (user.default_shipping || '') ||
+      defaultDelivery !== (user.default_delivery || 'BOTH') ||
       autoSubmit !== (user.auto_submit || false) ||
       priceType !== (user.default_price_type || 'FIXED') ||
       ebayEnabled !== !!user.ebay_enabled;
     
     setHasChanges(hasDiff);
-  }, [aiTone, aiIntro, aiCustomTone, aiCustomFooter, pricingOffset, defaultZip, defaultShipping, autoSubmit, priceType, ebayEnabled, user]);
+  }, [aiTone, aiIntro, aiCustomTone, aiCustomFooter, pricingOffset, defaultZip, defaultDelivery, autoSubmit, priceType, ebayEnabled, user]);
 
   // Debounced auto-save effect
   useEffect(() => {
@@ -278,11 +279,11 @@ export default function Settings({ user, drafts = [], onLogout, onUpdateUser, on
     setSaving(true);
     const delayDebounceFn = setTimeout(saveSettings, 1000); // save 1 second after last change
     return () => clearTimeout(delayDebounceFn);
-  }, [aiTone, aiIntro, aiCustomTone, aiCustomFooter, pricingOffset, defaultZip, defaultShipping, autoSubmit, priceType, ebayEnabled, hasChanges]);
+  }, [aiTone, aiIntro, aiCustomTone, aiCustomFooter, pricingOffset, defaultZip, defaultDelivery, autoSubmit, priceType, ebayEnabled, hasChanges]);
 
   // Latest settings values, reachable from the unmount cleanup below.
   const latestRef = useRef({});
-  latestRef.current = { aiTone, aiIntro, aiCustomTone, aiCustomFooter, pricingOffset, defaultZip, defaultShipping, autoSubmit, priceType, ebayEnabled, hasChanges };
+  latestRef.current = { aiTone, aiIntro, aiCustomTone, aiCustomFooter, pricingOffset, defaultZip, defaultDelivery, autoSubmit, priceType, ebayEnabled, hasChanges };
 
   // Flush a still-pending debounced save on unmount — e.g. the user leaves Settings
   // within the 1s debounce window, which clears the timer and loses the last change.
@@ -299,7 +300,7 @@ export default function Settings({ user, drafts = [], onLogout, onUpdateUser, on
           pricing_offset: Number(l.pricingOffset),
           default_zip: l.defaultZip,
           default_city: '',
-          default_shipping: l.defaultShipping,
+          default_delivery: l.defaultDelivery,
           auto_submit: l.autoSubmit,
           default_price_type: l.priceType,
           ebay_enabled: l.ebayEnabled,
@@ -517,20 +518,26 @@ export default function Settings({ user, drafts = [], onLogout, onUpdateUser, on
 
                 <div className="form-group" style={{ marginBottom: 0 }}>
                   <label style={{ display: 'flex', alignItems: 'center' }}>
-                    Standard-Versandart
+                    Versand oder Abholung
                     <span className="tooltip-container">
                       <HelpCircle size={14} />
-                      <span className="tooltip-text">Deine übliche Versandart.</span>
+                      <span className="tooltip-text">Vorgabe für Kleinanzeigen und eBay, pro Angebot änderbar. Vinted verkauft immer mit Versand.</span>
                     </span>
                   </label>
-                  <input
-                    type="text"
-                    className="form-control"
-                    placeholder="z.B. DHL Paket versichert"
-                    maxLength={200}
-                    value={defaultShipping}
-                    onChange={(e) => setDefaultShipping(e.target.value)}
-                  />
+                  <div className="segmented-control" role="radiogroup" aria-label="Versand oder Abholung">
+                    {DELIVERY_OPTIONS.map(({ value, label }) => (
+                      <button
+                        key={value}
+                        type="button"
+                        role="radio"
+                        aria-checked={defaultDelivery === value}
+                        className={`segmented-control-btn ${defaultDelivery === value ? 'active' : ''}`}
+                        onClick={() => setDefaultDelivery(value)}
+                      >
+                        {label}
+                      </button>
+                    ))}
+                  </div>
                 </div>
 
                 <div className="form-group" style={{ marginBottom: 0 }}>

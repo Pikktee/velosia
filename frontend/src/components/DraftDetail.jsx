@@ -7,6 +7,7 @@ import { statusMeta, listingPlatforms, TERMINAL, onlineChanges, detailSummary, p
 import { StatusSheet, PublishSheet, PlatformMark } from './ListingSheets';
 import { showError, showToast } from '../utils/toast';
 import { PRICE_TYPES } from '../utils/priceType';
+import { DELIVERY_OPTIONS } from '../utils/delivery';
 import RelistSheet from './RelistSheet';
 import OnlineChangesSheet from './OnlineChangesSheet';
 import { takePendingRelist, takeRecheck, rememberRecheck } from '../utils/relist';
@@ -60,6 +61,7 @@ export default function DraftDetail({ draft, user, onBack, onUpdateSuccess, onDe
   const [condition, setCondition] = useState(draft.condition || 'Gut');
   const [price, setPrice] = useState(draft.price || 0);
   const [priceType, setPriceType] = useState(draft.price_type_effective || 'FIXED');
+  const [delivery, setDelivery] = useState(draft.delivery_effective || 'BOTH');
   
   const [saveStatus, setSaveStatus] = useState('saved'); // 'saved', 'saving', 'error'
   const saveStatusRef = useRef(saveStatus);
@@ -299,6 +301,21 @@ export default function DraftDetail({ draft, user, onBack, onUpdateSuccess, onDe
       console.error(err);
       setPriceType(previous);
       showError('Die Preisart konnte nicht gespeichert werden.');
+    }
+  };
+
+  // Versand/Abholung: like the price type a single tap, saved right away.
+  const handleDeliveryChange = async (value) => {
+    if (value === delivery) return;
+    const previous = delivery;
+    setDelivery(value);
+    try {
+      const updated = await updateDraft(draft.id, { delivery: value });
+      onUpdateSuccess(updated);
+    } catch (err) {
+      console.error(err);
+      setDelivery(previous);
+      showError('Versand oder Abholung konnte nicht gespeichert werden.');
     }
   };
 
@@ -1182,6 +1199,30 @@ export default function DraftDetail({ draft, user, onBack, onUpdateSuccess, onDe
           </div>
           <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.35rem' }}>
             {draft.price_type ? 'Gilt für Kleinanzeigen.' : 'Vorgabe aus deinen Einstellungen · gilt für Kleinanzeigen.'}
+          </div>
+        </div>
+
+        {/* Versand oder Abholung */}
+        <div className="form-group" style={{ marginBottom: 0 }}>
+          <label style={{ marginBottom: '0.5rem' }}>Versand oder Abholung</label>
+          <div className="segmented-control" role="radiogroup" aria-label="Versand oder Abholung">
+            {DELIVERY_OPTIONS.map(({ value, label }) => (
+              <button
+                key={value}
+                type="button"
+                role="radio"
+                aria-checked={delivery === value}
+                className={`segmented-control-btn ${delivery === value ? 'active' : ''}`}
+                onClick={() => handleDeliveryChange(value)}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+          <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.35rem' }}>
+            {delivery === 'PICKUP'
+              ? 'Vinted verkauft immer mit Versand.'
+              : draft.delivery ? 'Gilt für Kleinanzeigen und eBay.' : 'Vorgabe aus deinen Einstellungen.'}
           </div>
         </div>
 
