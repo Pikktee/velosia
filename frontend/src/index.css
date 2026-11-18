@@ -5649,3 +5649,40 @@ textarea.form-control.autogrow.single { min-height: 48px; line-height: 1.4; }
 }
 .undo-btn:disabled { opacity: 0.35; cursor: default; }
 .undo-btn:not(:disabled):active { background: rgba(255, 255, 255, 0.08); }
+
+/* Übernommene Anzeige, deren Fotos der Server noch lädt (2.8.21): die Vorschau
+   schimmert wie das Skeleton, bis das erste Foto da ist. */
+.draft-list-item-thumb-container.is-importing {
+  background-color: rgba(255, 255, 255, 0.05);
+  background-image: linear-gradient(
+    100deg,
+    rgba(255, 255, 255, 0) 30%,
+    rgba(255, 255, 255, 0.07) 45%,
+    rgba(9, 176, 183, 0.06) 50%,
+    rgba(255, 255, 255, 0) 65%
+  );
+  background-size: 200vw 100%;
+  background-attachment: fixed;
+  background-repeat: no-repeat;
+  animation: skSweep 1.6s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .draft-list-item-thumb-container.is-importing { animation: none; }
+}
+
+/* Zweiter, leiser Weg im Leerzustand: vorhandene Anzeigen übernehmen. */
+.onboarding-import-btn {
+  margin-top: 0.9rem;
+  padding: 0.55rem 0.95rem;
+  min-height: 44px;
+  border-radius: 12px;
+  border: 1px solid rgba(9, 176, 183, 0.35);
+  background: rgba(9, 176, 183, 0.08);
+  color: var(--primary);
+  font: inherit;
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+  z-index: 1;
+}

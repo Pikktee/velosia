@@ -153,6 +153,11 @@ class Draft(Base):
     ebay_category = Column(String, nullable=True)
     ebay_aspects = Column(String, nullable=True)
 
+    # Übernahme einer vorhandenen Plattform-Anzeige (V2.8.21, services/listing_import):
+    # "pending" = wird im Hintergrund aus der Anzeigenseite gefüllt, "failed" = Seite
+    # war nicht lesbar, NULL = fertig bzw. nie übernommen.
+    import_status = Column(String, nullable=True)
+
     created_at = Column(DateTime, default=datetime.utcnow)
 
     # Relationships

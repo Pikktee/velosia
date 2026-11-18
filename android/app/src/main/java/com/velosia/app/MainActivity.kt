@@ -59,6 +59,11 @@ class MainActivity : AppCompatActivity() {
     @Volatile private var activeDraftId: Int = -1
     // Deleting a Kleinanzeigen ad: the ad to point at once "Meine Anzeigen" has loaded.
     @Volatile private var pendingFocusAdId: String? = null
+    // Importing existing ads (2.8.21): the platform whose own-ads page should start
+    // the engine's collectOwnListings once loaded, and the import-scoped token
+    // (POST /api/import/listings only) for sending the list. Never passed into a page.
+    @Volatile private var pendingImportPlatform: String? = null
+    @Volatile private var importToken: String? = null
     // The bearer token handed over by the frontend when the user starts a post (a
     // short-lived, draft-scoped platform token, or the account token from older
     // frontends). Only used natively for /api/auth/me, /api/drafts/{id},
@@ -132,6 +137,7 @@ class MainActivity : AppCompatActivity() {
     private val devHosts = setOf("localhost", "127.0.0.1", "10.0.2.2")
     private val vintedHosts = setOf("www.vinted.de", "vinted.de", "www.vinted.fr", "vinted.fr")
     private val kleinanzeigenHosts = setOf("www.kleinanzeigen.de", "kleinanzeigen.de")
+    private val kaOwnAdsUrl = "https://www.kleinanzeigen.de/m-meine-anzeigen.html"
     private val ebayHosts = setOf("www.ebay.de", "ebay.de")
 
     private fun hostsOf(platform: String?): Set<String> = when (platform) {
@@ -548,6 +554,7 @@ class MainActivity : AppCompatActivity() {
 
                 maybeTriggerAutofill(url)
                 maybeFocusOwnListing(url)
+                maybeStartImport(url)
             }
         }
 
@@ -636,6 +643,8 @@ class MainActivity : AppCompatActivity() {
                 ebayStepsDone.clear()
                 hasCaptured = false
                 resetCaptureGate()
+                pendingImportPlatform = null
+                importToken = null
                 authToken = token
                 activeDraftId = draftId
                 telemetryCount.set(0)
@@ -748,6 +757,71 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
+        // Importing existing ads (2.8.21): open the platform's own-ads page, where the
+        // user is signed in. The engine reads the list there (read-only) and sends it
+        // through importListings; the server fills the drafts from the public ad pages.
+        @JavascriptInterface
+        fun importFromPlatform(platform: String, token: String) {
+            runOnUiThread {
+                if (!isTrustedFrontend(webView.url)) return@runOnUiThread
+                if (platform != "kleinanzeigen" || token.isBlank() || token.length > 4096) return@runOnUiThread
+                activeDraftJson = null
+                activePlatform = null
+                activeDraftId = -1
+                draftImageDataUrls = emptyList()
+                hasAutoFilled = false
+                hasAutoCategory = false
+                ebayStepsDone.clear()
+                hasCaptured = false
+                resetCaptureGate()
+                authToken = null
+                pendingFocusAdId = null
+                importToken = token
+                pendingImportPlatform = platform
+                prefetchRemoteEngine()
+                Toast.makeText(this@MainActivity, "Kleinanzeigen wird geöffnet …", Toast.LENGTH_SHORT).show()
+                webView.loadUrl(kaOwnAdsUrl)
+            }
+        }
+
+        // The engine's import request (dry run or real) — sent natively with the
+        // import token, answered via window.__velosiaImportCb. Only from Kleinanzeigen's
+        // own-ads page while an import session is open.
+        @JavascriptInterface
+        fun importListings(payload: String) {
+            runOnUiThread {
+                fun deliverNow(json: String) = webView.evaluateJavascript(
+                    "window.__velosiaImportCb && window.__velosiaImportCb(${JSONObject.quote(json)});", null
+                )
+                val token = importToken
+                if (token == null || !isKaOwnAdsPage(webView.url) || payload.length > 250_000) {
+                    deliverNow("{}")
+                    return@runOnUiThread
+                }
+                val request = Request.Builder()
+                    .url("$backendUrl/api/import/listings")
+                    .header("Authorization", "Bearer $token")
+                    .post(payload.toRequestBody("application/json; charset=utf-8".toMediaTypeOrNull()))
+                    .build()
+                fun deliver(json: String) = runOnUiThread {
+                    if (importToken != token || !isKaOwnAdsPage(webView.url)) return@runOnUiThread
+                    deliverNow(json)
+                }
+                slowClient.newCall(request).enqueue(object : Callback {
+                    override fun onFailure(call: Call, e: IOException) = deliver("{}")
+                    override fun onResponse(call: Call, response: Response) {
+                        // Error bodies ({"detail": …}) go through too: the sheet shows them.
+                        val body = response.use { it.body?.string() ?: "{}" }
+                        deliver(if (body.length <= 20_000) body else "{}")
+                    }
+                })
+            }
+        }
+
+        // Feature probe for the frontend (2.8.21+): this build can import existing ads.
+        @JavascriptInterface
+        fun supportsImport(): Boolean = true
+
         // Semi-manual cross-platform take-down: open the still-live ad in the
         // WebView (the user's session cookies are present) so the user can delete
         // it himself. Deliberately NOT a headless delete — a write to the user's
@@ -775,6 +849,8 @@ class MainActivity : AppCompatActivity() {
                 hasCaptured = false
                 resetCaptureGate()
                 authToken = null
+                pendingImportPlatform = null
+                importToken = null
                 activeDraftId = draftId
                 // Kleinanzeigen's public ad page has no delete control, its own-ads list
                 // has one per ad: open that list and point at the ad once it is loaded
@@ -992,6 +1068,8 @@ class MainActivity : AppCompatActivity() {
     // Close the external listing page: drop the active draft session and return
     // to the Velosia dashboard.
     private fun closeListingView() {
+        pendingImportPlatform = null
+        importToken = null
         activeDraftJson = null
         activePlatform = null
         activeDraftId = -1
@@ -1191,6 +1269,28 @@ class MainActivity : AppCompatActivity() {
         webView.evaluateJavascript(engine) {
             webView.evaluateJavascript(
                 "window.__velosia && window.__velosia.focusOwnListing && window.__velosia.focusOwnListing('$id');",
+                null
+            )
+        }
+    }
+
+    private fun isKaOwnAdsPage(url: String?): Boolean {
+        val uri = parseUri(url) ?: return false
+        return uri.scheme == "https" && uri.host?.lowercase() in kleinanzeigenHosts && uri.path == "/m-meine-anzeigen.html"
+    }
+
+    // On "Meine Anzeigen" during an import: run the engine's collectOwnListings, which
+    // shows Velosia's import sheet. A login in between is fine — it starts once the
+    // list page itself has loaded.
+    private fun maybeStartImport(url: String) {
+        val platform = pendingImportPlatform ?: return
+        if (!isKaOwnAdsPage(url)) return
+        pendingImportPlatform = null
+        val engine = readEngineJs()
+        if (engine.isEmpty()) return
+        webView.evaluateJavascript(engine) {
+            webView.evaluateJavascript(
+                "window.__velosia && window.__velosia.collectOwnListings && window.__velosia.collectOwnListings('$platform');",
                 null
             )
         }

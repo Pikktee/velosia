@@ -146,8 +146,15 @@ def _ka_offer(resp):
 
 def check_kleinanzeigen(url):
     """(status, offer) of a KA ad — offer as in _ka_offer."""
+    status, offer, _resp = read_kleinanzeigen(url)
+    return status, offer
+
+
+def read_kleinanzeigen(url):
+    """(status, offer, response) of a KA ad; the response (or None) lets the
+    listing import read more from the same page without a second request."""
     resp = http_client.fetch(url, timeout=15)
-    return _ka_status(resp), _ka_offer(resp)
+    return _ka_status(resp), _ka_offer(resp), resp
 
 
 # ---------------------------------------------------------------------------

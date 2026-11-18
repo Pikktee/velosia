@@ -180,6 +180,8 @@ class DraftResponse(DraftBase):
     ebay_category_id: Optional[str] = None
     ebay_category: Optional[str] = None
     ebay_aspects: Optional[str] = None
+    # "pending" while an imported listing is still being filled (V2.8.21).
+    import_status: Optional[str] = None
     created_at: datetime
 
     class Config:
@@ -263,6 +265,29 @@ class AnalysisResponse(BaseModel):
     category: str
     condition: str
     price: float
+
+class ImportItem(BaseModel):
+    """One ad from the platform's own-ads list, as the engine read it."""
+    id: str = Field(..., max_length=20)
+    url: Optional[str] = Field(None, max_length=600)
+    title: Optional[str] = Field(None, max_length=300)
+    state: Optional[str] = Field(None, max_length=20)
+    created: Optional[str] = Field(None, max_length=40)
+
+
+class ImportRequest(BaseModel):
+    platform: str = Field(..., max_length=20)
+    # True: only count what would happen (the engine's sheet shows it first).
+    dry_run: bool = True
+    items: List[ImportItem] = Field(default_factory=list, max_length=500)
+
+
+class ImportResult(BaseModel):
+    found: int     # importable ads in the list (active/reserved)
+    new: int       # become new drafts
+    linked: int    # attached to an existing draft with the same title
+    known: int     # already in Velosia
+
 
 class BulkDeleteRequest(BaseModel):
     ids: List[int] = Field(..., min_length=1, max_length=500)

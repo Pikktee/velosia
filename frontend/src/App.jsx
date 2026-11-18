@@ -19,6 +19,7 @@ import WhatsNewSheet from './components/WhatsNewSheet';
 import { seedWhatsNewIfFresh, takeWhatsNew } from './utils/whatsNew';
 import { showError } from './utils/toast';
 import { getDrafts, deleteDraft, bulkDeleteDrafts, isAuthenticated, setAuthToken, getMe, refreshSessionIfDue, uploadAndAnalyze, uploadTurbo, refreshAllListings } from './utils/api';
+import { isImportPending } from './utils/listingImport';
 import { version } from '../package.json';
 
 
@@ -346,6 +347,22 @@ export default function App() {
   useEffect(() => {
     if (token && !loading) writeDraftCache(drafts);
   }, [drafts, token, loading]);
+
+  // Übernommene Anzeigen füllt der Server im Hintergrund (Fotos, Texte, Preis):
+  // solange eine davon noch lädt, die Liste still nachladen.
+  const importPending = drafts.some(isImportPending);
+  useEffect(() => {
+    if (!importPending || !token) return undefined;
+    const timer = setInterval(async () => {
+      if (document.visibilityState !== 'visible') return;
+      try {
+        setDrafts(await getDrafts());
+      } catch {
+        // nächster Versuch beim nächsten Takt
+      }
+    }, 6000);
+    return () => clearInterval(timer);
+  }, [importPending, token]);
 
   const handleLoginSuccess = (newToken) => {
     clearDraftCache();

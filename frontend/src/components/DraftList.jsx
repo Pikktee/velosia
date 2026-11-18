@@ -2,6 +2,7 @@ import React, { useRef, useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Sparkles, Trash2, ChevronRight, RefreshCw, AlertTriangle, Clock, Coins, X, Check, Search, ArrowLeft } from 'lucide-react';
 import { getThumbUrl } from '../utils/api';
+import { canImportListings, startListingImport, isImportPending } from '../utils/listingImport';
 import { statusMeta, hasListing, listingPlatforms, draftSection, crossPostConflict, STALE_DAYS, platformDeleteUrl, onlineChanges, publishedDays, isActive, PLATFORM_LETTER } from '../utils/listingStatus';
 
 // dd.mm for compact list signals.
@@ -286,6 +287,12 @@ export default function DraftList({ drafts, isLoading, loadError = false, onRetr
               Velosia automatisiert das Erstellen deiner Anzeigen. Mach einfach ein Foto, um loszulegen!
             </p>
             
+            {canImportListings() && (
+              <button type="button" className="onboarding-import-btn" onClick={() => startListingImport('kleinanzeigen')}>
+                Anzeigen von Kleinanzeigen übernehmen
+              </button>
+            )}
+
             <p className="onboarding-cta-text landscape-cta">
               Tippe links auf das Kamerasymbol, um dein erstes Angebot zu erstellen!
             </p>
@@ -753,19 +760,21 @@ function DraftListItem({ draft, onSelect, onDelete, flash = false, selecting = f
       >
         <div className="draft-list-item-main">
           {/* Small Thumbnail */}
-          <div className="draft-list-item-thumb-container">
-            <img
-              src={getThumbUrl(draft.image_path)}
-              alt={draft.title}
-              className={`draft-list-item-thumb ${thumbLoaded ? 'is-loaded' : 'is-loading'}`}
-              loading="lazy"
-              decoding="async"
-              width="58"
-              height="58"
-              onLoad={() => setThumbLoaded(true)}
-              onError={() => setThumbLoaded(true)}
-              draggable={false}
-            />
+          <div className={`draft-list-item-thumb-container${isImportPending(draft) && !draft.image_path ? ' is-importing' : ''}`}>
+            {draft.image_path && (
+              <img
+                src={getThumbUrl(draft.image_path)}
+                alt={draft.title}
+                className={`draft-list-item-thumb ${thumbLoaded ? 'is-loaded' : 'is-loading'}`}
+                loading="lazy"
+                decoding="async"
+                width="58"
+                height="58"
+                onLoad={() => setThumbLoaded(true)}
+                onError={() => setThumbLoaded(true)}
+                draggable={false}
+              />
+            )}
             <span className="select-check" aria-hidden="true">
               <span className="select-check-dot">{selected && <Check size={14} strokeWidth={3} />}</span>
             </span>

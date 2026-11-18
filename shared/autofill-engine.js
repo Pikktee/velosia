@@ -4317,9 +4317,212 @@
     return true;
   }
 
+  // ---------------------------------------------------------------------------
+  // Übernahme vorhandener Anzeigen (2.8.21). Läuft nur auf Kleinanzeigens
+  // "Meine Anzeigen", wohin die App den Nutzer dafür schickt. Liest die eigene
+  // Anzeigenliste (ID, Titel, Status) – nichts wird auf der Plattform geändert –
+  // und reicht sie über die Bridge an Velosia weiter; Fotos, Beschreibung und
+  // Preis holt der Server danach selbst von den öffentlichen Anzeigenseiten.
+  // ---------------------------------------------------------------------------
+  function readKaOwnAds() {
+    var MAX_PAGES = 20;
+    function absolute(u) {
+      u = String(u || "");
+      return u.charAt(0) === "/" ? location.origin + u : u;
+    }
+    function fromJson(ad) {
+      return {
+        id: String(ad.id || ""),
+        url: ad.seoUrl ? absolute(ad.seoUrl) : null,
+        title: ad.title ? String(ad.title).slice(0, 300) : null,
+        state: ad.state ? String(ad.state).slice(0, 20) : null,
+        created: ad.creationDate ? String(ad.creationDate).slice(0, 40) : (ad.activationDate ? String(ad.activationDate).slice(0, 40) : null)
+      };
+    }
+    function page(n) {
+      return fetch("/m-meine-anzeigen-verwalten.json?sort=DEFAULT&pageNum=" + n, {
+        credentials: "include",
+        headers: { Accept: "application/json", "X-Requested-With": "XMLHttpRequest" }
+      }).then(function (r) { return r.ok ? r.json() : null; }).catch(function () { return null; });
+    }
+    function fromDom() {
+      var rows = document.querySelectorAll("li[data-adid]"), out = [];
+      for (var i = 0; i < rows.length; i++) {
+        var row = rows[i], text = (row.textContent || "").replace(/\s+/g, " ");
+        var h = row.querySelector("h3") || row.querySelector("h2");
+        var link = row.querySelector('a[href*="/s-anzeige/"]');
+        out.push({
+          id: String(row.getAttribute("data-adid") || ""),
+          url: link ? absolute(link.getAttribute("href")) : null,
+          title: h ? (h.textContent || "").replace(/\s+/g, " ").trim().replace(/^Anzeige\s+/, "").slice(0, 300) : null,
+          state: /reserviert/i.test(text) ? "paused" : (/deaktiviert|abgelaufen|beendet/i.test(text) ? "inactive" : "active"),
+          created: null
+        });
+      }
+      return out;
+    }
+    var items = [];
+    function next(n) {
+      return page(n).then(function (data) {
+        if (!data || !data.ads || typeof data.ads.length !== "number") return n === 1 ? null : items;
+        for (var i = 0; i < data.ads.length; i++) items.push(fromJson(data.ads[i] || {}));
+        var last = data.paging && data.paging.last ? Number(data.paging.last) : 1;
+        return n < last && n < MAX_PAGES ? next(n + 1) : items;
+      });
+    }
+    return next(1).then(function (list) {
+      if (list) return list;
+      console.warn("Velosia Import: Anzeigenliste nicht lesbar, nehme die sichtbare Seite.");
+      return fromDom();
+    });
+  }
+
+  function collectOwnListings(platform) {
+    platform = platform || "kleinanzeigen";
+    if (platform !== "kleinanzeigen" || !/(^|\.)kleinanzeigen\.de$/.test(location.hostname)) return false;
+    if (document.getElementById("velosia-import-sheet")) return true;
+    if (!document.getElementById("velosia-import-style")) {
+      var st = document.createElement("style");
+      st.id = "velosia-import-style";
+      st.textContent =
+        "@keyframes velosia-sheet-up{from{transform:translateY(24px);opacity:0}to{transform:none;opacity:1}}" +
+        "@keyframes velosia-spin{to{transform:rotate(360deg)}}";
+      (document.head || document.documentElement).appendChild(st);
+    }
+    var bridge = window.VelosiaBridge;
+    var shade = document.createElement("div");
+    shade.id = "velosia-import-shade";
+    shade.style.cssText = "position:fixed;inset:0;z-index:2147483645;background:rgba(3,5,8,.62)";
+    var sheet = document.createElement("div");
+    sheet.id = "velosia-import-sheet";
+    sheet.style.cssText = "position:fixed;z-index:2147483646;box-sizing:border-box;padding:20px 18px 18px;border-radius:22px;background:#10141c;border:1px solid rgba(255,255,255,.12);box-shadow:0 18px 50px rgba(0,0,0,.6);color:#f8fafc;font-family:-apple-system,BlinkMacSystemFont,sans-serif;animation:velosia-sheet-up .22s ease-out";
+    document.body.appendChild(shade);
+    document.body.appendChild(sheet);
+
+    function btnCss(kind) {
+      var base = "flex:1;min-height:50px;border-radius:13px;font:700 16px/1 -apple-system,BlinkMacSystemFont,sans-serif;cursor:pointer;";
+      if (kind === "primary") return base + "border:none;background:#09b0b7;color:#031314;";
+      return base + "border:1px solid rgba(255,255,255,.14);background:transparent;color:#e2e8f0;";
+    }
+    function goBack() {
+      try { if (bridge && bridge.reloadApp) { bridge.reloadApp(); return; } } catch (e) {}
+      try { history.back(); } catch (e) {}
+    }
+    var sync = bindViewport(function () {
+      if (!sheet.isConnected) return;
+      var r = viewportRect();
+      var w = Math.min(r.width - 24, 460);
+      sheet.style.width = w + "px";
+      sheet.style.left = (r.left + (r.width - w) / 2) + "px";
+      sheet.style.top = (r.top + r.height - sheet.offsetHeight - 16) + "px";
+    });
+    function render(head, sub, buttons) {
+      sheet.innerHTML = "";
+      var h = document.createElement("div");
+      h.style.cssText = "font-size:19px;font-weight:700;margin-bottom:" + (sub ? "6px" : "16px") + ";display:flex;align-items:center;gap:10px";
+      if (head.spin) {
+        var sp = document.createElement("span");
+        sp.style.cssText = "flex:none;width:20px;height:20px;border-radius:50%;border:3px solid rgba(9,176,183,.25);border-top-color:#09b0b7;animation:velosia-spin .8s linear infinite";
+        h.appendChild(sp);
+      } else if (head.ok) {
+        var ok = document.createElement("span");
+        ok.style.cssText = "flex:none;width:28px;height:28px;border-radius:50%;background:#34d399;color:#04140d;display:inline-flex;align-items:center;justify-content:center;font-size:16px";
+        ok.textContent = "✓";
+        h.appendChild(ok);
+      }
+      h.appendChild(document.createTextNode(head.text));
+      sheet.appendChild(h);
+      if (sub) {
+        var p = document.createElement("div");
+        p.style.cssText = "font-size:14px;color:#94a3b8;line-height:1.4;margin-bottom:18px";
+        p.textContent = sub;
+        sheet.appendChild(p);
+      }
+      if (buttons && buttons.length) {
+        var row = document.createElement("div");
+        row.style.cssText = "display:flex;gap:10px";
+        buttons.forEach(function (b) {
+          var el = document.createElement("button");
+          el.type = "button";
+          el.textContent = b.label;
+          el.style.cssText = btnCss(b.kind);
+          el.addEventListener("click", b.onClick);
+          row.appendChild(el);
+        });
+        sheet.appendChild(row);
+      }
+      sync();
+      requestAnimationFrame(sync);
+    }
+    var backButton = { label: "Zurück zu Velosia", kind: "primary", onClick: goBack };
+
+    // One request through the native bridge; the app answers via
+    // window.__velosiaImportCb with the server's JSON.
+    function send(items, dryRun) {
+      return new Promise(function (resolve) {
+        var settled = false;
+        function finish(v) { if (!settled) { settled = true; resolve(v); } }
+        window.__velosiaImportCb = function (json) {
+          var v = null;
+          try { v = typeof json === "string" ? JSON.parse(json) : json; } catch (e) {}
+          finish(v);
+        };
+        setTimeout(function () { finish(null); }, 45000);
+        try {
+          bridge.importListings(JSON.stringify({ platform: platform, dry_run: dryRun, items: items.slice(0, 500) }));
+        } catch (e) { finish(null); }
+      });
+    }
+    function failed(res) {
+      var msg = res && (res.detail || res.error);
+      render({ text: "Übernahme nicht möglich" }, typeof msg === "string" ? msg : "Velosia war nicht erreichbar. Versuch es gleich noch einmal.", [backButton]);
+    }
+
+    if (!bridge || typeof bridge.importListings !== "function") {
+      render({ text: "Nur in der Velosia-App" }, "Öffne „Anzeigen übernehmen“ in der App.", [backButton]);
+      return true;
+    }
+    render({ text: "Deine Anzeigen werden gelesen …", spin: true });
+    readKaOwnAds().then(function (items) {
+      if (!items || !items.length) {
+        render({ text: "Keine Anzeigen gefunden" }, "Hier sind gerade keine aktiven Anzeigen.", [backButton]);
+        return;
+      }
+      return send(items, true).then(function (res) {
+        if (!res || typeof res.new !== "number") return failed(res);
+        var count = res.new + res.linked;
+        if (!count) {
+          render({ text: "Alles schon in Velosia" }, null, [backButton]);
+          return;
+        }
+        var sub = "Mit Fotos, Preis und Beschreibung." + (res.known ? " " + res.known + " " + (res.known === 1 ? "ist" : "sind") + " schon in Velosia." : "");
+        render({ text: count === 1 ? "1 Anzeige übernehmen?" : count + " Anzeigen übernehmen?" }, sub, [
+          { label: "Abbrechen", onClick: goBack },
+          {
+            label: "Übernehmen", kind: "primary", onClick: function () {
+              render({ text: "Wird übernommen …", spin: true });
+              send(items, false).then(function (done) {
+                if (!done || typeof done.new !== "number") return failed(done);
+                var n = done.new + done.linked;
+                render({ text: (n === 1 ? "1 Anzeige" : n + " Anzeigen") + " übernommen", ok: true },
+                  done.new ? "Fotos und Texte kommen in den nächsten Minuten." : null, [backButton]);
+                setTimeout(goBack, 1800);
+              });
+            }
+          }
+        ]);
+      });
+    }).catch(function (e) {
+      console.error("Velosia Import fehlgeschlagen", e);
+      failed(null);
+    });
+    return true;
+  }
+
   window.__velosia = {
     __loaded: true,
     focusOwnListing: focusOwnListing,
+    collectOwnListings: collectOwnListings,
     version: VERSION,
     autofill: autofill,
     detectPlatform: detectPlatform,

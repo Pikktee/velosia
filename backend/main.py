@@ -33,6 +33,7 @@ from auth_utils import (
     create_platform_token, decode_platform_token, DUMMY_PASSWORD_HASH,
     ACCESS_TOKEN_EXPIRE_MINUTES, PLATFORM_TOKEN_TTL_MIN,
     create_export_token, decode_export_token, EXPORT_TOKEN_TTL_MIN,
+    create_import_token, decode_import_token, IMPORT_TOKEN_TTL_MIN,
 )
 from google.oauth2 import id_token
 from google.auth.transport import requests as google_requests
@@ -147,6 +148,8 @@ def run_migrations():
         ("ebay_category_id", "VARCHAR(20)"),
         ("ebay_category", "VARCHAR(300)"),
         ("ebay_aspects", "VARCHAR"),
+        # Übernahme vorhandener Anzeigen (added V2.8.21)
+        ("import_status", "VARCHAR(20)"),
     ]:
         try:
             db.execute(text(f"ALTER TABLE drafts ADD COLUMN {col_name} {col_type}"))
@@ -246,7 +249,7 @@ run_migrations()
 _API_DOCS = os.getenv("ENABLE_API_DOCS", "").lower() in ("1", "true", "yes")
 app = FastAPI(
     title="Velosia API",
-    version="2.8.20",
+    version="2.8.21",
     docs_url="/docs" if _API_DOCS else None,
     redoc_url="/redoc" if _API_DOCS else None,
     openapi_url="/openapi.json" if _API_DOCS else None,
@@ -2717,6 +2720,159 @@ async def _status_poll_loop():
 @app.on_event("startup")
 async def _start_status_poller():
     asyncio.create_task(_status_poll_loop())
+
+
+# --- ÜBERNAHME VORHANDENER ANZEIGEN (V2.8.21) ---------------------------------
+# Die App liest in ihrer WebView die eigene Anzeigenliste der Plattform (Engine
+# collectOwnListings) und schickt sie hierher; die Angebote füllt danach
+# services/listing_import im Hintergrund aus den öffentlichen Anzeigenseiten.
+
+from services import listing_import
+
+
+def _with_ai_usage(db: Session, user: models.User, fn):
+    with ai_usage.track() as tally:
+        try:
+            return fn()
+        finally:
+            record_ai_usage(db, user, tally)
+
+
+def _configure_listing_import():
+    from database import SessionLocal
+    listing_import.configure(SessionLocal, UPLOAD_DIR, _with_ai_usage, _remove_upload_files)
+
+
+_configure_listing_import()
+
+
+@app.on_event("startup")
+async def _resume_listing_import():
+    await asyncio.to_thread(listing_import.resume_pending)
+
+
+def get_import_user(
+    credentials: HTTPAuthorizationCredentials = Depends(security),
+    db: Session = Depends(get_db),
+) -> models.User:
+    """Import token (POST /api/import/token) or session token."""
+    token = credentials.credentials
+    claims = decode_import_token(token)
+    if claims:
+        user = db.get(models.User, claims["uid"])
+        if (
+            not user
+            or claims.get("ver") != int(user.token_version or 0)
+            or _issued_before_account(claims, user)
+        ):
+            raise _auth_error()
+        if getattr(user, "is_blocked", False):
+            raise _blocked_error()
+        return user
+    return _user_from_access_token(token, db)
+
+
+@app.post("/api/import/token", response_model=schemas.PlatformTokenResponse)
+def issue_import_token(current_user: models.User = Depends(get_current_user)):
+    """Short-lived token the Android shell uses to send the user's own-ads list
+    from the platform page. It opens nothing but POST /api/import/listings."""
+    rate_limit.enforce(
+        "import", str(current_user.id), rate_limit.IMPORT_USER,
+        "Zu viele Übernahmen in kurzer Zeit. Bitte warte einen Moment.",
+    )
+    return {"token": create_import_token(current_user), "expires_in": IMPORT_TOKEN_TTL_MIN * 60}
+
+
+def _import_items(platform: str, items) -> list:
+    """Valid, importable, de-duplicated (id, url, title, status, created) rows."""
+    rows, seen = [], set()
+    for item in items[: listing_import.MAX_ITEMS]:
+        state = (item.state or "active").strip().lower()
+        status_value = listing_import.KA_STATES.get(state)
+        if not status_value:
+            continue
+        lid, url = listing_urls.canonical_listing(platform, item.id, item.url)
+        if not lid or lid in seen:
+            continue
+        seen.add(lid)
+        title = re.sub(r"\s+", " ", item.title or "").strip()[:200] or None
+        rows.append((lid, url, title, status_value, listing_import.parse_iso(item.created)))
+    return rows
+
+
+@app.post("/api/import/listings", response_model=schemas.ImportResult)
+def import_listings(
+    payload: schemas.ImportRequest,
+    db: Session = Depends(get_db),
+    user: models.User = Depends(get_import_user),
+):
+    """Take over the user's existing ads. Ads already in Velosia are skipped; an
+    ad whose title matches a draft that has no listing on this platform yet is
+    attached to it (e.g. published from Velosia while the capture failed);
+    everything else becomes a new draft, filled in the background.
+    `dry_run` only counts — the engine shows that before the user confirms."""
+    platform = payload.platform
+    if platform not in listing_import.SUPPORTED_PLATFORMS:
+        raise HTTPException(status_code=400, detail="Diese Plattform wird noch nicht unterstützt.")
+    if not payload.dry_run:
+        rate_limit.enforce(
+            "import", str(user.id), rate_limit.IMPORT_USER,
+            "Zu viele Übernahmen in kurzer Zeit. Bitte warte einen Moment.",
+        )
+    prefix = listing_urls.PREFIX[platform]
+    rows = _import_items(platform, payload.items)
+
+    drafts = db.query(models.Draft).filter(models.Draft.user_id == user.id).all()
+    known_ids = {getattr(d, f"{prefix}_listing_id") for d in drafts} - {None}
+    by_title = {}
+    for d in drafts:
+        if getattr(d, f"{prefix}_listing_id") or not d.title:
+            continue
+        key = listing_import.ka_title_key(d.title)
+        if key:
+            by_title.setdefault(key, []).append(d)
+
+    known = linked = 0
+    to_create, to_link = [], []
+    for row in rows:
+        lid, url, title, status_value, created = row
+        if lid in known_ids:
+            known += 1
+            continue
+        matches = by_title.get(listing_import.ka_title_key(title)) if title else None
+        if matches and len(matches) == 1:
+            linked += 1
+            to_link.append((matches.pop(), row))
+            continue
+        to_create.append(row)
+
+    result = {"found": len(rows), "new": len(to_create), "linked": linked, "known": known}
+    if payload.dry_run:
+        return result
+
+    now = datetime.utcnow()
+    for draft, (lid, url, _title, status_value, created) in to_link:
+        _apply_listing_capture(draft, platform, lid, url)
+        setattr(draft, f"{prefix}_status", status_value)
+        setattr(draft, f"{prefix}_published_at", created or now)
+    new_drafts = []
+    for lid, url, title, status_value, created in to_create:
+        draft = models.Draft(
+            user_id=user.id,
+            title=title,
+            import_status=listing_import.PENDING,
+        )
+        setattr(draft, f"{prefix}_listing_id", lid)
+        setattr(draft, f"{prefix}_listing_url", url)
+        setattr(draft, f"{prefix}_status", status_value)
+        setattr(draft, f"{prefix}_status_at", now)
+        setattr(draft, f"{prefix}_published_at", created)
+        db.add(draft)
+        new_drafts.append(draft)
+    db.commit()
+    listing_import.enqueue([d.id for d in new_drafts])
+    print(f"[import] Nutzer {user.id}: {len(new_drafts)} neu, {linked} verknüpft, {known} bekannt.", flush=True)
+    return result
 
 
 # --- SPEICHERFRISTEN (Art. 5 Abs. 1 lit. e DSGVO) -----------------------------

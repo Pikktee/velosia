@@ -66,6 +66,12 @@ EXPORT_TOKEN_TTL_MIN = int(os.getenv("EXPORT_TOKEN_TTL_MIN", "10"))
 EXPORT_SCOPE = "export"
 
 
+# Token for the listing import (POST /api/import/listings), handed to the
+# Android shell while the user's own-ads page of a platform is open.
+IMPORT_TOKEN_TTL_MIN = int(os.getenv("IMPORT_TOKEN_TTL_MIN", "30"))
+IMPORT_SCOPE = "import"
+
+
 def derive_key(label: bytes) -> bytes:
     """Purpose-specific subkey of SECRET_KEY, so that a value signed for one
     purpose (session token, platform token, upload URL) can never be replayed
@@ -75,6 +81,7 @@ def derive_key(label: bytes) -> bytes:
 
 _PLATFORM_KEY = derive_key(b"velosia/platform-token/v1")
 _EXPORT_KEY = derive_key(b"velosia/export-token/v1")
+_IMPORT_KEY = derive_key(b"velosia/import-token/v1")
 
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
@@ -195,5 +202,32 @@ def decode_export_token(token: str) -> Optional[dict]:
     except jwt.PyJWTError:
         return None
     if payload.get("scope") != EXPORT_SCOPE or not isinstance(payload.get("uid"), int):
+        return None
+    return payload
+
+
+def create_import_token(user) -> str:
+    """Token for importing the user's existing platform ads. Opens nothing but
+    POST /api/import/listings, for one account, for a few minutes."""
+    now = _now()
+    return jwt.encode(
+        {
+            "uid": user.id,
+            "ver": int(user.token_version or 0),
+            "scope": IMPORT_SCOPE,
+            "iat": now,
+            "exp": now + timedelta(minutes=IMPORT_TOKEN_TTL_MIN),
+        },
+        _IMPORT_KEY,
+        algorithm=ALGORITHM,
+    )
+
+
+def decode_import_token(token: str) -> Optional[dict]:
+    try:
+        payload = jwt.decode(token, _IMPORT_KEY, algorithms=[ALGORITHM])
+    except jwt.PyJWTError:
+        return None
+    if payload.get("scope") != IMPORT_SCOPE or not isinstance(payload.get("uid"), int):
         return None
     return payload

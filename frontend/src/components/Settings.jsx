@@ -1,9 +1,10 @@
 import React, { useState, useEffect, useRef } from 'react';
 import AutoTextarea from './AutoTextarea';
-import { User, LogOut, ArrowLeft, Newspaper, Trash2, AlertTriangle, Save, HelpCircle, Check, Shield, Sparkles, Euro, MapPin, Sliders, Zap, Users, ClipboardList, Bug, ChevronRight, RefreshCw, AlertCircle, KeyRound } from 'lucide-react';
+import { User, LogOut, ArrowLeft, Newspaper, Trash2, AlertTriangle, Save, HelpCircle, Check, Shield, Sparkles, Euro, MapPin, Sliders, Zap, Users, ClipboardList, Bug, ChevronRight, RefreshCw, AlertCircle, KeyRound, Download } from 'lucide-react';
 import { deleteUserAccount, updateMe, setPassword as setAccountPassword } from '../utils/api';
 import DataExportSection from './DataExport';
 import SalesOverview from './SalesOverview';
+import { canImportListings, startListingImport } from '../utils/listingImport';
 import { PRICE_TYPES } from '../utils/priceType';
 import { version } from '../../package.json';
 import LegalModal, { LegalLinks } from './LegalModal';
@@ -736,6 +737,14 @@ export default function Settings({ user, drafts = [], onLogout, onUpdateUser, on
             <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
 
               <SalesOverview drafts={drafts} />
+
+              {canImportListings() && (
+                <button type="button" className="settings-row" onClick={() => startListingImport('kleinanzeigen')}>
+                  <Download size={18} style={{ color: 'var(--primary)' }} />
+                  <span>Anzeigen von Kleinanzeigen übernehmen</span>
+                  <ChevronRight size={16} style={{ opacity: 0.4, marginLeft: 'auto' }} />
+                </button>
+              )}
 
               {/* Section: Hilfe */}
               <div className="detail-section-unboxed" style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>

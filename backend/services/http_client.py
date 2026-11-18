@@ -103,3 +103,43 @@ def fetch(url, *, timeout=15, allow_redirects=True, retries=2, jitter=True):
             time.sleep(min(8.0, 1.5 * (attempt + 1)) + random.uniform(0, 0.8))
 
     return last_resp
+
+
+# Image CDNs the listing import may download photos from (the user's own ads,
+# see services/listing_import). Exact hosts, https, no redirects.
+IMAGE_HOSTS = frozenset({"img.kleinanzeigen.de"})
+MAX_IMAGE_BYTES = 15 * 1024 * 1024
+
+
+def fetch_image(url, *, timeout=20):
+    """Bytes of a photo on one of IMAGE_HOSTS, or None. Never raises."""
+    from urllib.parse import urlsplit
+    try:
+        parts = urlsplit(url or "")
+        port = parts.port
+    except ValueError:
+        return None
+    host = (parts.hostname or "").lower()
+    if (
+        parts.scheme != "https" or port is not None or parts.username is not None
+        or host not in IMAGE_HOSTS or parts.netloc.lower() != host
+    ):
+        print(f"[http_client] Bild-URL nicht erlaubt: {str(url)[:200]}", flush=True)
+        return None
+    for attempt in range(2):
+        time.sleep(random.uniform(0.2, 0.6))
+        try:
+            resp = _get(url, timeout)
+        except Exception as e:
+            print(f"[http_client] Bild {url[:120]} fehlgeschlagen: {e}", flush=True)
+            resp = None
+        if resp is not None and resp.status_code == 200:
+            ctype = (resp.headers.get("content-type") or "").lower() if resp.headers else ""
+            data = resp.content or b""
+            if ctype.startswith("image/") and 0 < len(data) <= MAX_IMAGE_BYTES:
+                return data
+            return None
+        if resp is not None and resp.status_code not in _BLOCK_CODES:
+            return None
+        time.sleep(1.5 + random.uniform(0, 0.8))
+    return None

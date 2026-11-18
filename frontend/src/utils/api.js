@@ -333,6 +333,21 @@ export const getDraft = async (id) => {
 // Short-lived token that only works for publishing this one draft. It is what
 // the Android shell receives for the platform WebView (Vinted/Kleinanzeigen),
 // so the session token never enters that context.
+// Short-lived token the app hands to its platform WebView for importing the
+// user's existing ads (POST /api/import/listings only).
+export const createImportToken = async () => {
+  const response = await fetch(`${API_BASE_URL}/api/import/token`, {
+    method: 'POST',
+    headers: getHeaders(),
+  });
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    throw new Error(typeof errorData.detail === 'string' ? errorData.detail : 'Die Übernahme konnte nicht gestartet werden.');
+  }
+  const data = await response.json();
+  return data.token;
+};
+
 export const getPlatformToken = async (draftId) => {
   const response = await fetch(`${API_BASE_URL}/api/drafts/${draftId}/platform-token`, {
     method: 'POST',
