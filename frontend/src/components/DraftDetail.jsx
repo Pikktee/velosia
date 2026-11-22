@@ -839,18 +839,6 @@ export default function DraftDetail({ draft, user, onBack, onUpdateSuccess, onDe
               {idx === 0 && shownImages.length > 1 && (
                 <span className="thumbnail-cover-badge">Titelbild</span>
               )}
-              {idx > 0 && (
-                <button
-                  type="button"
-                  className="thumbnail-make-cover-btn"
-                  onClick={(e) => { e.stopPropagation(); moveImage(imgUrl, 0); }}
-                  disabled={imageOrder !== null}
-                  title="Als Titelbild festlegen"
-                  aria-label={`Foto ${idx + 1} als Titelbild festlegen`}
-                >
-                  <Star size={12} />
-                </button>
-              )}
             </div>
           ))}
           
@@ -1435,7 +1423,7 @@ export default function DraftDetail({ draft, user, onBack, onUpdateSuccess, onDe
   };
 
   const listed = listingPlatforms(draft);
-  const summary = detailSummary(draft, price);
+  const summary = detailSummary(draft);
   const openSummary = () => setSheet('status');
 
   return (

@@ -161,22 +161,12 @@ export const isActive = (status) => status === 'online' || status === 'reservier
 
 // Subtitle under the detail title. `tone` 'warn' = something to do; `action`
 // says where a tap leads (the 'status' sheet; null = nothing to open).
-export const detailSummary = (draft, currentPrice = draft?.price) => {
+export const detailSummary = (draft) => {
   const platforms = listingPlatforms(draft);
   if (!platforms.length) return { text: 'Entwurf', tone: 'muted', action: null };
   const conflict = crossPostConflict(draft);
   if (conflict) {
     return { text: `Auf ${conflict.sold.name} verkauft`, tone: 'warn', action: 'status' };
-  }
-  const targetPrice = Number(currentPrice ?? draft?.price) || null;
-  const priceMismatch = targetPrice != null && platforms.find((p) => {
-    if (!isActive(p.status)) return false;
-    const online = draft?.[`${PREFIX[p.key]}_online_price`] ?? draft?.[`${PREFIX[p.key]}_listed_price`];
-    return online != null && !samePrice(online, targetPrice);
-  });
-  if (priceMismatch) {
-    const online = draft?.[`${PREFIX[priceMismatch.key]}_online_price`] ?? draft?.[`${PREFIX[priceMismatch.key]}_listed_price`];
-    return { text: `${priceMismatch.name}: online ${formatEuro(online)}`, tone: 'warn', action: 'status' };
   }
   const stale = platforms.find((p) => isActive(p.status) && publishedDays(draft, p.key) >= STALE_DAYS);
   if (stale) {

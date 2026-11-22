@@ -66,9 +66,12 @@ export function StatusSheet({ draft, user, priceType, currentPrice, refreshing, 
           const isConflict = conflict && conflict.live.key === p.key;
           const days = publishedDays(draft, p.key);
           const isStale = !conflict && active && days >= STALE_DAYS;
-          const platformPrice = draft[`${PREFIX[p.key]}_online_price`] ?? draft[`${PREFIX[p.key]}_listed_price`];
+          const onlinePrice = draft[`${PREFIX[p.key]}_online_price`];
+          const listedPrice = draft[`${PREFIX[p.key]}_listed_price`];
+          const platformPrice = onlinePrice ?? listedPrice;
           const price = platformPrice ?? draft.price;
-          const hasPriceDiff = !isConflict && active && platformPrice != null && targetPrice != null && Math.abs(platformPrice - targetPrice) >= 0.01;
+          const changedOnPlatform = onlinePrice != null && listedPrice != null && Math.abs(onlinePrice - listedPrice) >= 0.01;
+          const hasPriceDiff = !isConflict && active && !changedOnPlatform && platformPrice != null && targetPrice != null && Math.abs(platformPrice - targetPrice) >= 0.01;
           const kaStats = p.key === 'kleinanzeigen' && active
             ? [
                 draft.ka_views != null ? `${draft.ka_views} ${draft.ka_views === 1 ? 'Aufruf' : 'Aufrufe'}` : null,
@@ -80,7 +83,7 @@ export function StatusSheet({ draft, user, priceType, currentPrice, refreshing, 
           else if (p.status === 'geloescht') info = 'gelöscht';
           else info = `${days === 0 ? 'seit heute' : days === 1 ? 'seit 1 Tag' : `seit ${days} Tagen`}${price ? ` · ${formatEuro(price)}${p.key === 'kleinanzeigen' && priceType === 'NEGOTIABLE' ? ' VB' : ''}` : ''}${kaStats ? ` · ${kaStats}` : ''}`;
           return (
-            <div key={p.key} className={`listing-card${isConflict || isStale || hasPriceDiff ? ' warn' : ''}`}>
+            <div key={p.key} className={`listing-card${isConflict || isStale ? ' warn' : ''}`}>
               <div className="listing-card-head">
                 <PlatformMark platform={p.key} status={p.status} size="lg" />
                 <div className="listing-card-name">
@@ -92,7 +95,7 @@ export function StatusSheet({ draft, user, priceType, currentPrice, refreshing, 
                 </span>
               </div>
               {isConflict && <p className="listing-card-note">Auf {conflict.sold.name} verkauft</p>}
-              {hasPriceDiff && <p className="listing-card-note">Im Entwurf {formatEuro(targetPrice)} · online {formatEuro(platformPrice)}</p>}
+              {hasPriceDiff && <p className="listing-card-note">Im Entwurf {formatEuro(targetPrice)}</p>}
               <div className="listing-card-actions">
                 {isConflict ? (
                   <button className="listing-card-main danger" onClick={() => onDelete(p)}>Löschen <ArrowUpRight size={15} /></button>

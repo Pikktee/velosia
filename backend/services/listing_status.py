@@ -151,7 +151,12 @@ def _ka_views(url):
     if not parsed:
         return None
     _norm_url, ad_id = parsed
-    resp = http_client.fetch(f"https://www.kleinanzeigen.de/s-vac-get.json?adId={ad_id}", timeout=8)
+    resp = http_client.fetch(
+        f"https://www.kleinanzeigen.de/s-vac-get.json?adId={ad_id}",
+        timeout=5,
+        retries=0,
+        jitter=False,
+    )
     if resp is None or resp.status_code != 200:
         return None
     try:

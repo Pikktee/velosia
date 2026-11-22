@@ -1,9 +1,13 @@
 [
   {
+    "version": "2.8.32", "date": "2026-11-22",
+    "fixes": true
+  },
+  {
     "version": "2.8.31", "date": "2026-11-22",
     "items": [
       "Kleinanzeigen-Aufrufe: Unter „Deine Anzeigen“ siehst du jetzt die Aufrufe deiner Anzeige (und nach einer Anzeigen-Übernahme auch, wie oft sie gemerkt wurde).",
-      "Titelbild & Preis-Abgleich: Jedes Foto lässt sich direkt in der Übersicht per Stern als Titelbild setzen; weicht der Entwurfspreis vom Online-Preis ab, zeigt „Deine Anzeigen“ das sofort an."
+      "Titelbild & Preis-Abgleich: Im Foto-Review vor der Analyse lässt sich jedes Foto per Stern als Titelbild setzen; weicht der Entwurfspreis vom Online-Preis ab, zeigt „Deine Anzeigen“ das an."
     ],
     "fixes": true
   },

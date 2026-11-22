@@ -194,10 +194,17 @@ const CameraCapture = ({
       canvas.toBlob((blob) => {
         if (blob) {
           const file = new File([blob], `capture-${Date.now()}.jpg`, { type: 'image/jpeg' });
-          const fullPreviewUrl = URL.createObjectURL(blob);
-          setSelectedImages(prev => 
-            prev.map(img => img.id === tempId ? { ...img, file, previewUrl: fullPreviewUrl, isCompressing: false } : img)
-          );
+          setSelectedImages(prev => {
+            if (!prev.some(img => img.id === tempId)) return prev;
+            const fullPreviewUrl = URL.createObjectURL(blob);
+            return prev.map(img => {
+              if (img.id !== tempId) return img;
+              if (img.previewUrl && img.previewUrl.startsWith('blob:')) {
+                URL.revokeObjectURL(img.previewUrl);
+              }
+              return { ...img, file, previewUrl: fullPreviewUrl, isCompressing: false };
+            });
+          });
         } else {
           // Remove the image if compression failed
           setSelectedImages(prev => prev.filter(img => img.id !== tempId));
