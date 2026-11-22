@@ -4223,6 +4223,7 @@
   function focusOwnListing(adId) {
     adId = String(adId || "").replace(/\D/g, "");
     if (!adId) return false;
+    ensureBackdrop();
     if (!document.getElementById("velosia-focus-style")) {
       var st = document.createElement("style");
       st.id = "velosia-focus-style";
@@ -4357,6 +4358,7 @@
     // Velosia's own confirm sheet, hosted INSIDE KA's (possibly modal) dialog so it
     // stays tappable, anchored to the visible viewport.
     function showSheet(dialog, row) {
+      removeBackdrop();
       var kids = dialog.children;
       for (var i = 0; i < kids.length; i++) kids[i].style.visibility = "hidden";
       dialog.classList.add("velosia-hosted");
@@ -4366,7 +4368,7 @@
 
       var sheet = document.createElement("div");
       sheet.id = "velosia-delete-sheet";
-      sheet.style.cssText = "position:fixed;z-index:2147483646;box-sizing:border-box;padding:20px 18px 18px;border-radius:22px;background:#10141c;border:1px solid rgba(255,255,255,.12);box-shadow:0 18px 50px rgba(0,0,0,.6);color:#f8fafc;font-family:-apple-system,BlinkMacSystemFont,sans-serif;animation:velosia-sheet-up .22s ease-out;visibility:visible";
+      sheet.style.cssText = "position:fixed;z-index:2147483647;box-sizing:border-box;padding:20px 18px 18px;border-radius:22px;background:#10141c;border:1px solid rgba(255,255,255,.12);box-shadow:0 18px 50px rgba(0,0,0,.6);color:#f8fafc;font-family:-apple-system,BlinkMacSystemFont,sans-serif;animation:velosia-sheet-up .22s ease-out;visibility:visible";
       dialog.appendChild(sheet);
       var title = adTitle(row);
       function render(state) {
@@ -4398,6 +4400,7 @@
         sheet.style.top = (r.top + r.height - sheet.offsetHeight - 16) + "px";
       });
       function teardown() {
+        removeBackdrop();
         unbindViewport(sync);
         if (sheet.parentNode) sheet.remove();
         for (var i = 0; i < kids.length; i++) kids[i].style.visibility = "";
@@ -4412,6 +4415,7 @@
       function confirm() {
         var yes = buttonNamed(dialog, /ja.*löschen/i, true);
         if (!yes) { teardown(); chip("Tippe auf „Ja, Anzeige löschen“."); return; }
+        ensureBackdrop();
         render("busy");
         sync();
         var finished = false;
@@ -4429,6 +4433,7 @@
         function success() {
           if (finished) return;
           finished = true;
+          removeBackdrop();
           unbindViewport(sync);
           (isDialogOpen() ? dialog : document.body).appendChild(sheet);
           render("done");
@@ -4466,6 +4471,7 @@
         })();
       }
       function teardownSheetOnly() {
+        removeBackdrop();
         unbindViewport(sync);
         if (sheet.parentNode) sheet.remove();
       }
@@ -4479,12 +4485,14 @@
       var row = document.querySelector('li[data-adid="' + adId + '"]');
       if (!row) {
         if (++tries < 40) return setTimeout(look, 250);
+        removeBackdrop();
         chip("Anzeige nicht gefunden – vielleicht ist sie schon gelöscht.");
         return;
       }
       var del = buttonNamed(row, /^löschen$/i, true);
       if (!del) {
         // Layout changed: fall back to pointing at the row.
+        removeBackdrop();
         row.style.outline = "3px solid #09b0b7";
         row.style.outlineOffset = "4px";
         var more = buttonNamed(row, /^mehr$/i);
@@ -4500,6 +4508,7 @@
         if (dialog) return showSheet(dialog, row);
         if (++waits < 16) return setTimeout(awaitDialog, 200);
         // No dialog: point at the button instead.
+        removeBackdrop();
         del.style.animation = "velosia-focus-pulse 1.3s ease-in-out infinite";
         del.scrollIntoView({ block: "center", inline: "center" });
         chip("Tippe auf „Löschen“.");

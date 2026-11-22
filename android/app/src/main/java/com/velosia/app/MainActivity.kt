@@ -535,6 +535,10 @@ class MainActivity : AppCompatActivity() {
             override fun onPageStarted(view: WebView, url: String, favicon: Bitmap?) {
                 super.onPageStarted(view, url, favicon)
                 currentPageUrl = url
+                if (pendingFocusAdId != null && isKaOwnAdsPage(url)) {
+                    injectEarlyBackdrop()
+                    return
+                }
                 if (activeDraftJson == null) return
                 // Only where the engine will actually run (and remove it again):
                 // a form page reached a second time in the same session (e.g. an eBay
