@@ -72,8 +72,9 @@ export default function DraftDetail({ draft, user, onBack, onUpdateSuccess, onDe
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [imageToDelete, setImageToDelete] = useState(null);
   const [rotatingImage, setRotatingImage] = useState(false);
-  const touchStartX = useRef(null);
-  const touchStartY = useRef(null);
+  const galleryTrackRef = useRef(null);
+  const galleryRafRef = useRef(null);
+  const wasModalOpenRef = useRef(false);
   
   const [regeneratingField, setRegeneratingField] = useState(null);
   const [uploadingImage, setUploadingImage] = useState(false);
@@ -579,6 +580,9 @@ export default function DraftDetail({ draft, user, onBack, onUpdateSuccess, onDe
     next.splice(from, 1);
     next.splice(toIndex, 0, imgUrl);
     setImageOrder(next);
+    if (selectedModalImage === imgUrl) {
+      scrollGalleryToIndex(toIndex, false);
+    }
     try {
       const updated = await updateDraft(draft.id, { image_paths: JSON.stringify(next) });
       onUpdateSuccess(updated);
@@ -595,17 +599,57 @@ export default function DraftDetail({ draft, user, onBack, onUpdateSuccess, onDe
     setImageToDelete(null);
   };
 
+  const scrollGalleryToIndex = (idx, smooth = true) => {
+    const el = galleryTrackRef.current;
+    if (!el) return;
+    const width = el.clientWidth || window.innerWidth;
+    el.scrollTo({ left: idx * width, behavior: smooth ? 'smooth' : 'auto' });
+  };
+
+  useLayoutEffect(() => {
+    const isOpen = !!selectedModalImage;
+    if (isOpen && !wasModalOpenRef.current) {
+      const idx = Math.max(0, shownImages.indexOf(selectedModalImage));
+      scrollGalleryToIndex(idx, false);
+    }
+    wasModalOpenRef.current = isOpen;
+  }, [selectedModalImage, shownImages]);
+
+  useEffect(() => {
+    if (!selectedModalImage) return;
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = prevOverflow;
+      if (galleryRafRef.current) cancelAnimationFrame(galleryRafRef.current);
+    };
+  }, [selectedModalImage]);
+
+  const handleGalleryScroll = () => {
+    if (galleryRafRef.current) return;
+    galleryRafRef.current = requestAnimationFrame(() => {
+      galleryRafRef.current = null;
+      const el = galleryTrackRef.current;
+      if (!el || !el.clientWidth) return;
+      const idx = Math.round(el.scrollLeft / el.clientWidth);
+      const clamped = Math.max(0, Math.min(shownImages.length - 1, idx));
+      if (shownImages[clamped] && shownImages[clamped] !== selectedModalImage) {
+        setSelectedModalImage(shownImages[clamped]);
+      }
+    });
+  };
+
   const goToPrevImage = () => {
     const currentPos = shownImages.indexOf(selectedModalImage);
     if (currentPos > 0) {
-      setSelectedModalImage(shownImages[currentPos - 1]);
+      scrollGalleryToIndex(currentPos - 1, true);
     }
   };
 
   const goToNextImage = () => {
     const currentPos = shownImages.indexOf(selectedModalImage);
     if (currentPos >= 0 && currentPos < shownImages.length - 1) {
-      setSelectedModalImage(shownImages[currentPos + 1]);
+      scrollGalleryToIndex(currentPos + 1, true);
     }
   };
 
@@ -623,26 +667,6 @@ export default function DraftDetail({ draft, user, onBack, onUpdateSuccess, onDe
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [selectedModalImage, shownImages]);
-
-  const handleTouchStart = (e) => {
-    touchStartX.current = e.touches[0].clientX;
-    touchStartY.current = e.touches[0].clientY;
-  };
-
-  const handleTouchEnd = (e) => {
-    if (touchStartX.current === null) return;
-    const diffX = e.changedTouches[0].clientX - touchStartX.current;
-    const diffY = e.changedTouches[0].clientY - touchStartY.current;
-    touchStartX.current = null;
-    touchStartY.current = null;
-    if (Math.abs(diffX) > 40 && Math.abs(diffX) > Math.abs(diffY) * 1.4) {
-      if (diffX < 0) {
-        goToNextImage();
-      } else {
-        goToPrevImage();
-      }
-    }
-  };
 
   const handleRotateImage = async (imgUrl) => {
     if (rotatingImage || !imgUrl) return;
@@ -1532,167 +1556,157 @@ export default function DraftDetail({ draft, user, onBack, onUpdateSuccess, onDe
           (.keyboard-open on app-shell) so it never covers a focused field. */}
       {/* In-app primary actions bottom bar removed to use Bottom Sheet */}
 
-      {/* Image Detail Popup Modal */}
-      {selectedModalImage && (
-        <div 
-          className="image-detail-modal"
-          onClick={() => setSelectedModalImage(null)}
-        >
-          <button
-            className="image-detail-modal-close"
-            onClick={() => setSelectedModalImage(null)}
-            title="Schließen (Esc)"
-            aria-label="Großansicht schließen"
+      {/* Fullscreen Swipeable Photo Viewer */}
+      {selectedModalImage && createPortal((() => {
+        const pos = Math.max(0, shownImages.indexOf(selectedModalImage));
+        const busy = imageOrder !== null;
+        const multi = shownImages.length > 1;
+        return (
+          <div
+            className="image-fs-overlay"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Foto Vollbildansicht"
           >
-            <X size={20} />
-          </button>
-
-          <div 
-            className="image-detail-modal-content"
-            onClick={(e) => e.stopPropagation()}
-            onTouchStart={handleTouchStart}
-            onTouchEnd={handleTouchEnd}
-          >
-            {shownImages.length > 1 && (
+            {/* Floating Top Bar */}
+            <div className="image-fs-topbar">
+              <div className="image-fs-status">
+                {multi && (
+                  <span className="image-fs-counter">{pos + 1} / {shownImages.length}</span>
+                )}
+                {multi && pos === 0 && (
+                  <span className="image-fs-cover-pill">
+                    <Star size={12} fill="currentColor" /> Titelbild
+                  </span>
+                )}
+              </div>
               <button
-                className="image-detail-nav-btn prev"
+                className="image-fs-icon-btn"
+                onClick={() => setSelectedModalImage(null)}
+                title="Schließen (Esc)"
+                aria-label="Vollbildansicht schließen"
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            {/* Smooth Horizontal Scroll-Snap Track */}
+            <div
+              className="image-fs-track"
+              ref={galleryTrackRef}
+              onScroll={handleGalleryScroll}
+            >
+              {shownImages.map((imgUrl, idx) => (
+                <div
+                  key={imgUrl}
+                  className="image-fs-slide"
+                  onClick={(e) => {
+                    if (e.target === e.currentTarget) setSelectedModalImage(null);
+                  }}
+                >
+                  <img
+                    src={getImageUrl(imgUrl)}
+                    alt={`Anzeige-Foto ${idx + 1}`}
+                    className="image-fs-img"
+                    draggable={false}
+                  />
+                </div>
+              ))}
+            </div>
+
+            {/* Desktop Side Arrows */}
+            {multi && pos > 0 && (
+              <button
+                className="image-fs-nav prev"
                 onClick={goToPrevImage}
-                disabled={shownImages.indexOf(selectedModalImage) <= 0}
                 title="Vorheriges Bild (Pfeil links)"
                 aria-label="Vorheriges Bild"
               >
-                <ChevronLeft size={28} />
+                <ChevronLeft size={26} />
               </button>
             )}
-
-            <img 
-              src={getImageUrl(selectedModalImage)} 
-              alt="Anzeige-Foto Großansicht" 
-              className="image-detail-modal-img"
-            />
-
-            {shownImages.length > 1 && (
+            {multi && pos < shownImages.length - 1 && (
               <button
-                className="image-detail-nav-btn next"
+                className="image-fs-nav next"
                 onClick={goToNextImage}
-                disabled={shownImages.indexOf(selectedModalImage) >= shownImages.length - 1}
                 title="Nächstes Bild (Pfeil rechts)"
                 aria-label="Nächstes Bild"
               >
-                <ChevronRight size={28} />
+                <ChevronRight size={26} />
               </button>
             )}
-          </div>
 
-          {shownImages.length > 1 && (() => {
-            const pos = shownImages.indexOf(selectedModalImage);
-            const busy = imageOrder !== null;
-            return (
-              <>
-                <div className="image-detail-modal-position" onClick={(e) => e.stopPropagation()}>
-                  <button
-                    className="image-nav-btn"
-                    onClick={goToPrevImage}
-                    disabled={pos <= 0}
-                    aria-label="Vorheriges Bild"
-                    title="Vorheriges Bild"
-                  >
-                    <ChevronLeft size={20} />
-                  </button>
-                  <span className="image-nav-counter">{pos + 1} / {shownImages.length}</span>
-                  <button
-                    className="image-nav-btn"
-                    onClick={goToNextImage}
-                    disabled={pos >= shownImages.length - 1}
-                    aria-label="Nächstes Bild"
-                    title="Nächstes Bild"
-                  >
-                    <ChevronRight size={20} />
-                  </button>
-                </div>
+            {/* Floating Bottom Action Dock */}
+            <div className="image-fs-bottombar" onClick={(e) => e.stopPropagation()}>
+              <button
+                className="image-fs-icon-btn"
+                onClick={() => handleRotateImage(selectedModalImage)}
+                disabled={rotatingImage}
+                title="Um 90° drehen"
+                aria-label="Foto um 90 Grad drehen"
+              >
+                <RotateCw size={18} className={rotatingImage ? 'spin' : ''} />
+              </button>
 
-                <div className="image-detail-modal-reorder" onClick={(e) => e.stopPropagation()}>
-                  {pos === 0 ? (
-                    <span className="image-cover-label"><Star size={14} /> Titelbild</span>
-                  ) : (
+              {multi && (
+                <>
+                  <span className="image-fs-divider" />
+                  {pos > 0 && (
                     <button
-                      className="image-cover-btn"
+                      className="image-fs-pill-btn"
                       onClick={() => moveImage(selectedModalImage, 0)}
                       disabled={busy}
-                      title="Dieses Foto als erstes Bild anzeigen"
+                      title="Als Titelbild festlegen"
                     >
-                      <Star size={14} /> Als Titelbild
+                      <Star size={14} />
+                      <span>Titelbild</span>
                     </button>
                   )}
-                  <button
-                    className="image-reorder-btn"
-                    onClick={() => moveImage(selectedModalImage, pos - 1)}
-                    disabled={busy || pos <= 0}
-                    title="Foto in der Reihenfolge nach vorne schieben"
-                  >
-                    ‹ Nach vorne
-                  </button>
-                  <button
-                    className="image-reorder-btn"
-                    onClick={() => moveImage(selectedModalImage, pos + 1)}
-                    disabled={busy || pos >= shownImages.length - 1}
-                    title="Foto in der Reihenfolge nach hinten schieben"
-                  >
-                    Nach hinten ›
-                  </button>
-                </div>
-              </>
-            );
-          })()}
+                  <div className="image-fs-reorder" title="Reihenfolge ändern">
+                    <button
+                      className="image-fs-step-btn"
+                      onClick={() => moveImage(selectedModalImage, pos - 1)}
+                      disabled={busy || pos <= 0}
+                      aria-label="Foto in der Reihenfolge nach vorne schieben"
+                      title="Nach vorne"
+                    >
+                      <ChevronLeft size={16} />
+                    </button>
+                    <span className="image-fs-pos-label">Pos {pos + 1}</span>
+                    <button
+                      className="image-fs-step-btn"
+                      onClick={() => moveImage(selectedModalImage, pos + 1)}
+                      disabled={busy || pos >= shownImages.length - 1}
+                      aria-label="Foto in der Reihenfolge nach hinten schieben"
+                      title="Nach hinten"
+                    >
+                      <ChevronRight size={16} />
+                    </button>
+                  </div>
+                </>
+              )}
 
-          <div 
-            className="image-detail-modal-actions"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <button
-              className="btn btn-secondary"
-              onClick={() => handleRotateImage(selectedModalImage)}
-              disabled={rotatingImage}
-              style={{ minHeight: '40px', padding: '0.5rem 1.25rem', display: 'flex', alignItems: 'center', gap: '0.45rem' }}
-              title="Foto um 90° im Uhrzeigersinn drehen"
-            >
-              <RotateCw size={16} className={rotatingImage ? 'spin' : ''} />
-              <span>Drehen</span>
-            </button>
-            <button
-              className="btn"
-              onClick={() => handleDeleteImage(selectedModalImage)}
-              style={{
-                background: 'var(--danger)',
-                color: '#fff',
-                minHeight: '40px',
-                padding: '0.5rem 1.25rem',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '0.5rem'
-              }}
-            >
-              <Trash2 size={16} />
-              <span>Löschen</span>
-            </button>
-            <button
-              className="btn btn-secondary"
-              onClick={() => setSelectedModalImage(null)}
-              style={{ minHeight: '40px', padding: '0.5rem 1.25rem' }}
-            >
-              Schließen
-            </button>
+              <span className="image-fs-divider" />
+              <button
+                className="image-fs-icon-btn danger"
+                onClick={() => handleDeleteImage(selectedModalImage)}
+                title="Foto löschen"
+                aria-label="Foto löschen"
+              >
+                <Trash2 size={18} />
+              </button>
+            </div>
           </div>
-        </div>
-      )}
+        );
+      })(), document.body)}
       <CustomConfirmModal 
         isOpen={confirmDeleteDraft}
         onClose={() => setConfirmDeleteDraft(false)}
         onConfirm={() => { setConfirmDeleteDraft(false); onDelete(); }}
         title="Angebot löschen?"
         message={listed.some((p) => !TERMINAL.has(p.status))
-          ? `Noch online auf ${listed.filter((p) => !TERMINAL.has(p.status)).map((p) => p.name).join(' und ')}. Die Anzeige dort bleibt bestehen.`
-          : 'Das lässt sich nicht rückgängig machen.'}
+          ? `Noch online auf ${listed.filter((p) => !TERMINAL.has(p.status)).map((p) => p.name).join(' und ')}. Die Anzeige dort wird dadurch nicht mit gelöscht und bleibt bestehen.`
+          : 'Das Angebot wird dauerhaft aus Velosia gelöscht. Hinweis: Veröffentlichte Anzeigen auf Kleinanzeigen, Vinted oder eBay werden dadurch nicht automatisch mit gelöscht.'}
       />
       <CustomConfirmModal
         isOpen={showDeleteConfirm}

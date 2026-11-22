@@ -458,9 +458,13 @@ export default function DraftList({ drafts, isLoading, loadError = false, onRetr
             <p>
               {selected.size === 1 ? 'Das Angebot wird' : 'Die Angebote werden'} mit allen Fotos dauerhaft aus Velosia gelöscht.
             </p>
-            {selectedLive > 0 && (
+            {selectedLive > 0 ? (
               <p className="confirm-modal-note">
-                {selectedLive === 1 ? '1 davon ist' : `${selectedLive} davon sind`} noch online – die Anzeigen auf Vinted bzw. Kleinanzeigen bleiben bestehen.
+                {selectedLive === 1 ? '1 davon ist' : `${selectedLive} davon sind`} noch online – die Anzeigen auf Vinted, Kleinanzeigen bzw. eBay bleiben bestehen.
+              </p>
+            ) : (
+              <p className="confirm-modal-note">
+                Hinweis: Veröffentlichte Anzeigen auf Kleinanzeigen, Vinted oder eBay werden dadurch nicht automatisch mit gelöscht.
               </p>
             )}
             {bulkError && <p className="confirm-modal-error">{bulkError}</p>}
@@ -824,7 +828,10 @@ function DraftListItem({ draft, onSelect, onDelete, flash = false, selecting = f
         <div className="confirm-modal-overlay" onClick={handleCancelDelete}>
           <div className="confirm-modal-card" onClick={(e) => e.stopPropagation()}>
             <h3>Angebot löschen?</h3>
-            <p>Möchtest du dieses Angebot wirklich dauerhaft löschen?</p>
+            <p>Möchtest du dieses Angebot wirklich dauerhaft aus Velosia löschen?</p>
+            <p className="confirm-modal-note">
+              Hinweis: Veröffentlichte Anzeigen auf Kleinanzeigen, Vinted oder eBay werden dadurch nicht automatisch mit gelöscht.
+            </p>
             <div className="confirm-modal-buttons">
               <button className="confirm-btn-cancel" onClick={handleCancelDelete}>Abbrechen</button>
               <button className="confirm-btn-delete" onClick={handleConfirmDelete}>Löschen</button>

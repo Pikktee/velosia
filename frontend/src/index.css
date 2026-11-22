@@ -4712,6 +4712,275 @@ textarea:focus {
   pointer-events: none;
 }
 
+/* Fullscreen swipeable photo viewer (DraftDetail) */
+.image-fs-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1100;
+  background: #05070a;
+  display: flex;
+  flex-direction: column;
+  animation: modalFadeIn 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.image-fs-topbar {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 1102;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: calc(0.85rem + env(safe-area-inset-top, 0px)) calc(1rem + env(safe-area-inset-right, 0px)) 0.85rem calc(1rem + env(safe-area-inset-left, 0px));
+  background: linear-gradient(180deg, rgba(5, 7, 10, 0.72) 0%, rgba(5, 7, 10, 0) 100%);
+  pointer-events: none;
+}
+
+.image-fs-topbar > * {
+  pointer-events: auto;
+}
+
+.image-fs-status {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.image-fs-counter {
+  padding: 0.35rem 0.75rem;
+  border-radius: 999px;
+  background: rgba(18, 22, 32, 0.72);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: #f8fafc;
+  font-size: 0.82rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.image-fs-cover-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.35rem 0.7rem;
+  border-radius: 999px;
+  background: rgba(9, 176, 183, 0.22);
+  border: 1px solid rgba(9, 176, 183, 0.45);
+  color: var(--primary);
+  font-size: 0.76rem;
+  font-weight: 700;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+.image-fs-track {
+  flex: 1;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scroll-snap-type: x mandatory;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+  touch-action: pan-x pinch-zoom;
+}
+
+.image-fs-track::-webkit-scrollbar {
+  display: none;
+}
+
+.image-fs-slide {
+  flex: 0 0 100%;
+  width: 100%;
+  height: 100%;
+  scroll-snap-align: center;
+  scroll-snap-stop: always;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: calc(3.5rem + env(safe-area-inset-top, 0px)) 0 calc(5rem + env(safe-area-inset-bottom, 0px));
+  box-sizing: border-box;
+}
+
+.image-fs-img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
+}
+
+.image-fs-nav {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 1102;
+  width: 46px;
+  height: 46px;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(15, 18, 27, 0.68);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  color: #f8fafc;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background 0.15s ease, transform 0.15s ease;
+}
+
+@media (min-width: 640px) and (hover: hover) {
+  .image-fs-nav {
+    display: flex;
+  }
+}
+
+.image-fs-nav.prev { left: 1.25rem; }
+.image-fs-nav.next { right: 1.25rem; }
+
+.image-fs-nav:hover {
+  background: rgba(25, 30, 42, 0.92);
+  transform: translateY(-50%) scale(1.06);
+}
+
+.image-fs-bottombar {
+  position: absolute;
+  left: 50%;
+  bottom: calc(1rem + env(safe-area-inset-bottom, 0px));
+  transform: translateX(-50%);
+  z-index: 1102;
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.4rem 0.5rem;
+  border-radius: 999px;
+  background: rgba(16, 20, 28, 0.84);
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.55);
+  max-width: calc(100vw - 1.5rem);
+}
+
+.image-fs-icon-btn {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.08);
+  color: #f8fafc;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background 0.15s ease, transform 0.12s ease;
+}
+
+.image-fs-icon-btn:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.16);
+}
+
+.image-fs-icon-btn:active:not(:disabled) {
+  transform: scale(0.93);
+}
+
+.image-fs-icon-btn:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.image-fs-icon-btn.danger {
+  color: #fca5a5;
+  background: rgba(239, 68, 68, 0.16);
+  border-color: rgba(239, 68, 68, 0.35);
+}
+
+.image-fs-icon-btn.danger:hover:not(:disabled) {
+  background: rgba(239, 68, 68, 0.28);
+}
+
+.image-fs-divider {
+  width: 1px;
+  height: 22px;
+  background: rgba(255, 255, 255, 0.14);
+  flex-shrink: 0;
+}
+
+.image-fs-pill-btn {
+  height: 36px;
+  padding: 0 0.75rem;
+  border-radius: 999px;
+  border: 1px solid rgba(9, 176, 183, 0.45);
+  background: rgba(9, 176, 183, 0.16);
+  color: var(--primary);
+  font-size: 0.78rem;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  cursor: pointer;
+  white-space: nowrap;
+  flex-shrink: 0;
+  transition: background 0.15s ease;
+}
+
+.image-fs-pill-btn:hover:not(:disabled) {
+  background: rgba(9, 176, 183, 0.28);
+}
+
+.image-fs-pill-btn:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.image-fs-reorder {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.15rem;
+  padding: 0 0.2rem;
+  height: 36px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.image-fs-step-btn {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  border: none;
+  background: transparent;
+  color: #f8fafc;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.image-fs-step-btn:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.image-fs-step-btn:disabled {
+  opacity: 0.3;
+  cursor: default;
+}
+
+.image-fs-pos-label {
+  font-size: 0.74rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  padding: 0 0.2rem;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
 .image-detail-modal-close {
   position: absolute;
   top: calc(1rem + env(safe-area-inset-top, 0px));

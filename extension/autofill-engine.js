@@ -4290,9 +4290,23 @@
     // 2xx (fetch/XHR naming the ad id), a "gelöscht" notice, or (above) the row
     // leaving or the page navigating.
     function watchDeleteSuccess(id, done) {
+      function bodyText(body) {
+        if (!body) return "";
+        if (typeof body === "string") return body;
+        try {
+          if (typeof URLSearchParams !== "undefined" && body instanceof URLSearchParams) return body.toString();
+          if (typeof FormData !== "undefined" && body instanceof FormData) {
+            var parts = [];
+            body.forEach(function (v, k) { parts.push(k + "=" + v); });
+            return parts.join("&");
+          }
+        } catch (e) {}
+        return "";
+      }
       function hit(url, method, body) {
-        var u = String(url || ""), b = typeof body === "string" ? body : "";
-        return (u.indexOf(id) >= 0 || b.indexOf(id) >= 0) && /^(post|delete|put)$/i.test(method || "get");
+        var u = String(url || ""), b = bodyText(body);
+        if (!/^(post|delete|put)$/i.test(method || "get")) return false;
+        return u.indexOf(id) >= 0 || b.indexOf(id) >= 0 || /(loeschen|delete)/i.test(u);
       }
       try {
         var of = window.fetch;
@@ -4401,25 +4415,47 @@
         render("busy");
         sync();
         var finished = false;
+        function isDialogOpen() {
+          return dialog.isConnected && (dialog.open || dialog.hasAttribute("open"));
+        }
+        function hoistToBody() {
+          if (finished) return;
+          if (!isDialogOpen() && sheet.parentNode !== document.body) {
+            document.body.appendChild(sheet);
+            sync();
+          }
+        }
+        try { dialog.addEventListener("close", hoistToBody); } catch (e) {}
         function success() {
           if (finished) return;
           finished = true;
-          var open = dialog.isConnected && (dialog.open || dialog.hasAttribute("open"));
-          (open ? dialog : document.body).appendChild(sheet);
+          unbindViewport(sync);
+          (isDialogOpen() ? dialog : document.body).appendChild(sheet);
           render("done");
-          sync();
+          sync = bindViewport(function () {
+            if (!sheet.isConnected) return;
+            var r = viewportRect();
+            var w = Math.min(r.width - 24, 460);
+            sheet.style.width = w + "px";
+            sheet.style.left = (r.left + (r.width - w) / 2) + "px";
+            sheet.style.top = (r.top + r.height - sheet.offsetHeight - 16) + "px";
+          });
           // Back to the draft in Velosia on its own; the button stays as a fallback.
-          setTimeout(goBack, 1100);
+          setTimeout(goBack, 900);
         }
         watchDeleteSuccess(adId, success);
         // KA may reload the page after deleting: that navigation is the success.
         window.addEventListener("pagehide", function () { if (!finished) { finished = true; goBack(); } });
         yes.click();
+        hoistToBody();
         var n = 0;
         (function wait() {
           if (finished) return;
+          hoistToBody();
           var row = document.querySelector('li[data-adid="' + adId + '"]');
-          if (!row || /gelöscht/i.test(row.textContent || "") || successNotice()) return success();
+          if (!row || /gelöscht/i.test(row.textContent || "") || successNotice() || (n >= 4 && !buttonNamed(row, /^löschen$/i, true))) {
+            return success();
+          }
           // KA asks something else first (another dialog): step aside so the user
           // can answer it; success is still caught and brings them back.
           var other = otherOpenDialog(dialog);
