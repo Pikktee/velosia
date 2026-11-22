@@ -74,14 +74,14 @@ export function StatusSheet({ draft, user, priceType, currentPrice, refreshing, 
           const hasPriceDiff = !isConflict && active && !changedOnPlatform && platformPrice != null && targetPrice != null && Math.abs(platformPrice - targetPrice) >= 0.01;
           const kaStats = p.key === 'kleinanzeigen' && active
             ? [
-                draft.ka_views != null ? `${draft.ka_views} ${draft.ka_views === 1 ? 'Aufruf' : 'Aufrufe'}` : null,
-                draft.ka_saves != null ? `${draft.ka_saves}× gemerkt` : null,
+                draft.ka_views != null ? `${draft.ka_views}\u00A0${draft.ka_views === 1 ? 'Aufruf' : 'Aufrufe'}` : null,
+                draft.ka_saves != null ? `${draft.ka_saves}×\u00A0gemerkt` : null,
               ].filter(Boolean).join(' · ')
             : '';
           let info;
           if (p.status === 'verkauft') info = 'verkauft';
           else if (p.status === 'geloescht') info = 'gelöscht';
-          else info = `${days === 0 ? 'seit heute' : days === 1 ? 'seit 1 Tag' : `seit ${days} Tagen`}${price ? ` · ${formatEuro(price)}${p.key === 'kleinanzeigen' && priceType === 'NEGOTIABLE' ? ' VB' : ''}` : ''}${kaStats ? ` · ${kaStats}` : ''}`;
+          else info = `${days === 0 ? 'seit heute' : days === 1 ? 'seit 1 Tag' : `seit ${days} Tagen`}${price ? ` · ${formatEuro(price)}${p.key === 'kleinanzeigen' && priceType === 'NEGOTIABLE' ? ' VB' : ''}` : ''}`;
           return (
             <div key={p.key} className={`listing-card${isConflict || isStale ? ' warn' : ''}`}>
               <div className="listing-card-head">
@@ -89,6 +89,7 @@ export function StatusSheet({ draft, user, priceType, currentPrice, refreshing, 
                 <div className="listing-card-name">
                   <strong>{p.name}</strong>
                   <span className={isStale ? 'warn' : undefined}>{info}</span>
+                  {kaStats && <span>{kaStats}</span>}
                 </div>
                 <span className="listing-card-pill" style={{ color: meta.color, background: meta.bg }}>
                   <i style={{ background: meta.color }} />{meta.label}
