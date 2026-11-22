@@ -1,5 +1,9 @@
 [
   {
+    "version": "2.8.30", "date": "2026-11-22",
+    "fixes": true
+  },
+  {
     "version": "2.8.29", "date": "2026-11-22",
     "fixes": true
   },

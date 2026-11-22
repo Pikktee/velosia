@@ -856,6 +856,7 @@ class MainActivity : AppCompatActivity() {
                 pendingImportPlatform = null
                 importToken = null
                 activeDraftId = draftId
+                prefetchRemoteEngine()
                 // Kleinanzeigen's public ad page has no delete control, its own-ads list
                 // has one per ad: open that list and point at the ad once it is loaded
                 // (onPageFinished). The id comes from the ad URL or from the list URL's
