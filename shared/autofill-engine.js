@@ -3074,7 +3074,7 @@
   // — no CSS @keyframes, no stylesheets, nothing the platform can remove or override.
   function pointToButton(btn) {
     if (!btn) return;
-    try { btn.scrollIntoView({ behavior: "smooth", block: "center" }); } catch (e) {}
+    try { btn.scrollIntoView({ behavior: "smooth", block: "center", inline: "center" }); } catch (e) {}
 
     try {
       var old = document.getElementById("velosia-pulse-ring");
@@ -4061,12 +4061,36 @@
   // Public entry point
   // ----------------------------------------------------------------------------
 
+  // Kleinanzeigen serves desktop-width layouts on several seller/form pages even
+  // with a mobile User-Agent. Inject a defensive mobile-fitting stylesheet on
+  // narrow viewports so forms and own-ads lists fit without horizontal scrolling.
+  function injectKleinanzeigenMobileCss() {
+    try {
+      if (document.getElementById("velosia-ka-mobile-css")) return;
+      var st = document.createElement("style");
+      st.id = "velosia-ka-mobile-css";
+      st.textContent =
+        "@media (max-width: 768px) {" +
+        "html, body { max-width: 100vw !important; overflow-x: hidden !important; }" +
+        "#site-content, .l-page-wrapper, .l-container, .l-container-row, .site-base, .site-base--content, #my-ads-content, #ad-form, form[id*='ad'], main {" +
+        "  width: 100% !important; max-width: 100% !important; min-width: 0 !important; box-sizing: border-box !important; margin-left: 0 !important; margin-right: 0 !important;" +
+        "}" +
+        ".l-page-wrapper, .l-container, .site-base--content { padding-left: 8px !important; padding-right: 8px !important; }" +
+        ".l-col, [class*='a-span-'], .formgroup, .formgroup-input { max-width: 100% !important; min-width: 0 !important; box-sizing: border-box !important; }" +
+        "input:not([type='checkbox']):not([type='radio']), textarea, select, button[role='combobox'] { max-width: 100% !important; box-sizing: border-box !important; }" +
+        "#site-footer, .site-footer, .advertising, .ad-slot, .banner-ad { display: none !important; }" +
+        "}";
+      (document.head || document.documentElement).appendChild(st);
+    } catch (e) {}
+  }
+
   async function autofill(draft, options) {
     options = options || {};
     if (typeof draft === "string") {
       try { draft = JSON.parse(draft); } catch (e) { draft = {}; }
     }
     var platform = options.platform || detectPlatform();
+    if (platform === "kleinanzeigen") injectKleinanzeigenMobileCss();
     var phase = detectPhase(platform);
     // eBay is never published automatically: its form asks for more than we can
     // know (item specifics, shipping) — the user always reviews and submits.
@@ -4223,6 +4247,7 @@
   function focusOwnListing(adId) {
     adId = String(adId || "").replace(/\D/g, "");
     if (!adId) return false;
+    injectKleinanzeigenMobileCss();
     ensureBackdrop();
     if (!document.getElementById("velosia-focus-style")) {
       var st = document.createElement("style");
@@ -4530,13 +4555,31 @@
       u = String(u || "");
       return u.charAt(0) === "/" ? location.origin + u : u;
     }
+    function pickInt(obj, keys) {
+      if (!obj || typeof obj !== "object") return null;
+      for (var i = 0; i < keys.length; i++) {
+        var v = obj[keys[i]];
+        if (v !== undefined && v !== null && v !== "") {
+          var n = parseInt(String(v).replace(/\D/g, ""), 10);
+          if (!isNaN(n) && n >= 0) return n;
+        }
+      }
+      return null;
+    }
     function fromJson(ad) {
+      var stats = ad.statistics || ad.stats || ad.counters || null;
+      var views = pickInt(ad, ["numVisits", "visits", "viewCount", "views", "impressions"]);
+      if (views === null) views = pickInt(stats, ["numVisits", "visits", "viewCount", "views", "impressions"]);
+      var saves = pickInt(ad, ["numBookmarks", "watchCount", "watchlistCount", "bookmarks", "favoritesCount", "saves"]);
+      if (saves === null) saves = pickInt(stats, ["numBookmarks", "watchCount", "watchlistCount", "bookmarks", "favoritesCount", "saves"]);
       return {
         id: String(ad.id || ""),
         url: ad.seoUrl ? absolute(ad.seoUrl) : null,
         title: ad.title ? String(ad.title).slice(0, 300) : null,
         state: ad.state ? String(ad.state).slice(0, 20) : null,
-        created: ad.creationDate ? String(ad.creationDate).slice(0, 40) : (ad.activationDate ? String(ad.activationDate).slice(0, 40) : null)
+        created: ad.creationDate ? String(ad.creationDate).slice(0, 40) : (ad.activationDate ? String(ad.activationDate).slice(0, 40) : null),
+        views: views,
+        saves: saves
       };
     }
     function page(n) {
@@ -4551,12 +4594,16 @@
         var row = rows[i], text = (row.textContent || "").replace(/\s+/g, " ");
         var h = row.querySelector("h3") || row.querySelector("h2");
         var link = row.querySelector('a[href*="/s-anzeige/"]');
+        var mv = text.match(/(\d+)\s*(?:Besucher|Aufrufe?)/i);
+        var ms = text.match(/(\d+)\s*(?:[×x]\s*)?(?:mal\s+)?(?:gemerkt|Merkliste)/i);
         out.push({
           id: String(row.getAttribute("data-adid") || ""),
           url: link ? absolute(link.getAttribute("href")) : null,
           title: h ? (h.textContent || "").replace(/\s+/g, " ").trim().replace(/^Anzeige\s+/, "").slice(0, 300) : null,
           state: /reserviert/i.test(text) ? "paused" : (/deaktiviert|abgelaufen|beendet/i.test(text) ? "inactive" : "active"),
-          created: null
+          created: null,
+          views: mv ? parseInt(mv[1], 10) : null,
+          saves: ms ? parseInt(ms[1], 10) : null
         });
       }
       return out;

@@ -3819,6 +3819,43 @@ select.form-control {
   cursor: default;
 }
 
+.camera-review-cell-cover {
+  position: absolute;
+  bottom: 4px;
+  right: 4px;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  border: 1px solid var(--glass-border);
+  background: rgba(15, 18, 27, 0.85);
+  color: #fbbf24;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+  transition: transform 0.15s ease, background 0.15s ease;
+}
+
+.camera-review-cell-cover:hover {
+  background: rgba(35, 42, 58, 0.95);
+  transform: scale(1.05);
+}
+
+.camera-review-cover-badge {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  padding: 2px 8px;
+  border-radius: 8px;
+  background: rgba(9, 176, 183, 0.92);
+  color: #fff;
+  font-size: 0.72rem;
+  font-weight: 700;
+  z-index: 5;
+  pointer-events: none;
+}
+
 .camera-review-actions {
   position: absolute;
   top: 10px;
@@ -3828,6 +3865,7 @@ select.form-control {
   z-index: 5;
 }
 
+.camera-review-actions .camera-review-cell-cover,
 .camera-review-actions .camera-review-cell-rotate,
 .camera-review-actions .camera-review-cell-delete {
   position: static;
@@ -4710,6 +4748,34 @@ textarea:focus {
   font-weight: 700;
   letter-spacing: 0.02em;
   pointer-events: none;
+}
+
+.thumbnail-make-cover-btn {
+  position: absolute;
+  right: 4px;
+  bottom: 4px;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: rgba(15, 18, 27, 0.78);
+  color: #fbbf24;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  padding: 0;
+  transition: transform 0.15s ease, background 0.15s ease;
+}
+
+.thumbnail-make-cover-btn:hover:not(:disabled) {
+  background: rgba(25, 30, 44, 0.95);
+  transform: scale(1.08);
+}
+
+.thumbnail-make-cover-btn:disabled {
+  opacity: 0.4;
+  cursor: default;
 }
 
 /* Fullscreen swipeable photo viewer (DraftDetail) */

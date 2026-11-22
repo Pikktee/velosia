@@ -144,6 +144,24 @@ def _ka_offer(resp):
     return offer
 
 
+def _ka_views(url):
+    """Public, read-only visit count of a KA ad via s-vac-get.json (unlike
+    s-vac-inc-get.json, this endpoint does not increment the counter)."""
+    parsed = listing_urls.parse_listing_url(listing_urls.KLEINANZEIGEN, url)
+    if not parsed:
+        return None
+    _norm_url, ad_id = parsed
+    resp = http_client.fetch(f"https://www.kleinanzeigen.de/s-vac-get.json?adId={ad_id}", timeout=8)
+    if resp is None or resp.status_code != 200:
+        return None
+    try:
+        data = json.loads(getattr(resp, "text", "") or "")
+        visits = int(data.get("numVisits"))
+        return visits if visits >= 0 else None
+    except (TypeError, ValueError):
+        return None
+
+
 def check_kleinanzeigen(url):
     """(status, offer) of a KA ad — offer as in _ka_offer."""
     status, offer, _resp = read_kleinanzeigen(url)
@@ -154,7 +172,13 @@ def read_kleinanzeigen(url):
     """(status, offer, response) of a KA ad; the response (or None) lets the
     listing import read more from the same page without a second request."""
     resp = http_client.fetch(url, timeout=15)
-    return _ka_status(resp), _ka_offer(resp), resp
+    status = _ka_status(resp)
+    offer = _ka_offer(resp)
+    if status in (ONLINE, RESERVIERT):
+        views = _ka_views(url)
+        if views is not None:
+            offer["views"] = views
+    return status, offer, resp
 
 
 # ---------------------------------------------------------------------------
@@ -333,6 +357,10 @@ def _offer_updates(draft, prefix, platform, offer):
             updates[f"{prefix}_listed_{field}"] = baseline[field]
     if offer.get("price") is not None and "price_type" in offer:
         updates[f"{prefix}_online_price_type"] = offer["price_type"]
+    if offer.get("views") is not None:
+        updates[f"{prefix}_views"] = offer["views"]
+    if offer.get("saves") is not None:
+        updates[f"{prefix}_saves"] = offer["saves"]
     return updates
 
 

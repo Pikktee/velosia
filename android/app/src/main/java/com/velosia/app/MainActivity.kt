@@ -438,6 +438,10 @@ class MainActivity : AppCompatActivity() {
         settings.allowFileAccess = false
         settings.allowContentAccess = false
         settings.databaseEnabled = true
+        // Allow pinch-to-zoom on wide platform pages (e.g. Kleinanzeigen) without
+        // forcing desktop overview scaling that would make text unreadably tiny.
+        settings.builtInZoomControls = true
+        settings.displayZoomControls = false
         
         // Use a standard mobile Chrome user agent to prevent Cloudflare/Vinted bot-blocking
         settings.userAgentString = "Mozilla/5.0 (Linux; Android 13; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/116.0.0.0 Mobile Safari/537.36"

@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Camera, Upload, Image as ImageIcon, Images, Sparkles, X, RotateCw, AlertCircle, Rocket, Trash2, Wand2, Layers, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Camera, Upload, Image as ImageIcon, Images, Sparkles, X, RotateCw, Star, AlertCircle, Rocket, Trash2, Wand2, Layers, ChevronLeft, ChevronRight } from 'lucide-react';
 
 const CameraCapture = ({
   selectedImages = [],
@@ -35,8 +35,8 @@ const CameraCapture = ({
       const constraints = {
         video: {
           facingMode: { ideal: facingMode },
-          width: { ideal: 1280 },
-          height: { ideal: 720 }
+          width: { ideal: 2560 },
+          height: { ideal: 1440 }
         },
         audio: false
       };
@@ -194,15 +194,16 @@ const CameraCapture = ({
       canvas.toBlob((blob) => {
         if (blob) {
           const file = new File([blob], `capture-${Date.now()}.jpg`, { type: 'image/jpeg' });
+          const fullPreviewUrl = URL.createObjectURL(blob);
           setSelectedImages(prev => 
-            prev.map(img => img.id === tempId ? { ...img, file, isCompressing: false } : img)
+            prev.map(img => img.id === tempId ? { ...img, file, previewUrl: fullPreviewUrl, isCompressing: false } : img)
           );
         } else {
           // Remove the image if compression failed
           setSelectedImages(prev => prev.filter(img => img.id !== tempId));
           setError("Foto konnte nicht komprimiert werden.");
         }
-      }, 'image/jpeg', 0.85);
+      }, 'image/jpeg', 0.90);
     } catch (err) {
       console.error("Fehler beim Fotografieren:", err);
       setError("Foto konnte nicht aufgenommen werden.");
@@ -216,6 +217,17 @@ const CameraCapture = ({
         URL.revokeObjectURL(target.previewUrl);
       }
       return prev.filter(img => img.id !== idToRemove);
+    });
+  };
+
+  const makeCoverImage = (idToCover) => {
+    setSelectedImages(prev => {
+      const idx = prev.findIndex(img => img.id === idToCover);
+      if (idx <= 0) return prev;
+      const next = [...prev];
+      const [item] = next.splice(idx, 1);
+      next.unshift(item);
+      return next;
     });
   };
 
@@ -603,6 +615,7 @@ const CameraCapture = ({
           images={selectedImages}
           onRemove={removeImage}
           onRotate={rotateImage}
+          onMakeCover={!turbo ? makeCoverImage : null}
           onClose={() => setShowReview(false)}
         />
       )}
@@ -644,7 +657,7 @@ const CameraCapture = ({
 
 // Full-screen photo review. Portrait: 2-column grid. Landscape: swipeable carousel
 // (centered main photo, dimmed neighbors on each side).
-const PhotoReview = ({ images, onRemove, onRotate, onClose }) => {
+const PhotoReview = ({ images, onRemove, onRotate, onMakeCover, onClose }) => {
   const [isLandscape, setIsLandscape] = useState(
     () => typeof window !== 'undefined' && window.matchMedia('(orientation: landscape)').matches
   );
@@ -743,8 +756,20 @@ const PhotoReview = ({ images, onRemove, onRotate, onClose }) => {
                 >
                   <div className="camera-review-slide-inner">
                     <img src={img.previewUrl} alt={`Foto ${idx + 1}`} />
+                    {onMakeCover && idx === 0 && count > 1 && (
+                      <span className="camera-review-cover-badge">Titelbild</span>
+                    )}
                     {isCurrent && (
                       <div className="camera-review-actions">
+                        {onMakeCover && idx > 0 && (
+                          <button
+                            className="camera-review-cell-cover"
+                            onClick={(e) => { e.stopPropagation(); onMakeCover(img.id); scrollToIndex(0); }}
+                            title="Als Titelbild festlegen"
+                          >
+                            <Star size={16} />
+                          </button>
+                        )}
                         <button
                           className="camera-review-cell-rotate"
                           onClick={(e) => { e.stopPropagation(); onRotate(img.id); }}
@@ -788,7 +813,18 @@ const PhotoReview = ({ images, onRemove, onRotate, onClose }) => {
               style={{ opacity: img.isCompressing ? 0.6 : 1 }}
             >
               <img src={img.previewUrl} alt={`Foto ${idx + 1}`} />
-              <span className="camera-review-cell-index">{idx + 1}</span>
+              <span className="camera-review-cell-index">
+                {onMakeCover && idx === 0 && count > 1 ? '1 · Titelbild' : idx + 1}
+              </span>
+              {onMakeCover && idx > 0 && (
+                <button
+                  className="camera-review-cell-cover"
+                  onClick={() => onMakeCover(img.id)}
+                  title="Als Titelbild festlegen"
+                >
+                  <Star size={14} />
+                </button>
+              )}
               <button
                 className="camera-review-cell-rotate"
                 onClick={() => onRotate(img.id)}

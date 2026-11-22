@@ -117,6 +117,8 @@ class Draft(Base):
     vinted_status_at = Column(DateTime, nullable=True)
     ka_published_at = Column(DateTime, nullable=True)
     vinted_published_at = Column(DateTime, nullable=True)
+    ka_views = Column(Integer, nullable=True)
+    ka_saves = Column(Integer, nullable=True)
     # Price as last read from the public listing page, so a price changed on the
     # platform can be taken over into the draft (price_type: FIXED/NEGOTIABLE).
     # *_listed_price is the baseline: the draft price the ad was published with,

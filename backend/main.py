@@ -136,6 +136,8 @@ def run_migrations():
         # in the detail view; NULL for older rows (frontend falls back to created_at).
         ("ka_published_at", "DATETIME"),
         ("vinted_published_at", "DATETIME"),
+        ("ka_views", "INTEGER"),
+        ("ka_saves", "INTEGER"),
         # eBay as third platform (added V2.8)
         ("ebay_listing_id", "VARCHAR(50)"),
         ("ebay_listing_url", "VARCHAR(500)"),
@@ -263,7 +265,7 @@ run_migrations()
 _API_DOCS = os.getenv("ENABLE_API_DOCS", "").lower() in ("1", "true", "yes")
 app = FastAPI(
     title="Velosia API",
-    version="2.8.30",
+    version="2.8.31",
     docs_url="/docs" if _API_DOCS else None,
     redoc_url="/redoc" if _API_DOCS else None,
     openapi_url="/openapi.json" if _API_DOCS else None,
@@ -2763,6 +2765,8 @@ def _reset_online_values(draft, prefix, platform):
         setattr(draft, f"{prefix}_listed_{field}", published[field])
     if prefix == "ka":
         draft.ka_online_price_type = None
+        draft.ka_views = None
+        draft.ka_saves = None
 
 
 def _apply_listing_capture(draft, platform, listing_id, listing_url):
@@ -3068,7 +3072,7 @@ def issue_import_token(current_user: models.User = Depends(get_current_user)):
 
 
 def _import_items(platform: str, items) -> list:
-    """Valid, importable, de-duplicated (id, url, title, status, created) rows."""
+    """Valid, importable, de-duplicated (id, url, title, status, created, views, saves) rows."""
     rows, seen = [], set()
     for item in items[: listing_import.MAX_ITEMS]:
         state = (item.state or "active").strip().lower()
@@ -3080,7 +3084,7 @@ def _import_items(platform: str, items) -> list:
             continue
         seen.add(lid)
         title = re.sub(r"\s+", " ", item.title or "").strip()[:200] or None
-        rows.append((lid, url, title, status_value, listing_import.parse_iso(item.created)))
+        rows.append((lid, url, title, status_value, listing_import.parse_iso(item.created), item.views, item.saves))
     return rows
 
 
@@ -3107,7 +3111,8 @@ def import_listings(
     rows = _import_items(platform, payload.items)
 
     drafts = db.query(models.Draft).filter(models.Draft.user_id == user.id).all()
-    known_ids = {getattr(d, f"{prefix}_listing_id") for d in drafts} - {None}
+    by_lid = {getattr(d, f"{prefix}_listing_id"): d for d in drafts if getattr(d, f"{prefix}_listing_id")}
+    known_ids = set(by_lid.keys())
     by_title = {}
     for d in drafts:
         if getattr(d, f"{prefix}_listing_id") or not d.title:
@@ -3118,10 +3123,19 @@ def import_listings(
 
     known = linked = 0
     to_create, to_link = [], []
+    stats_changed = False
     for row in rows:
-        lid, url, title, status_value, created = row
+        lid, url, title, status_value, created, views, saves = row
         if lid in known_ids:
             known += 1
+            if prefix == "ka":
+                kd = by_lid[lid]
+                if views is not None and kd.ka_views != views:
+                    kd.ka_views = views
+                    stats_changed = True
+                if saves is not None and kd.ka_saves != saves:
+                    kd.ka_saves = saves
+                    stats_changed = True
             continue
         matches = by_title.get(listing_import.ka_title_key(title)) if title else None
         if matches and len(matches) == 1:
@@ -3132,15 +3146,22 @@ def import_listings(
 
     result = {"found": len(rows), "new": len(to_create), "linked": linked, "known": known}
     if payload.dry_run:
+        if stats_changed:
+            db.commit()
         return result
 
     now = datetime.utcnow()
-    for draft, (lid, url, _title, status_value, created) in to_link:
+    for draft, (lid, url, _title, status_value, created, views, saves) in to_link:
         _apply_listing_capture(draft, platform, lid, url)
         setattr(draft, f"{prefix}_status", status_value)
         setattr(draft, f"{prefix}_published_at", created or now)
+        if prefix == "ka":
+            if views is not None:
+                draft.ka_views = views
+            if saves is not None:
+                draft.ka_saves = saves
     new_drafts = []
-    for lid, url, title, status_value, created in to_create:
+    for lid, url, title, status_value, created, views, saves in to_create:
         draft = models.Draft(
             user_id=user.id,
             title=title,
@@ -3151,6 +3172,9 @@ def import_listings(
         setattr(draft, f"{prefix}_status", status_value)
         setattr(draft, f"{prefix}_status_at", now)
         setattr(draft, f"{prefix}_published_at", created)
+        if prefix == "ka":
+            draft.ka_views = views
+            draft.ka_saves = saves
         db.add(draft)
         new_drafts.append(draft)
     db.commit()

@@ -42,10 +42,11 @@ const MANUAL_SOLD = new Set(['kleinanzeigen', 'ebay']);
 
 // "Deine Anzeigen": one card per platform the draft is listed on, plus a quiet
 // card for a platform it isn't on yet.
-export function StatusSheet({ draft, user, priceType, refreshing, settingStatus, opening, onRefresh, onRelist, onPublish, onMarkSold, onDelete, onOpen, onClose }) {
+export function StatusSheet({ draft, user, priceType, currentPrice, refreshing, settingStatus, opening, onRefresh, onRelist, onPublish, onMarkSold, onDelete, onOpen, onClose }) {
   const platforms = listingPlatforms(draft);
   const conflict = crossPostConflict(draft);
   const missing = publishablePlatforms(user, draft).map((p) => p.key).filter((k) => !platforms.some((p) => p.key === k));
+  const targetPrice = Number(currentPrice ?? draft.price) || null;
 
   return (
     <Sheet
@@ -65,14 +66,21 @@ export function StatusSheet({ draft, user, priceType, refreshing, settingStatus,
           const isConflict = conflict && conflict.live.key === p.key;
           const days = publishedDays(draft, p.key);
           const isStale = !conflict && active && days >= STALE_DAYS;
-          const online = draft[`${PREFIX[p.key]}_online_price`];
-          const price = online ?? draft.price;
+          const platformPrice = draft[`${PREFIX[p.key]}_online_price`] ?? draft[`${PREFIX[p.key]}_listed_price`];
+          const price = platformPrice ?? draft.price;
+          const hasPriceDiff = !isConflict && active && platformPrice != null && targetPrice != null && Math.abs(platformPrice - targetPrice) >= 0.01;
+          const kaStats = p.key === 'kleinanzeigen' && active
+            ? [
+                draft.ka_views != null ? `${draft.ka_views} ${draft.ka_views === 1 ? 'Aufruf' : 'Aufrufe'}` : null,
+                draft.ka_saves != null ? `${draft.ka_saves}× gemerkt` : null,
+              ].filter(Boolean).join(' · ')
+            : '';
           let info;
           if (p.status === 'verkauft') info = 'verkauft';
           else if (p.status === 'geloescht') info = 'gelöscht';
-          else info = `${days === 0 ? 'seit heute' : days === 1 ? 'seit 1 Tag' : `seit ${days} Tagen`}${price ? ` · ${formatEuro(price)}${p.key === 'kleinanzeigen' && priceType === 'NEGOTIABLE' ? ' VB' : ''}` : ''}`;
+          else info = `${days === 0 ? 'seit heute' : days === 1 ? 'seit 1 Tag' : `seit ${days} Tagen`}${price ? ` · ${formatEuro(price)}${p.key === 'kleinanzeigen' && priceType === 'NEGOTIABLE' ? ' VB' : ''}` : ''}${kaStats ? ` · ${kaStats}` : ''}`;
           return (
-            <div key={p.key} className={`listing-card${isConflict || isStale ? ' warn' : ''}`}>
+            <div key={p.key} className={`listing-card${isConflict || isStale || hasPriceDiff ? ' warn' : ''}`}>
               <div className="listing-card-head">
                 <PlatformMark platform={p.key} status={p.status} size="lg" />
                 <div className="listing-card-name">
@@ -84,6 +92,7 @@ export function StatusSheet({ draft, user, priceType, refreshing, settingStatus,
                 </span>
               </div>
               {isConflict && <p className="listing-card-note">Auf {conflict.sold.name} verkauft</p>}
+              {hasPriceDiff && <p className="listing-card-note">Im Entwurf {formatEuro(targetPrice)} · online {formatEuro(platformPrice)}</p>}
               <div className="listing-card-actions">
                 {isConflict ? (
                   <button className="listing-card-main danger" onClick={() => onDelete(p)}>Löschen <ArrowUpRight size={15} /></button>

@@ -161,6 +161,8 @@ class DraftResponse(DraftBase):
     ka_online_price: Optional[float] = None
     ka_online_price_type: Optional[str] = None
     ka_listed_price: Optional[float] = None
+    ka_views: Optional[int] = None
+    ka_saves: Optional[int] = None
     vinted_online_price: Optional[float] = None
     vinted_listed_price: Optional[float] = None
     ka_online_title: Optional[str] = None
@@ -280,6 +282,8 @@ class ImportItem(BaseModel):
     title: Optional[str] = Field(None, max_length=300)
     state: Optional[str] = Field(None, max_length=20)
     created: Optional[str] = Field(None, max_length=40)
+    views: Optional[int] = Field(None, ge=0)
+    saves: Optional[int] = Field(None, ge=0)
 
 
 class ImportRequest(BaseModel):

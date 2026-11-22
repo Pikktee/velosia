@@ -353,6 +353,8 @@ def fill_draft(draft_id: int) -> None:
             setattr(draft, f"ka_online_{field}", offer.get(field))
             setattr(draft, f"ka_listed_{field}", offer.get(field) if offer.get(field) is not None else value)
         draft.ka_online_price_type = offer.get("price_type")
+        if offer.get("views") is not None:
+            draft.ka_views = offer["views"]
         draft.import_status = None
         db.commit()
 
