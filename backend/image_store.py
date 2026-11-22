@@ -195,6 +195,70 @@ def store_bytes(data: bytes, upload_dir: str, prefix: str = "") -> Tuple[str, st
     return _store_from_file(io.BytesIO(data), upload_dir, prefix)
 
 
+def rotate_image_file(upload_dir: str, filename_or_path: str, angle: int = 90) -> Tuple[str, str]:
+    """Rotate an existing stored photo by `angle` degrees clockwise.
+
+    Supported clockwise angles are 90, 180, 270 (and -90, -180, -270).
+    Rotates the image losslessly across 90-degree steps, saves it as a new
+    metadata-free JPEG under a new UUID name, cleans up the old file and its
+    thumbnails, and returns (new_url_path, new_local_path).
+    """
+    raw = filename_or_path.split("?")[0].strip()
+    safe_name = os.path.basename(raw)
+    if not safe_name:
+        raise _bad_image("Ungültiger Dateiname.")
+
+    norm_angle = angle % 360
+    if norm_angle == 0:
+        return f"/uploads/{safe_name}", os.path.join(upload_dir, safe_name)
+
+    if norm_angle == 90:
+        transpose_op = Image.Transpose.ROTATE_270
+    elif norm_angle == 180:
+        transpose_op = Image.Transpose.ROTATE_180
+    elif norm_angle == 270:
+        transpose_op = Image.Transpose.ROTATE_90
+    else:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Ungültiger Drehwinkel. Erlaubt sind 90, 180 oder 270 Grad.",
+        )
+
+    old_local = os.path.join(upload_dir, safe_name)
+    if not os.path.isfile(old_local):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Bild nicht gefunden.")
+
+    try:
+        with Image.open(old_local) as probe:
+            probe.load()
+            icc = probe.info.get("icc_profile")
+            rotated = probe.transpose(transpose_op)
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"[images] Fehler beim Drehen von {safe_name}: {e}", flush=True)
+        raise HTTPException(status_code=500, detail="Das Bild konnte nicht gedreht werden.")
+
+    name = f"{uuid.uuid4()}.jpg"
+    new_local = os.path.join(upload_dir, name)
+    try:
+        _write_jpeg(rotated, new_local, icc=icc)
+    except Exception as e:
+        print(f"[images] Speichern des gedrehten Bildes fehlgeschlagen: {e}", flush=True)
+        raise HTTPException(status_code=500, detail="Das gedrehte Bild konnte nicht gespeichert werden.")
+
+    # Remove old file and any cached thumbnails for it
+    try:
+        if os.path.exists(old_local):
+            os.remove(old_local)
+    except OSError as e:
+        print(f"[images] Altes Bild konnte nicht entfernt werden ({safe_name}): {e}", flush=True)
+
+    remove_thumbnails(upload_dir, safe_name)
+
+    return f"/uploads/{name}", new_local
+
+
 # --- One-time clean-up of files stored before the pipeline above --------------
 
 _MIGRATION_MARKER = ".metadata-cleanup-v1.done"

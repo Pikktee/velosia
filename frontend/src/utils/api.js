@@ -555,6 +555,21 @@ export const deleteDraftImage = async (id, imagePath) => {
   return response.json();
 };
 
+export const rotateDraftImage = async (id, imagePath, angle = 90) => {
+  const response = await fetch(`${API_BASE_URL}/api/drafts/${id}/images/rotate`, {
+    method: 'POST',
+    headers: getHeaders(),
+    body: JSON.stringify({ image_path: imagePath, angle }),
+  });
+
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    throw new Error(errorData.detail || 'Fehler beim Drehen des Bildes.');
+  }
+
+  return response.json();
+};
+
 // --- LISTING STATUS TRACKING ---
 
 // Re-poll one draft's published listings (Kleinanzeigen / Vinted) and return the

@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useRef, useLayoutEffect } from 'react';
 import AutoTextarea from './AutoTextarea';
 import { createPortal } from 'react-dom';
-import { ArrowLeft, Copy, Check, ExternalLink, Monitor, RefreshCw, AlertCircle, Trash2, Plus, Sparkles, Share2, Camera, TrendingUp, ChevronDown, ChevronLeft, ChevronRight, Star, Tag, Coins, ArrowUp, ArrowUpRight, MoreVertical, Undo2, Redo2 } from 'lucide-react';
-import { updateDraft, prepareEbay, getImageUrl, getPlatformToken, uploadDraftImages, deleteDraftImage, regenerateDraftField, refreshListingStatus, setListingStatus } from '../utils/api';
+import { ArrowLeft, Copy, Check, ExternalLink, Monitor, RefreshCw, AlertCircle, Trash2, Plus, Sparkles, Share2, Camera, TrendingUp, ChevronDown, ChevronLeft, ChevronRight, Star, Tag, Coins, ArrowUp, ArrowUpRight, MoreVertical, Undo2, Redo2, RotateCw, X } from 'lucide-react';
+import { updateDraft, prepareEbay, getImageUrl, getPlatformToken, uploadDraftImages, deleteDraftImage, rotateDraftImage, regenerateDraftField, refreshListingStatus, setListingStatus } from '../utils/api';
 import { statusMeta, listingPlatforms, TERMINAL, onlineChanges, detailSummary, platformDeleteUrl, PLATFORMS } from '../utils/listingStatus';
 import { StatusSheet, PublishSheet, PlatformMark } from './ListingSheets';
 import { showError, showToast } from '../utils/toast';
@@ -71,6 +71,9 @@ export default function DraftDetail({ draft, user, onBack, onUpdateSuccess, onDe
   const [selectedModalImage, setSelectedModalImage] = useState(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [imageToDelete, setImageToDelete] = useState(null);
+  const [rotatingImage, setRotatingImage] = useState(false);
+  const touchStartX = useRef(null);
+  const touchStartY = useRef(null);
   
   const [regeneratingField, setRegeneratingField] = useState(null);
   const [uploadingImage, setUploadingImage] = useState(false);
@@ -590,6 +593,85 @@ export default function DraftDetail({ draft, user, onBack, onUpdateSuccess, onDe
   const handleCancelDeleteImage = () => {
     setShowDeleteConfirm(false);
     setImageToDelete(null);
+  };
+
+  const goToPrevImage = () => {
+    const currentPos = shownImages.indexOf(selectedModalImage);
+    if (currentPos > 0) {
+      setSelectedModalImage(shownImages[currentPos - 1]);
+    }
+  };
+
+  const goToNextImage = () => {
+    const currentPos = shownImages.indexOf(selectedModalImage);
+    if (currentPos >= 0 && currentPos < shownImages.length - 1) {
+      setSelectedModalImage(shownImages[currentPos + 1]);
+    }
+  };
+
+  useEffect(() => {
+    if (!selectedModalImage) return;
+    const handleKeyDown = (e) => {
+      if (e.key === 'ArrowLeft') {
+        goToPrevImage();
+      } else if (e.key === 'ArrowRight') {
+        goToNextImage();
+      } else if (e.key === 'Escape') {
+        setSelectedModalImage(null);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [selectedModalImage, shownImages]);
+
+  const handleTouchStart = (e) => {
+    touchStartX.current = e.touches[0].clientX;
+    touchStartY.current = e.touches[0].clientY;
+  };
+
+  const handleTouchEnd = (e) => {
+    if (touchStartX.current === null) return;
+    const diffX = e.changedTouches[0].clientX - touchStartX.current;
+    const diffY = e.changedTouches[0].clientY - touchStartY.current;
+    touchStartX.current = null;
+    touchStartY.current = null;
+    if (Math.abs(diffX) > 40 && Math.abs(diffX) > Math.abs(diffY) * 1.4) {
+      if (diffX < 0) {
+        goToNextImage();
+      } else {
+        goToPrevImage();
+      }
+    }
+  };
+
+  const handleRotateImage = async (imgUrl) => {
+    if (rotatingImage || !imgUrl) return;
+    setRotatingImage(true);
+    try {
+      const pos = shownImages.indexOf(imgUrl);
+      const updated = await rotateDraftImage(draft.id, imgUrl, 90);
+      onUpdateSuccess(updated);
+
+      let newPaths = [];
+      if (updated.image_paths) {
+        try {
+          const parsed = JSON.parse(updated.image_paths);
+          if (Array.isArray(parsed)) newPaths = parsed;
+        } catch (_) {}
+      }
+      if (newPaths.length === 0 && updated.image_path) {
+        newPaths = [updated.image_path];
+      }
+      const newActive = (pos >= 0 && newPaths[pos]) ? newPaths[pos] : (newPaths[0] || null);
+      if (newActive) {
+        setSelectedModalImage(newActive);
+      }
+    } catch (err) {
+      console.error(err);
+      showError(`Bild konnte nicht gedreht werden: ${err.message}`, () => handleRotateImage(imgUrl));
+    } finally {
+      setRotatingImage(false);
+    }
   };
 
   // Undo/redo per text field. Edits save themselves, so a slip would be saved
@@ -1456,64 +1538,126 @@ export default function DraftDetail({ draft, user, onBack, onUpdateSuccess, onDe
           className="image-detail-modal"
           onClick={() => setSelectedModalImage(null)}
         >
+          <button
+            className="image-detail-modal-close"
+            onClick={() => setSelectedModalImage(null)}
+            title="Schließen (Esc)"
+            aria-label="Großansicht schließen"
+          >
+            <X size={20} />
+          </button>
+
           <div 
             className="image-detail-modal-content"
             onClick={(e) => e.stopPropagation()}
+            onTouchStart={handleTouchStart}
+            onTouchEnd={handleTouchEnd}
           >
+            {shownImages.length > 1 && (
+              <button
+                className="image-detail-nav-btn prev"
+                onClick={goToPrevImage}
+                disabled={shownImages.indexOf(selectedModalImage) <= 0}
+                title="Vorheriges Bild (Pfeil links)"
+                aria-label="Vorheriges Bild"
+              >
+                <ChevronLeft size={28} />
+              </button>
+            )}
+
             <img 
               src={getImageUrl(selectedModalImage)} 
               alt="Anzeige-Foto Großansicht" 
               className="image-detail-modal-img"
             />
+
+            {shownImages.length > 1 && (
+              <button
+                className="image-detail-nav-btn next"
+                onClick={goToNextImage}
+                disabled={shownImages.indexOf(selectedModalImage) >= shownImages.length - 1}
+                title="Nächstes Bild (Pfeil rechts)"
+                aria-label="Nächstes Bild"
+              >
+                <ChevronRight size={28} />
+              </button>
+            )}
           </div>
+
           {shownImages.length > 1 && (() => {
             const pos = shownImages.indexOf(selectedModalImage);
             const busy = imageOrder !== null;
             return (
-              <div className="image-detail-modal-position" onClick={(e) => e.stopPropagation()}>
-                <button
-                  className="image-move-btn"
-                  onClick={() => moveImage(selectedModalImage, pos - 1)}
-                  disabled={busy || pos <= 0}
-                  aria-label="Bild nach vorne verschieben"
-                  title="Nach vorne"
-                >
-                  <ChevronLeft size={20} />
-                </button>
-                {pos === 0 ? (
-                  <span className="image-cover-label"><Star size={14} /> Titelbild</span>
-                ) : (
+              <>
+                <div className="image-detail-modal-position" onClick={(e) => e.stopPropagation()}>
                   <button
-                    className="image-cover-btn"
-                    onClick={() => moveImage(selectedModalImage, 0)}
-                    disabled={busy}
+                    className="image-nav-btn"
+                    onClick={goToPrevImage}
+                    disabled={pos <= 0}
+                    aria-label="Vorheriges Bild"
+                    title="Vorheriges Bild"
                   >
-                    <Star size={14} /> Als Titelbild
+                    <ChevronLeft size={20} />
                   </button>
-                )}
-                <span>{pos + 1} / {shownImages.length}</span>
-                <button
-                  className="image-move-btn"
-                  onClick={() => moveImage(selectedModalImage, pos + 1)}
-                  disabled={busy || pos >= shownImages.length - 1}
-                  aria-label="Bild nach hinten verschieben"
-                  title="Nach hinten"
-                >
-                  <ChevronRight size={20} />
-                </button>
-              </div>
+                  <span className="image-nav-counter">{pos + 1} / {shownImages.length}</span>
+                  <button
+                    className="image-nav-btn"
+                    onClick={goToNextImage}
+                    disabled={pos >= shownImages.length - 1}
+                    aria-label="Nächstes Bild"
+                    title="Nächstes Bild"
+                  >
+                    <ChevronRight size={20} />
+                  </button>
+                </div>
+
+                <div className="image-detail-modal-reorder" onClick={(e) => e.stopPropagation()}>
+                  {pos === 0 ? (
+                    <span className="image-cover-label"><Star size={14} /> Titelbild</span>
+                  ) : (
+                    <button
+                      className="image-cover-btn"
+                      onClick={() => moveImage(selectedModalImage, 0)}
+                      disabled={busy}
+                      title="Dieses Foto als erstes Bild anzeigen"
+                    >
+                      <Star size={14} /> Als Titelbild
+                    </button>
+                  )}
+                  <button
+                    className="image-reorder-btn"
+                    onClick={() => moveImage(selectedModalImage, pos - 1)}
+                    disabled={busy || pos <= 0}
+                    title="Foto in der Reihenfolge nach vorne schieben"
+                  >
+                    ‹ Nach vorne
+                  </button>
+                  <button
+                    className="image-reorder-btn"
+                    onClick={() => moveImage(selectedModalImage, pos + 1)}
+                    disabled={busy || pos >= shownImages.length - 1}
+                    title="Foto in der Reihenfolge nach hinten schieben"
+                  >
+                    Nach hinten ›
+                  </button>
+                </div>
+              </>
             );
           })()}
+
           <div 
             className="image-detail-modal-actions"
             onClick={(e) => e.stopPropagation()}
           >
             <button
               className="btn btn-secondary"
-              onClick={() => setSelectedModalImage(null)}
-              style={{ minHeight: '40px', padding: '0.5rem 1.25rem' }}
+              onClick={() => handleRotateImage(selectedModalImage)}
+              disabled={rotatingImage}
+              style={{ minHeight: '40px', padding: '0.5rem 1.25rem', display: 'flex', alignItems: 'center', gap: '0.45rem' }}
+              title="Foto um 90° im Uhrzeigersinn drehen"
             >
-              Schließen
+              <RotateCw size={16} className={rotatingImage ? 'spin' : ''} />
+              <span>Drehen</span>
             </button>
             <button
               className="btn"
@@ -1529,7 +1673,14 @@ export default function DraftDetail({ draft, user, onBack, onUpdateSuccess, onDe
               }}
             >
               <Trash2 size={16} />
-              Löschen
+              <span>Löschen</span>
+            </button>
+            <button
+              className="btn btn-secondary"
+              onClick={() => setSelectedModalImage(null)}
+              style={{ minHeight: '40px', padding: '0.5rem 1.25rem' }}
+            >
+              Schließen
             </button>
           </div>
         </div>

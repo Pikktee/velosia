@@ -1,5 +1,12 @@
 [
   {
+    "version": "2.8.27", "date": "2026-11-22",
+    "items": [
+      "Fotos drehen: Fotos können jetzt direkt in der Großansicht sowie in der Foto-Übersicht vor der KI-Analyse um 90° gedreht werden.",
+      "Vollbildansicht: Die Pfeile blättern nun zuverlässig durch die Fotos des Angebots, inklusive Swipe-Gesten auf dem Smartphone."
+    ]
+  },
+  {
     "version": "2.8.26", "date": "2026-11-18",
     "fixes": true
   },

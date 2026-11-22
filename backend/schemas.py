@@ -308,6 +308,11 @@ class DraftRegenerateRequest(BaseModel):
     field: str = Field(max_length=20)
 
 
+class DraftImageRotateRequest(BaseModel):
+    image_path: str = Field(max_length=500)
+    angle: int = Field(default=90)
+
+
 # Autofill telemetry (anonymous structural outcome — NO listing content).
 # Values match what every engine version sends: platform from the page host,
 # phase "category" (KA step 1) or "form"; unknown extra keys are ignored.

@@ -219,6 +219,59 @@ const CameraCapture = ({
     });
   };
 
+  const rotateImage = (idToRotate) => {
+    const target = selectedImages.find(img => img.id === idToRotate);
+    if (!target || target.isCompressing) return;
+
+    setSelectedImages(prev => prev.map(img => img.id === idToRotate ? { ...img, isCompressing: true } : img));
+
+    const imageObj = new window.Image();
+    imageObj.onload = () => {
+      try {
+        const canvas = document.createElement('canvas');
+        canvas.width = imageObj.height;
+        canvas.height = imageObj.width;
+        const ctx = canvas.getContext('2d');
+        ctx.translate(canvas.width, 0);
+        ctx.rotate((90 * Math.PI) / 180);
+        ctx.drawImage(imageObj, 0, 0);
+
+        canvas.toBlob((blob) => {
+          if (blob) {
+            const file = new File(
+              [blob],
+              target.file ? target.file.name : `capture-${Date.now()}.jpg`,
+              { type: 'image/jpeg' }
+            );
+            if (target.previewUrl && target.previewUrl.startsWith('blob:')) {
+              URL.revokeObjectURL(target.previewUrl);
+            }
+            const previewUrl = URL.createObjectURL(blob);
+            setSelectedImages(current =>
+              current.map(img => img.id === idToRotate ? { ...img, file, previewUrl, isCompressing: false } : img)
+            );
+          } else {
+            setSelectedImages(current =>
+              current.map(img => img.id === idToRotate ? { ...img, isCompressing: false } : img)
+            );
+          }
+        }, 'image/jpeg', 0.90);
+      } catch (err) {
+        console.error("Fehler beim Drehen des Fotos:", err);
+        setSelectedImages(current =>
+          current.map(img => img.id === idToRotate ? { ...img, isCompressing: false } : img)
+        );
+      }
+    };
+    imageObj.onerror = (e) => {
+      console.error("Bild konnte nicht geladen werden:", e);
+      setSelectedImages(current =>
+        current.map(img => img.id === idToRotate ? { ...img, isCompressing: false } : img)
+      );
+    };
+    imageObj.src = target.previewUrl;
+  };
+
 
 
   return (
@@ -549,6 +602,7 @@ const CameraCapture = ({
         <PhotoReview
           images={selectedImages}
           onRemove={removeImage}
+          onRotate={rotateImage}
           onClose={() => setShowReview(false)}
         />
       )}
@@ -590,7 +644,7 @@ const CameraCapture = ({
 
 // Full-screen photo review. Portrait: 2-column grid. Landscape: swipeable carousel
 // (centered main photo, dimmed neighbors on each side).
-const PhotoReview = ({ images, onRemove, onClose }) => {
+const PhotoReview = ({ images, onRemove, onRotate, onClose }) => {
   const [isLandscape, setIsLandscape] = useState(
     () => typeof window !== 'undefined' && window.matchMedia('(orientation: landscape)').matches
   );
@@ -690,13 +744,23 @@ const PhotoReview = ({ images, onRemove, onClose }) => {
                   <div className="camera-review-slide-inner">
                     <img src={img.previewUrl} alt={`Foto ${idx + 1}`} />
                     {isCurrent && (
-                      <button
-                        className="camera-review-cell-delete"
-                        onClick={(e) => { e.stopPropagation(); onRemove(img.id); }}
-                        title="Foto entfernen"
-                      >
-                        <Trash2 size={16} />
-                      </button>
+                      <div className="camera-review-actions">
+                        <button
+                          className="camera-review-cell-rotate"
+                          onClick={(e) => { e.stopPropagation(); onRotate(img.id); }}
+                          title="Foto um 90° drehen"
+                          disabled={img.isCompressing}
+                        >
+                          <RotateCw size={16} />
+                        </button>
+                        <button
+                          className="camera-review-cell-delete"
+                          onClick={(e) => { e.stopPropagation(); onRemove(img.id); }}
+                          title="Foto entfernen"
+                        >
+                          <Trash2 size={16} />
+                        </button>
+                      </div>
                     )}
                   </div>
                 </div>
@@ -725,6 +789,14 @@ const PhotoReview = ({ images, onRemove, onClose }) => {
             >
               <img src={img.previewUrl} alt={`Foto ${idx + 1}`} />
               <span className="camera-review-cell-index">{idx + 1}</span>
+              <button
+                className="camera-review-cell-rotate"
+                onClick={() => onRotate(img.id)}
+                title="Foto um 90° drehen"
+                disabled={img.isCompressing}
+              >
+                <RotateCw size={14} />
+              </button>
               <button
                 className="camera-review-cell-delete"
                 onClick={() => onRemove(img.id)}

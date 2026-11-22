@@ -263,7 +263,7 @@ run_migrations()
 _API_DOCS = os.getenv("ENABLE_API_DOCS", "").lower() in ("1", "true", "yes")
 app = FastAPI(
     title="Velosia API",
-    version="2.8.26",
+    version="2.8.27",
     docs_url="/docs" if _API_DOCS else None,
     redoc_url="/redoc" if _API_DOCS else None,
     openapi_url="/openapi.json" if _API_DOCS else None,
@@ -2208,6 +2208,47 @@ def delete_draft_image(
     db_draft.image_paths = json.dumps(existing_paths)
     if db_draft.image_path == image_path:
         db_draft.image_path = existing_paths[0] if existing_paths else None
+
+    db.commit()
+    db.refresh(db_draft)
+    return db_draft
+
+@app.post("/api/drafts/{draft_id}/images/rotate", response_model=schemas.DraftResponse)
+def rotate_draft_image(
+    draft_id: int,
+    req: schemas.DraftImageRotateRequest,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user)
+):
+    db_draft = db.query(models.Draft).filter(
+        models.Draft.id == draft_id,
+        models.Draft.user_id == current_user.id
+    ).first()
+    if not db_draft:
+        raise HTTPException(status_code=404, detail="Angebot wurde nicht gefunden.")
+
+    raw_image_path = signed_urls.strip_signature(req.image_path)
+
+    existing_paths = []
+    if db_draft.image_paths:
+        try:
+            existing_paths = json.loads(db_draft.image_paths)
+        except Exception:
+            if db_draft.image_path:
+                existing_paths = [db_draft.image_path]
+    elif db_draft.image_path:
+        existing_paths = [db_draft.image_path]
+
+    if raw_image_path not in existing_paths:
+        raise HTTPException(status_code=400, detail="Bild gehört nicht zu diesem Angebot.")
+
+    angle = req.angle or 90
+    new_url_path, _new_local_path = image_store.rotate_image_file(UPLOAD_DIR, raw_image_path, angle)
+
+    new_paths = [new_url_path if p == raw_image_path else p for p in existing_paths]
+    db_draft.image_paths = json.dumps(new_paths)
+    if db_draft.image_path == raw_image_path:
+        db_draft.image_path = new_url_path
 
     db.commit()
     db.refresh(db_draft)
